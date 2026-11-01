@@ -16,7 +16,9 @@ from sim.clock import SimClock
 from sim.config import load_config
 from sim.engine import Engine
 from sim.events import EventBus
+from sim.journal import JsonlJournal
 from ui import theme
+from ui.dialogue_box import DialogueBox
 from ui.hud import Hud
 from ui.renderer import Renderer
 from world.house import House
@@ -53,6 +55,10 @@ def main() -> None:
     map_w, map_h = renderer.size
     screen = pygame.display.set_mode((map_w + config.display.hud_width, map_h))
     hud = Hud(pygame.Rect(map_w, 0, config.display.hud_width, map_h))
+    dialogue_box = DialogueBox(renderer, agents, config.dialogue.line_display_s, config.dialogue.history_size)
+    bus.subscribe("dialogue", dialogue_box.on_dialogue)
+    journal = JsonlJournal(config.log_dir, clock)
+    journal.attach(bus)
     frame_clock = pygame.time.Clock()
 
     speed_index = 0
@@ -71,12 +77,16 @@ def main() -> None:
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
+                elif event.key == pygame.K_h:
+                    dialogue_box.toggle_history()
                 elif event.key in SPEED_KEYS:
                     speed_index = min(SPEED_KEYS[event.key], len(config.sim.speed_multipliers) - 1)
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if event.pos[0] < map_w:
                     clicked = renderer.agent_at(agents, event.pos)
                     selected_id = clicked.id if clicked else None
+            elif event.type == pygame.MOUSEWHEEL and dialogue_box.show_history:
+                dialogue_box.scroll_history(event.y * 3)
 
         speed = config.sim.speed_multipliers[speed_index]
         if not paused:
@@ -90,13 +100,16 @@ def main() -> None:
         engine.poll()  # réponses LLM arrivées (non bloquant)
 
         renderer.update_display(agents, dt)
+        dialogue_box.update(0.0 if paused else dt)
         screen.fill(theme.BACKGROUND)
         renderer.draw(screen, agents, selected_id, clock.minute_of_day)
+        dialogue_box.draw(screen)
         selected = engine.agent_by_id(selected_id) if selected_id else None
         hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label)
         pygame.display.flip()
 
     llm.shutdown()
+    journal.close()
     pygame.quit()
 
 

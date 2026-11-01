@@ -30,6 +30,13 @@ llm:
   mock_latency_s: [0.3, 1.2]
   mock_invalid_rate: 0.05
 
+dialogue:
+  pair_cooldown_minutes: 120  # cooldown social par paire (minutes simulées)
+  max_participants: 3
+  social_gain: 25
+  line_display_s: 3.5         # durée d'affichage d'une réplique (secondes réelles)
+  history_size: 300
+
 family_file: data/family.yaml
 save_file: save.json
 log_dir: logs

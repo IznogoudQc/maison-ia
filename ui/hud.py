@@ -13,7 +13,8 @@ from ui import theme
 CONTROLS = [
     "Espace : pause / reprise",
     "1-4 : vitesse",
-    "Clic : sélectionner un agent",
+    "Clic : sélectionner un agent (clic vide : famille)",
+    "H : historique des dialogues",
     "Échap : quitter",
 ]
 

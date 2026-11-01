@@ -42,10 +42,19 @@ class LLMConfig(BaseModel):
     mock_invalid_rate: float = 0.05       # part de réponses non JSON pour exercer le repli
 
 
+class DialogueConfig(BaseModel):
+    pair_cooldown_minutes: int = 120   # minutes simulées entre deux conversations d'une même paire
+    max_participants: int = 3
+    social_gain: float = 25.0
+    line_display_s: float = 3.5        # secondes réelles par réplique affichée
+    history_size: int = 300
+
+
 class AppConfig(BaseModel):
     sim: SimConfig = Field(default_factory=SimConfig)
     display: DisplayConfig = Field(default_factory=DisplayConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    dialogue: DialogueConfig = Field(default_factory=DialogueConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"

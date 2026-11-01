@@ -18,7 +18,14 @@ from agents.actions import (
 from agents.agent import ActiveAction, Agent
 from agents.needs import Needs
 from agents.scheduler import Scheduler
-from llm.prompts import ActionDecision, build_decision_request, validate_decision
+from llm.prompts import (
+    ActionDecision,
+    Dialogue,
+    build_decision_request,
+    build_dialogue_request,
+    validate_decision,
+    validate_dialogue,
+)
 from llm.service import LLMService, StructuredResult
 from sim.clock import SimClock
 from sim.config import AppConfig
@@ -37,6 +44,18 @@ class PendingDecision:
     requested_minute: int
 
 
+@dataclass
+class PendingDialogue:
+    future: Future[StructuredResult[Dialogue]]
+    participant_ids: list[str]
+    room: str
+    minute: int
+
+
+def pair_key(a: str, b: str) -> str:
+    return "|".join(sorted((a, b)))
+
+
 class Engine:
     def __init__(self, config: AppConfig, house: House, agents: list[Agent], clock: SimClock,
                  rng: random.Random, bus: EventBus | None = None, llm: LLMService | None = None) -> None:
@@ -49,6 +68,8 @@ class Engine:
         self.llm = llm
         self.scheduler = Scheduler()
         self.pending_decisions: dict[str, PendingDecision] = {}
+        self.pending_dialogues: list[PendingDialogue] = []
+        self.pair_last_talk: dict[str, int] = {}  # paire -> minute absolue de la dernière conversation
 
     # ------------------------------------------------------------------ utilitaires
 
@@ -225,6 +246,7 @@ class Engine:
 
     def poll(self) -> None:
         """Appelé à chaque image (fil principal) : applique les réponses LLM arrivées."""
+        self._poll_dialogues()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -262,6 +284,81 @@ class Engine:
         self.clock.advance()
         for agent in self.agents:
             self._update_agent(agent)
+        self._detect_encounters()
+
+    # ------------------------------------------------------------------ rencontres et dialogues
+
+    def _talking_ids(self) -> set[str]:
+        return {agent_id for p in self.pending_dialogues for agent_id in p.participant_ids}
+
+    def _pair_ready(self, a: str, b: str) -> bool:
+        last = self.pair_last_talk.get(pair_key(a, b))
+        return last is None or self.clock.total_minutes - last >= self.config.dialogue.pair_cooldown_minutes
+
+    def _detect_encounters(self) -> None:
+        """Deux agents ou plus dans la même pièce, cooldown écoulé : on demande un dialogue."""
+        if self.llm is None:
+            return
+        busy = self._talking_ids()
+        by_room: dict[str, list[Agent]] = {}
+        for agent in self.agents:
+            room = self.house.room_at(agent.pos)
+            if room is not None and agent.is_available and agent.id not in busy:
+                by_room.setdefault(room, []).append(agent)
+
+        for room, present in by_room.items():
+            if len(present) < 2:
+                continue
+            candidates = present[:]
+            self.rng.shuffle(candidates)
+            for first in candidates:
+                group = [first]
+                for other in candidates:
+                    if other is first or len(group) >= self.config.dialogue.max_participants:
+                        continue
+                    if all(self._pair_ready(other.id, member.id) for member in group):
+                        group.append(other)
+                if len(group) >= 2:
+                    self._request_dialogue(group, room)
+                    break
+
+    def _request_dialogue(self, group: list[Agent], room: str) -> bool:
+        assert self.llm is not None
+        memories, summaries = {}, {}
+        for agent in group:
+            memories[agent.id], summaries[agent.id] = self.memories_for(agent)
+        request = build_dialogue_request(group, room, self.clock.label(), memories, summaries,
+                                         self.config.llm.max_tokens)
+        names = {a.id: a.name for a in group}
+        future = self.llm.try_submit(request, Dialogue, None, lambda d: validate_dialogue(d, names))
+        if future is None:
+            return False
+        now = self.clock.total_minutes
+        # Le cooldown démarre à la demande : évite de relancer la même paire pendant l'attente
+        for i, a in enumerate(group):
+            for b in group[i + 1:]:
+                self.pair_last_talk[pair_key(a.id, b.id)] = now
+        self.pending_dialogues.append(PendingDialogue(future, [a.id for a in group], room, now))
+        return True
+
+    def _poll_dialogues(self) -> None:
+        for pending in [p for p in self.pending_dialogues if p.future.done()]:
+            self.pending_dialogues.remove(pending)
+            names = [a.name for a in (self.agent_by_id(i) for i in pending.participant_ids) if a]
+            try:
+                result = pending.future.result()
+            except Exception as exc:
+                result = StructuredResult(value=None, ok=False, attempts=0, error=str(exc))
+            if not result.ok or result.value is None:
+                self.publish("dialogue_echec", room=pending.room, participants=names, error=result.error)
+                continue
+            lines = [line.model_dump() for line in result.value.lines]
+            for agent_id in pending.participant_ids:
+                agent = self.agent_by_id(agent_id)
+                if agent is not None:
+                    agent.needs.apply({"social": self.config.dialogue.social_gain})
+            self.publish("dialogue", room=pending.room, participants=names, lines=lines,
+                         time=self.clock.hhmm, attempts=result.attempts)
 
     def _update_agent(self, agent: Agent) -> None:
         minutes = self.clock.tick_minutes
