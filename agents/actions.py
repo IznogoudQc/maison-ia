@@ -41,7 +41,13 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("cuisiner", "prépare le souper", "cuisiniere", 40, {"fun": 5}, selectable=False),
     ActionDef("dormir", "dort", "lit", 480, {}, selectable=False),
     ActionDef("partir", "part {target}", "porte", 0, {}, selectable=False),
+    # Actions économiques : proposées par le moteur selon l'état du ménage (pas par les besoins)
+    ActionDef("epicerie", "va faire l'épicerie", "porte", 0, {}, selectable=False),
+    ActionDef("heures_sup", "part faire des heures supplémentaires", "porte", 0, {}, selectable=False),
 ]}
+
+# Actions qui font sortir de la maison une fois la porte atteinte
+AWAY_ACTIONS = {"partir", "epicerie", "heures_sup"}
 
 
 def away_phrase(label: str) -> str:
@@ -71,6 +77,7 @@ class Option(BaseModel):
     target: str | None = None      # id d'agent pour « jaser »
     label: str
     score: float
+    urgent: bool = False           # choisie d'office, sans demander au LLM (garde-manger vide...)
 
 
 def action_label(name: str, target_name: str | None = None) -> str:

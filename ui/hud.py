@@ -7,7 +7,8 @@ import pygame
 from agents.agent import Agent
 from agents.needs import NEED_LABELS
 from llm.service import LLMService
-from sim.clock import SimClock
+from sim.clock import DAY_NAMES, SimClock
+from sim.economy import Economy
 from ui import theme
 from ui.dialogue_box import wrap_text
 
@@ -26,7 +27,7 @@ class Hud:
 
     def draw(self, surface: pygame.Surface, clock: SimClock, speed: float, paused: bool,
              agents: list[Agent], selected: Agent | None, llm: LLMService | None = None,
-             llm_label: str = "") -> None:
+             llm_label: str = "", economy: Economy | None = None, alive: int = 0) -> None:
         pygame.draw.rect(surface, theme.PANEL, self.rect)
         pygame.draw.line(surface, theme.PANEL_BORDER, self.rect.topleft, self.rect.bottomleft, 2)
         x, y = self.rect.x + 14, self.rect.y + 12
@@ -38,10 +39,14 @@ class Hud:
         if llm is not None:
             y = self._draw_llm(surface, x, y, llm, llm_label)
         y += 8
+        if economy is not None and economy.enabled:
+            y = self._draw_household(surface, x, y, economy, alive)
 
         controls_top = self.rect.bottom - 18 * len(CONTROLS) - 10
         if selected is None:
-            self._draw_family(surface, x, y, agents)
+            y = self._draw_family(surface, x, y, agents)
+            if economy is not None and economy.enabled:
+                self._draw_ledger(surface, x, y + 8, economy, controls_top - 8)
         else:
             y = self._draw_agent(surface, x, y, selected)
             self._draw_memory(surface, x, y, selected, controls_top - 8)
@@ -63,6 +68,33 @@ class Hud:
             surface.blit(theme.font(12).render(_clip(line, 56), True, theme.TEXT_DIM), (x, y))
             y += 16
         return y
+
+    def _draw_household(self, surface: pygame.Surface, x: int, y: int, economy: Economy, alive: int) -> int:
+        h = economy.household
+        money_color = (235, 90, 80) if h.money < 0 else (120, 210, 130)
+        surface.blit(theme.font(17, bold=True).render(_money(h.money), True, money_color), (x, y))
+        days = economy.pantry_days(alive)
+        pantry_color = (235, 90, 80) if days < 1 else (230, 180, 70) if days < 2 else theme.TEXT_DIM
+        pantry = f"Garde-manger : {h.pantry:.0f} portions (~{days:.1f} j)".replace(".", ",")
+        surface.blit(theme.font(13).render(pantry, True, pantry_color), (x + 130, y + 3))
+        y += 24
+        day = DAY_NAMES[economy.config.bills_weekday]
+        bills = f"Factures chaque {day} : {_money(economy.weekly_bills())}"
+        surface.blit(theme.font(12).render(bills, True, theme.TEXT_DIM), (x, y))
+        return y + 22
+
+    def _draw_ledger(self, surface: pygame.Surface, x: int, y: int, economy: Economy, bottom: int) -> None:
+        surface.blit(theme.font(14, bold=True).render("Derniers mouvements", True, theme.TEXT), (x, y))
+        y += 20
+        for entry in reversed(economy.household.ledger):
+            if y + 16 > bottom:
+                break
+            color = (120, 210, 130) if entry.amount >= 0 else (235, 130, 110)
+            sign = "+" if entry.amount >= 0 else "−"
+            surface.blit(theme.font(12).render(_clip(entry.label, 38), True, theme.TEXT_DIM), (x, y))
+            amount = theme.font(12, bold=True).render(f"{sign}{_money(abs(entry.amount))}", True, color)
+            surface.blit(amount, (self.rect.right - 16 - amount.get_width(), y))
+            y += 16
 
     def _draw_family(self, surface: pygame.Surface, x: int, y: int, agents: list[Agent]) -> int:
         surface.blit(theme.font(15, bold=True).render("Famille", True, theme.TEXT), (x, y))
@@ -131,6 +163,11 @@ def _need_color(value: float) -> tuple[int, int, int]:
     if value < 50:
         return (230, 170, 60)
     return (90, 190, 110)
+
+
+def _money(amount: float) -> str:
+    """1234.5 -> « 1 235 $ » ; -80 -> « -80 $ »."""
+    return f"{amount:,.0f} $".replace(",", " ")
 
 
 def _clip(text: str, length: int) -> str:

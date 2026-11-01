@@ -57,7 +57,9 @@ def test_journee_type_d_un_lundi(setup):
     engine, events, _ = setup
     run_until(engine, parse_hhmm("23:40"))
     kinds = [e.kind for e in events]
-    assert kinds.count("depart") == 4 and kinds.count("retour") == 4
+    # Travail et école seulement : un adulte peut aussi sortir faire l'épicerie
+    daily = [e for e in events if e.kind in ("depart", "retour") and e.data["label"] in ("travail", "école")]
+    assert len(daily) == 8
     soupers = [e for e in events if e.kind == "action" and e.data["action"] == "souper"]
     assert len(soupers) == 4
     assert "dialogue" in kinds

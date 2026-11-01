@@ -10,6 +10,7 @@ from pathlib import Path
 
 from agents.actions import (
     ACTIONS,
+    AWAY_ACTIONS,
     URGENT_THRESHOLD,
     Option,
     action_label,
@@ -31,8 +32,9 @@ from llm.prompts import (
     validate_dialogue,
 )
 from llm.service import LLMService, StructuredResult
-from sim.clock import SimClock
+from sim.clock import SimClock, parse_hhmm
 from sim.config import AppConfig
+from sim.economy import Economy, Household
 from sim.events import Event, EventBus
 from world.house import House, InteractiveObject
 from world.pathfinding import NEIGHBORS, manhattan
@@ -68,7 +70,8 @@ MEMORABLE_ACTIONS = {
     "dormir": "Au lit pour la nuit.",
 }
 
-SAVE_VERSION = 1
+SAVE_VERSION = 2
+SUPPORTED_SAVE_VERSIONS = {1, 2}  # v1 : avant l'économie (le ménage repart des valeurs de départ)
 
 
 class Engine:
@@ -87,8 +90,12 @@ class Engine:
         self.pair_last_talk: dict[str, int] = {}  # paire -> minute absolue de la dernière conversation
         # agent -> (future du résumé, nombre d'événements couverts)
         self.pending_summaries: dict[str, tuple[Future[StructuredResult[MemorySummary]], int]] = {}
+        self.economy = Economy(config.economy)
 
     # ------------------------------------------------------------------ utilitaires
+
+    def alive_count(self) -> int:
+        return len(self.agents)
 
     def agent_by_id(self, agent_id: str) -> Agent | None:
         return next((a for a in self.agents if a.id == agent_id), None)
@@ -157,7 +164,7 @@ class Engine:
                 return None
         elif name == "flaner":
             use_pos = self.house.random_tile(self.rng, self.room_of(agent))
-        elif name == "partir":
+        elif name in AWAY_ACTIONS:
             # La porte est un passage : plusieurs agents peuvent s'y diriger en même temps
             use_pos = self.house.objects_of_kind("porte")[0].use_positions[0]
         elif definition.object_kind is not None:
@@ -200,16 +207,54 @@ class Engine:
                 continue
             if definition.object_kind and self._object_spot(agent, definition.object_kind) is None:
                 continue
+            if self.economy.enabled and not self._has_food_for(definition.name):
+                continue
             score = score_action(definition, agent.needs, favorites)
             if definition.name == "flaner":
                 score = max(score, 0.5)
             options.append(Option(action=definition.name, label=definition.label, score=score))
-        options.sort(key=lambda o: o.score, reverse=True)
+        options += self._economic_options(agent)
+        options.sort(key=lambda o: (o.urgent, o.score), reverse=True)
         return options
 
+    def _has_food_for(self, action: str) -> bool:
+        return self.economy.household.pantry + 1e-9 >= self.economy.portions_for(action)
+
+    def _economic_options(self, agent: Agent) -> list[Option]:
+        """Épicerie quand le garde-manger baisse, heures sup quand l'argent manque (adultes seulement)."""
+        eco = self.economy
+        if not eco.enabled or not agent.persona.is_adult:
+            return []
+        cfg = eco.config
+        open_from, open_to = (parse_hhmm(h) for h in cfg.shop_hours)
+        minute = self.clock.minute_of_day
+        if not open_from <= minute < open_to:
+            return []
+        options = []
+        days = eco.pantry_days(self.alive_count())
+        shopper_out = any(a.away_kind == "epicerie" or (a.action and a.action.name == "epicerie")
+                          for a in self.agents if a is not agent)
+        if days < cfg.low_pantry_days and eco.household.money >= eco.portion_price() and not shopper_out:
+            label = (f"va faire l'épicerie (garde-manger : {eco.household.pantry:.0f} portions, "
+                     f"{eco.household.money:.0f} $ en banque)")
+            options.append(Option(action="epicerie", label=label, score=round(20 + (cfg.low_pantry_days - days) * 20, 2),
+                                  urgent=days < 0.5))
+        weekday = self.clock.weekday < 5
+        if eco.household.money < cfg.overtime_below and agent.persona.salary_per_day > 0 and weekday \
+                and minute + cfg.overtime_minutes <= open_to:
+            pay = self._overtime_pay(agent)
+            label = f"part faire des heures supplémentaires (+{pay:.0f} $, {cfg.overtime_minutes // 60} h)"
+            gap = (cfg.overtime_below - eco.household.money) / cfg.overtime_below
+            options.append(Option(action="heures_sup", label=label, score=round(10 + gap * 30, 2)))
+        return options
+
+    def _overtime_pay(self, agent: Agent) -> float:
+        cfg = self.economy.config
+        return round(agent.persona.salary_per_day / 8 * cfg.overtime_rate * cfg.overtime_minutes / 60, 2)
+
     def pick_deterministic(self, agent: Agent, options: list[Option]) -> Option:
-        """Besoin urgent : meilleure option ; sinon tirage pondéré parmi les 3 meilleures."""
-        if agent.needs.lowest()[1] < URGENT_THRESHOLD:
+        """Option urgente ou besoin urgent : meilleure option ; sinon tirage pondéré parmi les 3 meilleures."""
+        if options[0].urgent or agent.needs.lowest()[1] < URGENT_THRESHOLD:
             return options[0]
         top = options[:3]
         weights = [max(o.score, 0.01) for o in top]
@@ -277,6 +322,7 @@ class Engine:
     def _should_ask_llm(self, agent: Agent, options: list[Option]) -> bool:
         cfg = self.config.llm
         return (self.llm is not None and cfg.decisions_enabled and len(options) >= 2
+                and not options[0].urgent
                 and agent.needs.lowest()[1] >= URGENT_THRESHOLD
                 and self.clock.total_minutes - agent.last_decision_minute >= cfg.decision_cooldown_minutes)
 
@@ -342,9 +388,21 @@ class Engine:
 
     def tick(self) -> None:
         self.clock.advance()
+        if self.economy.bills_due(self.clock):
+            self._charge_bills()
         for agent in self.agents:
             self._update_agent(agent)
         self._detect_encounters()
+
+    def _charge_bills(self) -> None:
+        total = self.economy.charge_bills(self.clock)
+        money = self.economy.household.money
+        self.publish("factures", amount=-total, money=money,
+                     detail=dict(self.economy.config.weekly_bills))
+        for agent in self.agents:
+            if agent.persona.is_adult:
+                warning = " On est dans le rouge." if money < 0 else ""
+                self.remember(agent, f"Les factures sont passées : {total:.0f} $ (solde {money:.0f} $).{warning}")
 
     # ------------------------------------------------------------------ rencontres et dialogues
 
@@ -434,6 +492,9 @@ class Engine:
             return
 
         agent.needs.decay(minutes, "sleeping" if agent.is_sleeping else "awake")
+        if self.economy.in_debt and agent.persona.is_adult and not agent.is_sleeping:
+            # Les dettes gâchent le moral des parents
+            agent.needs.apply({"fun": -self.economy.config.debt_fun_penalty_per_hour * minutes / 60})
 
         scheduled = self.scheduler.check(agent, self.clock)
         if scheduled is not None:
@@ -475,8 +536,10 @@ class Engine:
                     agent.action = None
                 return
             action.started = True
-            if action.name == "partir":
+            if action.name in AWAY_ACTIONS:
                 self._leave(agent, action)
+            elif not self._eat(agent, action.name):
+                agent.action = None
             return
 
         definition = ACTIONS[action.name]
@@ -490,9 +553,35 @@ class Engine:
         if done:
             agent.action = None
 
+    def _eat(self, agent: Agent, action_name: str) -> bool:
+        """Prend la nourriture du garde-manger au début d'un repas ; False si le frigo est vide."""
+        portions = self.economy.portions_for(action_name)
+        if self.economy.consume(portions):
+            return True
+        self.publish("frigo_vide", agent=agent.id, name=agent.name, action=action_name)
+        self.remember(agent, "Le frigo est vide, rien à manger.")
+        return False
+
     def _leave(self, agent: Agent, action: ActiveAction) -> None:
-        agent.away_until = action.until_minute
-        agent.away_label = action.target or "travail"
+        now = self.clock.total_minutes
+        cfg = self.economy.config
+        if action.name == "epicerie":
+            agent.away_until, agent.away_label, agent.away_kind = now + cfg.grocery_minutes, "épicerie", "epicerie"
+            agent.away_pay = 0.0
+        elif action.name == "heures_sup":
+            agent.away_until = now + cfg.overtime_minutes
+            agent.away_label, agent.away_kind = "travail (heures sup)", "heures_sup"
+            agent.away_pay = self._overtime_pay(agent)
+        else:
+            salary = agent.persona.salary_per_day
+            agent.away_until = action.until_minute
+            agent.away_label = action.target or "travail"
+            agent.away_kind = "travail" if salary > 0 else "ecole"
+            agent.away_pay = salary
+            # Le lunch vient du garde-manger ; sans lunch, on rentre affamé
+            if self.economy.enabled and not self.economy.consume(self.economy.config.meal_portions):
+                agent.needs.apply({"hunger": -25})
+                self.remember(agent, "Parti sans lunch : le frigo était vide.")
         agent.action = None
         agent.path = []
         self.publish("depart", agent=agent.id, name=agent.name, label=agent.away_label)
@@ -502,13 +591,31 @@ class Engine:
         door = self.house.objects["porte"].use_positions[0]
         agent.pos = door
         agent.last_room = self.house.room_at(door)
-        label = agent.away_label
+        label, kind, pay = agent.away_label, agent.away_kind, agent.away_pay
         agent.away_until = None
         agent.away_label = None
+        agent.away_kind = None
+        agent.away_pay = 0.0
         self.publish("retour", agent=agent.id, name=agent.name, label=label)
         place = label or "travail"
         origin = f"de l'{place}" if away_phrase(place).startswith("à l'") else f"du {place}"
         self.remember(agent, f"De retour {origin}.")
+        if not self.economy.enabled:
+            return
+        now = self.clock.total_minutes
+        if pay > 0:
+            what = "Heures sup" if kind == "heures_sup" else "Paie"
+            self.economy.transaction(now, f"{what} de {agent.name}", pay)
+            self.publish("paie", agent=agent.id, name=agent.name, amount=pay, source=kind,
+                         money=self.economy.household.money)
+        if kind == "epicerie":
+            bought, cost = self.economy.buy_groceries(now, self.alive_count(), agent.name)
+            self.publish("epicerie", agent=agent.id, name=agent.name, portions=bought, amount=-cost,
+                         money=self.economy.household.money)
+            if bought:
+                self.remember(agent, f"Épicerie faite : {bought} portions pour {cost:.0f} $.")
+            else:
+                self.remember(agent, "Pas assez d'argent pour faire l'épicerie...")
 
     # ------------------------------------------------------------------ sauvegarde
 
@@ -519,6 +626,7 @@ class Engine:
             "total_minutes": self.clock.total_minutes,
             "agents": {a.id: a.model_dump(mode="json") for a in self.agents},
             "pair_last_talk": self.pair_last_talk,
+            "household": self.economy.household.model_dump(mode="json"),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -529,10 +637,12 @@ class Engine:
     def load_state(self, path: str | Path) -> None:
         """Restaure une sauvegarde ; les agents absents du fichier gardent leur état initial."""
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-        if data.get("version") != SAVE_VERSION:
+        if data.get("version") not in SUPPORTED_SAVE_VERSIONS:
             raise ValueError(f"Version de sauvegarde non prise en charge : {data.get('version')}")
         self.clock.total_minutes = data["total_minutes"]
         self.pair_last_talk = dict(data.get("pair_last_talk", {}))
+        if "household" in data:
+            self.economy.household = Household.model_validate(data["household"])
         saved = data.get("agents", {})
         for index, agent in enumerate(self.agents):
             if agent.id in saved:

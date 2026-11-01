@@ -123,7 +123,8 @@ def main() -> None:
         renderer.draw(screen, agents, selected_id, clock.minute_of_day)
         dialogue_box.draw(screen)
         selected = engine.agent_by_id(selected_id) if selected_id else None
-        hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label)
+        hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label,
+                 engine.economy, engine.alive_count())
         pygame.display.flip()
 
     engine.save_state(save_path)

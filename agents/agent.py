@@ -42,6 +42,8 @@ class Agent(BaseModel):
     action: ActiveAction | None = None
     away_until: int | None = None    # minute absolue de retour si absent
     away_label: str | None = None
+    away_kind: str | None = None     # travail, ecole, epicerie, heures_sup
+    away_pay: float = 0.0            # paie versée au retour
     fired: dict[str, int] = Field(default_factory=dict)  # tâche d'horaire -> dernier jour exécuté
     last_decision_minute: int = -10**9   # dernière décision demandée au LLM
     memory: Memory = Field(default_factory=Memory)

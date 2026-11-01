@@ -57,12 +57,35 @@ class MemoryConfig(BaseModel):
     max_summaries: int = 5
 
 
+class EconomyConfig(BaseModel):
+    enabled: bool = True
+    start_money: float = 1500.0
+    start_pantry: float = 30.0          # portions
+    portion_price: float = 8.0
+    meal_portions: float = 1.0
+    snack_portions: float = 0.5
+    weekly_bills: dict[str, float] = Field(default_factory=lambda: {
+        "Hypothèque": 370.0, "Hydro-Québec": 50.0, "Internet et cellulaires": 55.0, "Assurances": 40.0,
+    })
+    bills_weekday: int = 4              # vendredi
+    bills_time: str = "09:00"
+    grocery_minutes: int = 90
+    grocery_days: int = 7               # l'épicerie vise N jours de nourriture
+    low_pantry_days: float = 2.0        # sous ce seuil, l'épicerie devient une option
+    shop_hours: tuple[str, str] = ("08:00", "20:00")
+    overtime_minutes: int = 180
+    overtime_rate: float = 1.5
+    overtime_below: float = 400.0       # heures sup proposées sous ce solde
+    debt_fun_penalty_per_hour: float = 1.5
+
+
 class AppConfig(BaseModel):
     sim: SimConfig = Field(default_factory=SimConfig)
     display: DisplayConfig = Field(default_factory=DisplayConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     dialogue: DialogueConfig = Field(default_factory=DialogueConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    economy: EconomyConfig = Field(default_factory=EconomyConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"

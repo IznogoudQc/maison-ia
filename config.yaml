@@ -43,6 +43,21 @@ memory:
   summary_every: 12           # nouveaux événements avant un résumé
   max_summaries: 5
 
+economy:
+  enabled: true
+  start_money: 1500
+  start_pantry: 30            # portions de nourriture au départ
+  portion_price: 8            # $ par portion à l'épicerie
+  weekly_bills:               # prélevées chaque semaine
+    Hypothèque: 370
+    Hydro-Québec: 50
+    Internet et cellulaires: 55
+    Assurances: 40
+  bills_weekday: 4            # 0 = lundi ... 4 = vendredi
+  grocery_days: 7             # l'épicerie vise N jours de nourriture
+  low_pantry_days: 2          # sous ce seuil, l'épicerie devient une option
+  overtime_below: 400         # heures sup proposées sous ce solde
+
 family_file: data/family.yaml
 save_file: save.json
 log_dir: logs

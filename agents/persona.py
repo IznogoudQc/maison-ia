@@ -47,7 +47,12 @@ class Persona(BaseModel):
     speech_style: str = ""
     bed: str
     favorite_actions: list[str] = Field(default_factory=list)
+    salary_per_day: float = 0.0   # paie nette par journée de travail (0 = pas d'emploi)
     schedule: Schedule
+
+    @property
+    def is_adult(self) -> bool:
+        return self.age >= 18
 
     def short_description(self) -> str:
         return f"{self.name}, {self.age} ans ({self.role}) : {', '.join(self.traits)}"

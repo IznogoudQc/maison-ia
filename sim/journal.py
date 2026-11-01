@@ -10,7 +10,8 @@ from typing import TextIO
 from sim.clock import SimClock
 from sim.events import Event, EventBus
 
-LOGGED_KINDS = ("dialogue", "decision", "depart", "retour", "resume", "dialogue_echec")
+LOGGED_KINDS = ("dialogue", "decision", "depart", "retour", "resume", "dialogue_echec",
+                "paie", "factures", "epicerie", "frigo_vide")
 
 
 class JsonlJournal:

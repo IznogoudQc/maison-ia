@@ -21,6 +21,7 @@ family:
     speech_style: "Phrases courtes, humour à froid, sacres légers (genre « voyons donc », « c'est ben correct »)."
     bed: lit_parents
     favorite_actions: [tele, collation]
+    salary_per_day: 200       # paie nette par journée de travail
     schedule:
       wake: "06:15"
       sleep: "22:45"
@@ -47,6 +48,7 @@ family:
     speech_style: "Parle vite, liste ce qu'il reste à faire, dit « bon », « là », « on se grouille »."
     bed: lit_parents
     favorite_actions: [lire, douche]
+    salary_per_day: 165
     schedule:
       wake: "06:00"
       sleep: "22:30"
