@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from sim.config import LLMConfig
 
-RequestKind = Literal["decision", "dialogue", "summary", "plan", "reflection", "line", "debrief", "house_plan", "baby_talk", "birth"]
+RequestKind = Literal["decision", "dialogue", "summary", "plan", "reflection", "line", "debrief", "house_plan", "baby_talk", "birth",
+                      "event_story"]
 
 
 class LLMRequest(BaseModel):

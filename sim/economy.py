@@ -56,6 +56,8 @@ class Household(BaseModel):
     last_lawn_day: int = -1
     last_fine_day: int = -100
     wood: int = 0                  # bûches coupées sur le terrain (feu, puis construction)
+    building_permit: bool = False  # permis de construire payé (inspecteur municipal)
+    gifted: list[str] = Field(default_factory=list)  # enfants déjà fêtés par la parenté (cadeau de naissance)
     ledger: list[LedgerEntry] = Field(default_factory=list)
 
 

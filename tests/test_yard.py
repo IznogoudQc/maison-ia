@@ -108,10 +108,10 @@ def test_auto_retour_plus_tot_et_absente_de_l_entree():
     run_until(eng, parse_hhmm("09:00"))
     pere = eng.agent_by_id("pere")
     assert pere.drove and not eng.car_home()
-    run_until(eng, parse_hhmm("17:00"))
+    run_until(eng, parse_hhmm("16:45") - 30 + 1)
     back = next(e for e in events if e.kind == "retour" and e.data["name"] == "Stéphane")
     assert back.minute == parse_hhmm("16:45") - 30
-    assert eng.car_home()
+    assert eng.car_home()  # juste à son retour (plus tard, quelqu'un peut repartir avec)
 
 
 def test_bbq_la_fin_de_semaine():

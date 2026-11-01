@@ -111,6 +111,7 @@ class EventsConfig(BaseModel):
     enabled: bool = True
     check_time: str = "08:30"           # tirage quotidien des événements
     frequency: float = 1.0              # multiplicateur des probabilités (0 = jamais, 2 = deux fois plus)
+    narrate: bool = True                # le LLM raconte l'événement (les chiffres restent ceux du moteur)
 
 
 class LifeConfig(BaseModel):

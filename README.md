@@ -116,8 +116,18 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
 - **Santé et mort** : faim ou épuisement à zéro font baisser la santé ; à zéro, la personne meurt
   (cadre avec ruban noir au salon, deuil des survivants). Quand toute la famille est morte, la partie
   se termine. `health.mortality: false` remplace la mort par quelques jours d'hôpital.
-- **Événements aléatoires** : mise à pied, facture imprévue, hausse du prix de l'épicerie, prime,
-  remboursement d'impôt, gardiennage de Léa...
+- **Événements aléatoires** (tirés chaque matin, au plus deux par jour) : chacun dit dans quel
+  scénario il peut arriver et à quelle condition, et seuls ceux qui collent à la situation sont tirés.
+  Partout : mise à pied, facture imprévue (des factures propres à chaque scénario), hausse de
+  l'épicerie, prime, impôt, grand-maman (qui vient voir le bébé s'il y en a un), belle journée d'été,
+  gardiennage (s'il y a un ado). Sur le terrain : orage (la tente prend l'eau, ou la bâche du
+  chantier s'envole), arbre tombé (bûches gratuites), vol de matériaux et corvée entre voisins
+  (pendant un chantier), ratons laveurs dans la glacière (tant qu'il n'y a pas de cuisine),
+  inspecteur municipal (permis de construire, une seule fois), vente de bois de chauffage (grosse
+  réserve), bébé malade (un parent rate une journée), cadeau de naissance.
+- **Récit par l'IA** (`events.narrate`) : l'effet chiffré est appliqué par le moteur, puis le LLM
+  raconte l'événement en une ou deux phrases avec les noms et le contexte ; le récit doit garder
+  tous les chiffres, sinon (ou après 10 secondes sans réponse) le texte fixe est publié.
 - **Extérieur** : le gazon pousse chaque jour. Sans tondeuse, le jeune d'à côté le tond (40 $) ;
   à 100 %, la ville donne une amende.
 - **Achats** : tondeuse, BBQ, piscine, auto. Ils sont proposés aux parents seulement s'il reste deux
@@ -198,7 +208,7 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | `mind` | `plans_enabled`, `reflections_enabled`, `plan_item_window_minutes`, `max_replans_per_day`, `goal_boost` |
 | `economy` | `enabled`, `start_money`, `start_pantry`, `portion_price`, `weekly_bills`, `bills_weekday`, `grocery_days`, `low_pantry_days`, `overtime_below` |
 | `health` | `mortality`, `starvation_per_hour`, `exhaustion_per_hour`, `regen_per_hour`, `hospital_days`, `grief_days` |
-| `events` | `enabled`, `check_time`, `frequency` (0 = jamais, 2 = deux fois plus souvent) |
+| `events` | `enabled`, `check_time`, `frequency` (0 = jamais, 2 = deux fois plus souvent), `narrate` |
 | `life` | `enabled`, `days_per_year`, `pregnancy_days`, `min_happiness`, `min_affection`, `talk_every_days`, `max_children`, `parental_leave_years`, `daycare_fee` |
 | `world` | `scenario` (`maison` ou `terrain`) ; `terrain` : `width`, `height`, `seed`, `tree_density`, `family_file`, `start_money`, `start_pantry`, `weekly_bills`, `instant_build` |
 

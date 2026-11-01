@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+import time
 from concurrent.futures import Future
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,12 +27,15 @@ from agents.scheduler import Scheduler
 from llm.prompts import (
     ActionDecision,
     Dialogue,
+    EventStory,
     MemorySummary,
     build_decision_request,
     build_dialogue_request,
+    build_story_request,
     build_summary_request,
     validate_decision,
     validate_dialogue,
+    validate_story,
 )
 from llm.service import LLMService, StructuredResult
 from sim.clock import SimClock, parse_hhmm
@@ -92,6 +96,7 @@ WOOD_YIELD = {"Érable": 6, "Sapin": 5, "Bouleau": 4}
 SAW_FACTOR = 0.45          # avec la scie à chaîne, un arbre prend 45 % du temps
 NO_ROOF_FUN_PER_HOUR = 1.0  # vivre sans toit use le moral, petit à petit
 CUT_HOURS = (8 * 60, 19 * 60)
+STORY_WAIT_SECONDS = 10.0  # secondes réelles : au-delà, la nouvelle paraît avec son texte fixe
 BUILD_HOURS = (8 * 60, 20 * 60)   # on peut cogner jusqu'à 20 h (après le souper, l'été)
 EVENING = 17 * 60
 ENCOUNTER_RADIUS = 6       # dehors, on ne jase qu'avec quelqu'un d'assez proche
@@ -125,6 +130,8 @@ class Engine:
         self.social = Social(self)
         self.architect = Architect(self)
         self.family = FamilyLife(self)
+        # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
+        self.pending_stories: list[tuple] = []
 
     # ------------------------------------------------------------------ utilitaires
 
@@ -597,6 +604,7 @@ class Engine:
         self._poll_dialogues()
         self._poll_summaries()
         self.mind.poll()
+        self._poll_stories()
         self.social.poll()
         self.architect.poll()
         self.family.poll()
@@ -655,8 +663,33 @@ class Engine:
         self._detect_encounters()
 
     def _roll_events(self) -> None:
+        """Effets appliqués tout de suite ; le LLM raconte ensuite le fait (repli : le texte fixe)."""
+        family = [a for a in self.agents if not a.dead]
         for event, text in self.random_events.roll(self, self.rng):
+            if self.llm is not None and self.config.events.narrate:
+                request = build_story_request(text, event.good, self.family_context(family),
+                                              self.config.llm.max_tokens)
+                future = self.llm.try_submit(request, EventStory, None,
+                                             lambda story, base=text: validate_story(story, base))
+                if future is not None:
+                    self.pending_stories.append((event, text, future, time.monotonic()))
+                    continue
             self._news(text, event.good, event.id)
+
+    def _poll_stories(self) -> None:
+        now = time.monotonic()  # temps réel : à vitesse x30, 30 minutes de jeu ne durent qu'une seconde
+        for item in list(self.pending_stories):
+            event, base, future, submitted = item
+            if future.done():
+                self.pending_stories.remove(item)
+                try:
+                    story = future.result().value
+                except Exception:  # erreur inattendue dans le thread : le texte fixe
+                    story = None
+                self._news(story.text if story else base, event.good, event.id)
+            elif now - submitted > STORY_WAIT_SECONDS:
+                self.pending_stories.remove(item)
+                self._news(base, event.good, event.id)  # le récit tarde : on n'attend pas
 
     def family_context(self, agents: list[Agent]) -> str:
         """Situation de la famille pour les prompts : argent, santé, chômage, deuils, dernière nouvelle."""
@@ -1042,11 +1075,11 @@ class Engine:
         self.remember(agent, "Plus de bois sec : souper froid sur le réchaud.", 3)
         return True
 
-    def _fell_tree(self, agent: Agent, tree_id: str) -> None:
-        """L'arbre tombe : des bûches pour la réserve, et la lisière recule."""
+    def fell_tree(self, tree_id: str) -> int:
+        """L'arbre tombe (hache, scie ou grand vent) : des bûches pour la réserve, la lisière recule."""
         tree = self.house.remove_object(tree_id)
         if tree is None:
-            return  # quelqu'un l'a abattu avant
+            return 0  # quelqu'un l'a abattu avant
         logs = WOOD_YIELD.get(tree.label, 5)
         self.economy.household.wood += logs
         x, y = tree.rect[:2]
@@ -1056,6 +1089,13 @@ class Engine:
                 spots = [p for p in ((nx, ny + 1), (nx - 1, ny), (nx + 1, ny), (nx, ny - 1))
                          if self.house.is_walkable(p)]
                 self.house.set_use_positions(neighbor, spots)
+        return logs
+
+    def _fell_tree(self, agent: Agent, tree_id: str) -> None:
+        tree = self.house.objects.get(tree_id)
+        logs = self.fell_tree(tree_id)
+        if not logs or tree is None:
+            return
         self.publish("coupe", agent=agent.id, name=agent.name, species=tree.label, logs=logs,
                      wood=self.economy.household.wood, trees=len(self.house.objects_of_kind("arbre")))
         self.remember(agent, f"J'ai abattu un {tree.label.lower()} : {logs} bûches de plus "
@@ -1189,6 +1229,7 @@ class Engine:
         self.pending_dialogues.clear()
         self.pending_summaries.clear()
         self.mind.clear()
+        self.pending_stories.clear()
         self.social.clear()
         self.social.load_dict(data.get("social", {}))
         self.game_over = self.alive_count() == 0

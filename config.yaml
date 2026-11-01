@@ -88,6 +88,7 @@ events:
   enabled: true               # mise à pied, facture imprévue, hausse de prix, prime...
   check_time: "08:30"         # tirage quotidien
   frequency: 1.0              # 0 = jamais, 2 = deux fois plus souvent
+  narrate: true               # le LLM raconte chaque événement (les chiffres restent ceux du moteur)
 
 world:
   scenario: maison            # maison : la famille Gagnon et sa maison ; terrain : un couple, une tente, un lot à bâtir

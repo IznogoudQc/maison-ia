@@ -147,6 +147,8 @@ class MockProvider(LLMProvider):
                 text = self._baby_talk(request)
             elif request.kind == "birth":
                 text = self._birth(request)
+            elif request.kind == "event_story":
+                text = self._event_story(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -346,6 +348,13 @@ class MockProvider(LLMProvider):
                            "Un chalet simple au bord du bois, bâti de nos mains."])
         return json.dumps({"vision": vision, "discussion": discussion, "rooms": rooms}, ensure_ascii=False)
 
+
+    def _event_story(self, request: LLMRequest) -> str:
+        """Le fait tel quel, avec une entrée en matière (les chiffres sont donc conservés)."""
+        good = request.meta.get("good", True)
+        intro = self.rng.choice(["Ça parle de ça au souper : ", "Nouvelle du jour : ", "Imaginez-vous donc : "]
+                                if good else ["Pas de chance : ", "Ouch : ", "Comme si c'était pas assez : "])
+        return json.dumps({"text": intro + request.meta.get("base", "")}, ensure_ascii=False)
 
     def _baby_talk(self, request: LLMRequest) -> str:
         names = [p["name"] for p in request.meta.get("couple", [])] or ["Maxime", "Camille"]

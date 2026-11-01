@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
@@ -214,6 +215,39 @@ def build_dialogue_request(participants: list[Agent], room: str, time_label: str
         **(extra_meta or {}),
     }
     return LLMRequest(kind="dialogue", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
+
+
+class EventStory(BaseModel):
+    text: str = Field(min_length=1)
+
+
+def validate_story(story: EventStory, base: str) -> EventStory:
+    """Le récit garde tous les chiffres du fait (montants, jours, portions) ; ValueError sinon."""
+    text = " ".join(story.text.split())[:240]
+    digits = re.findall(r"\d+", base)
+    plain = text.replace("\u202f", "").replace("\xa0", "")
+    missing = [d for d in digits if d not in re.findall(r"\d+", plain.replace(" ", ""))
+               and d not in re.findall(r"\d+", plain)]
+    if missing:
+        raise ValueError(f"chiffres du fait absents du récit : {', '.join(missing)}")
+    return EventStory(text=text)
+
+
+def build_story_request(base: str, good: bool, context: str, max_tokens: int) -> LLMRequest:
+    system = (
+        "Tu es le narrateur d'une simulation de vie d'une famille québécoise. Tu racontes un événement du jour "
+        "en une ou deux phrases vivantes, en français québécois, sans rien inventer qui contredise le fait. "
+        "Tous les chiffres du fait (montants, jours, heures, portions) doivent apparaître tels quels. " + JSON_RULE
+    )
+    tone = "bonne nouvelle" if good else "coup dur"
+    prompt = (
+        f"FAIT ({tone}) : {base}\n\n"
+        + (f"SITUATION DE LA FAMILLE\n{context}\n\n" if context else "")
+        + "Raconte ce fait en 35 mots au plus, en nommant les personnes concernées s'il y en a.\n"
+        'Format exact : {"text": "<récit>"}'
+    )
+    return LLMRequest(kind="event_story", system=system, prompt=prompt, max_tokens=max_tokens,
+                      meta={"base": base, "good": good})
 
 
 def build_summary_request(agent: Agent, events: list[str], previous: str | None,
