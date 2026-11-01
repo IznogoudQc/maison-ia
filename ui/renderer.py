@@ -74,8 +74,8 @@ class Renderer:
 
     def set_plan(self, plan, marked_trees: list[tuple[int, int]]) -> None:
         """Pièces prévues pas encore bâties (piquets au sol) et arbres marqués à couper."""
-        self.blueprint = [] if plan is None else [(r.outer(), r.name, r.status) for r in plan.rooms
-                                                  if r.status != "bati"]
+        self.blueprint = [] if plan is None else [(r.outer(), r.name, r.status, r.fraction, r.contractor)
+                                                  for r in plan.rooms if r.status != "bati"]
         self.marked_trees = marked_trees
 
     def _refresh_rooms(self) -> None:
@@ -221,7 +221,8 @@ class Renderer:
         labels = [(name, rect) for name, rect in house.rooms.items()
                   if house.layout.labels or name not in house.outdoor_rooms]
         # Pièces prévues : le nom sur le plan au sol (rectangle extérieur, d'où le décalage d'une case)
-        labels += [(f"{name} (plan)", (x0 + 1, y0, x1, y1 - 1)) for (x0, y0, x1, y1), name, _s in self.blueprint]
+        labels += [(f"{name} ({frac * 100:.0f} %)" if status == "chantier" else f"{name} (plan)",
+                    (x0 + 1, y0, x1, y1 - 1)) for (x0, y0, x1, y1), name, status, frac, _c in self.blueprint]
         for name, (x0, _y0, _x1, y1) in labels:
             text = self._label_cache.get(name)
             if text is None:
@@ -345,9 +346,12 @@ class Renderer:
         view = self.view_rect()
         low.set_clip(view)
         low.blit(self.background, view.topleft, view)
-        for (x0, y0, x1, y1), _name, status in self.blueprint:
-            sprites.draw_stake_line(low, pygame.Rect(x0 * TILE + 3, y0 * TILE + 3, (x1 - x0 + 1) * TILE - 6,
-                                                     (y1 - y0 + 1) * TILE - 6), status == "pret")
+        for (x0, y0, x1, y1), _name, status, fraction, contractor in self.blueprint:
+            if status == "chantier":
+                sprites.draw_construction(low, (x0, y0, x1, y1), fraction, contractor)
+            else:
+                sprites.draw_stake_line(low, pygame.Rect(x0 * TILE + 3, y0 * TILE + 3, (x1 - x0 + 1) * TILE - 6,
+                                                         (y1 - y0 + 1) * TILE - 6), status == "pret")
         for x, y in self.marked_trees:
             sprites.draw_tree_ribbon(low, x, y)
         pile = self.house.objects.get("corde_bois")
@@ -415,22 +419,31 @@ class Renderer:
         objects = self.house.objects
         frame = int(self.time * WALK_FPS)
         steam: list[tuple[int, int]] = []
-        if any(self._active(a, "tele") for a in agents) and "tele" in objects:
-            sprites.draw_tv_screen(low, objects["tele"], frame)
-        if any(self._active(a, "ordi") for a in agents) and "ordi" in objects:
-            sprites.draw_computer_screen(low, objects["ordi"], self.time)
-        if any(self._active(a, "collation") for a in agents) and "frigo" in objects:
-            sprites.draw_fridge_open(low, objects["frigo"])
-        if any(self._active(a, "cuisiner") for a in agents) and "cuisiniere" in objects:
-            steam.append(sprites.draw_pan(low, objects["cuisiniere"]))
-        meal = next((a.action.name for a in agents if self._active(a, "souper", "dejeuner")), None)
-        if meal and "table" in objects:
-            x, y, w, h = objects["table"].rect
+        # Objet réellement utilisé par chaque agent : marche aussi pour les meubles de la maison bâtie
+        tables: dict[str, tuple[object, str]] = {}
+        for agent in agents:
+            used = self._used_object(agent)
+            if self._active(agent, "tele"):
+                tv = self._tv_for(agent)
+                if tv is not None:
+                    sprites.draw_tv_screen(low, tv, frame)
+            elif self._active(agent, "ordi") and used is not None and used.kind == "ordi":
+                sprites.draw_computer_screen(low, used, self.time)
+            elif self._active(agent, "collation") and used is not None and used.kind == "frigo" \
+                    and used.id != "glaciere":
+                sprites.draw_fridge_open(low, used)
+            elif self._active(agent, "cuisiner") and used is not None and used.kind == "cuisiniere" \
+                    and used.id != "feu":
+                steam.append(sprites.draw_pan(low, used))
+            elif self._active(agent, "souper", "dejeuner") and used is not None and used.kind == "table":
+                tables[used.id] = (used, agent.action.name)
+            elif self._active(agent, "douche") and self._shower_of(agent) is not None:
+                x, y, w, h = self._shower_of(agent).rect
+                steam.append((x * TILE + w * TILE // 2, y * TILE + 6))
+        for table, meal in tables.values():
+            x, y, w, h = table.rect
             for plate in sprites.table_plates(pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)):
                 sprites.draw_food(low, plate, dinner=meal == "souper")
-        if any(self._active(a, "douche") for a in agents) and "douche" in objects:
-            x, y, w, h = objects["douche"].rect
-            steam.append((x * TILE + w * TILE // 2, y * TILE + 6))
         fire = objects.get("feu")
         if fire is not None and self._fire_burning(agents):
             steam.append(sprites.draw_flames(low, fire, self.time))
@@ -438,6 +451,17 @@ class Renderer:
             x, y, _w, _h = objects["bbq"].rect
             steam.append((x * TILE + TILE // 2, y * TILE + 4))
         return steam
+
+    def _used_object(self, agent: Agent):
+        if agent.action is None or agent.action.use_pos is None:
+            return None
+        return self.house.object_at_spot(agent.action.use_pos)
+
+    def _tv_for(self, agent: Agent):
+        """La télé de la pièce où l'on est assis (celle des Gagnon ou celle de la maison bâtie)."""
+        room = self.house.room_at(agent.pos)
+        return next((o for o in self.house.objects.values() if o.label.startswith("Télé") and o.room == room),
+                    self.house.objects.get("tele"))
 
     def _fire_burning(self, agents: list[Agent]) -> bool:
         hour = self.time_of_day
@@ -527,6 +551,8 @@ class Renderer:
             sprites.draw_lego(low, left + 8, top + 14)
         elif self._active(agent, "tondre"):
             sprites.draw_mower(low, left + (12 if direction != "left" else -2), top + 12)
+        elif self._active(agent, "construire"):
+            sprites.draw_hammer(low, hand_x, hand_y, self.time)
         elif self._active(agent, "couper"):
             sprites.draw_axe(low, hand_x, hand_y, self.time, chainsaw="scie" in self.purchases)
         elif self._active(agent, "dejeuner") and agent.persona.age >= 18 and "table" in self.house.objects:

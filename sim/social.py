@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 # Activités qu'on peut se promettre de faire ensemble (ou corvées qu'on promet de faire)
 PROMISABLE = ("tele", "lire", "jouer", "jaser", "baignade", "jardin", "balancoire", "tondre", "epicerie",
-              "veiller", "couper")
+              "veiller", "couper", "construire")
 TENSE_PAIR = 70.0          # au-delà, la paire se reparle moins souvent
 NOTE_FROM = 2.0            # variation de ressenti qui laisse une impression (note)
 KEPT_AFFECTION = 4.0
@@ -337,6 +337,10 @@ class Social:
             return None  # pas de piscine
         if action == "tondre" and not engine.economy.owns("tondeuse"):
             return None
+        if action == "construire":
+            site = engine.architect.site_room()
+            if site is None or site.contractor:
+                return None  # rien à bâtir pour l'instant
         if action == "epicerie":
             open_from, open_to = (parse_hhmm(h) for h in engine.economy.config.shop_hours)
             if not any(people[i].persona.is_adult for i in who) or not open_from <= minute_of_day < open_to:
@@ -362,7 +366,7 @@ class Social:
         definition = ACTIONS[action]
         if action == "tondre":
             return agent.persona.age >= 13
-        if action == "couper":
+        if action in ("couper", "construire"):
             return agent.persona.age >= 16
         if action == "epicerie":
             return agent.persona.is_adult
@@ -387,7 +391,9 @@ class Social:
         partners = [i for i in promise.people if i != agent.id]
         reason = f"Promesse : {promise.text}"
         if promise.action != "jaser" and self._allowed(agent, promise.action):
-            action = engine.make_action(agent, promise.action, forced=False, reason=reason)
+            site = engine.architect.site_room() if promise.action == "construire" else None
+            action = engine.make_action(agent, promise.action, site.id if site else None, forced=False,
+                                        reason=reason)
             if action is not None:
                 return action
         # Activité réservée à l'autre (les Lego de Félix) : on va la faire à côté en jasant

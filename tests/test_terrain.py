@@ -156,6 +156,7 @@ def free(engine, agent):
 def test_couper_propose_de_jour_quand_la_reserve_est_basse(setup):
     engine, _ = setup
     run_until(engine, 5 * DAY + parse_hhmm("10:00"))
+    engine.architect.plan = None  # sans chantier : la réserve visée est celle du feu de camp
     maxime = engine.agent_by_id("maxime")
     engine.economy.household.wood = 0
     low = next(o for o in engine.options_for(maxime) if o.action == "couper")

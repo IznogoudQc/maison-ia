@@ -79,15 +79,43 @@ def room_cost(room_type: str, width: int, height: int) -> tuple[float, int]:
     return round(money, -1), wood
 
 
+WORK_BASE, WORK_PER_TILE = 8.0, 1.2   # heures de travail : fondation + par case de plancher
+
+
+def work_hours(width: int, height: int) -> float:
+    """Heures de travail d'une personne ordinaire pour bâtir la pièce."""
+    return round(WORK_BASE + WORK_PER_TILE * width * height, 1)
+
+
 class PlannedRoom(BaseModel):
     id: str
     type: str
     name: str
     rect: Rect                     # intérieur
-    status: str = "plan"           # plan (à défricher), pret (terrain dégagé), bati
+    status: str = "plan"           # plan (à défricher), pret (terrain dégagé), chantier, bati
     anchor: str | None = None      # pièce à laquelle elle est collée
     side: str | None = None
     why: str = ""
+    progress: float = 0.0          # heures de travail faites
+    materials_paid: bool = False   # matériaux achetés au début du chantier
+    contractor: bool = False       # un entrepreneur finit le travail
+    wood_used: int = 0             # bûches déjà posées
+
+    @property
+    def work_needed(self) -> float:
+        return work_hours(self.width, self.height)
+
+    @property
+    def fraction(self) -> float:
+        return min(1.0, self.progress / self.work_needed)
+
+    @property
+    def wood_needed(self) -> int:
+        return room_cost(self.type, self.width, self.height)[1]
+
+    @property
+    def materials_cost(self) -> float:
+        return room_cost(self.type, self.width, self.height)[0]
 
     @property
     def width(self) -> int:

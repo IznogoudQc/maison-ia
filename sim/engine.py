@@ -91,6 +91,7 @@ WOOD_YIELD = {"Érable": 6, "Sapin": 5, "Bouleau": 4}
 SAW_FACTOR = 0.45          # avec la scie à chaîne, un arbre prend 45 % du temps
 NO_ROOF_FUN_PER_HOUR = 1.0  # vivre sans toit use le moral, petit à petit
 CUT_HOURS = (8 * 60, 19 * 60)
+BUILD_HOURS = (8 * 60, 20 * 60)   # on peut cogner jusqu'à 20 h (après le souper, l'été)
 EVENING = 17 * 60
 ENCOUNTER_RADIUS = 6       # dehors, on ne jase qu'avec quelqu'un d'assez proche
 
@@ -215,6 +216,17 @@ class Engine:
             target_name = f"{item.label} ({item.price:,.0f} $)".replace(",", " ")
         elif name == "tondre":
             use_pos = self.rng.choice(self.house.lawn_tiles())
+        elif name in ("construire", "engager"):
+            room = self.architect.plan.room(target or "") if self.architect.plan else None
+            if room is None:
+                return None
+            target_name = room.name.lower()
+            if name == "construire":
+                occupied = self._occupied(agent)
+                spots = [p for p in room.interior_tiles() if self.house.is_walkable(p) and p not in occupied]
+                if not spots:
+                    return None
+                use_pos = min(spots, key=lambda p: manhattan(p, agent.pos))
         elif name == "couper":
             found = self._nearest_tree(agent, clearing=target == "defrichage")
             if found is None:
@@ -323,7 +335,7 @@ class Engine:
         eco = self.economy
         if not eco.enabled:
             return []
-        options = self._yard_options(agent) + self._wood_options(agent)
+        options = self._yard_options(agent) + self._wood_options(agent) + self._building_options(agent)
         if not agent.persona.is_adult:
             return options
         options += self._purchase_options(agent)
@@ -354,11 +366,39 @@ class Engine:
             room = self.architect.clearing_room()
             label = f"défriche l'emplacement de la future {room.name.lower()} ({len(clearing)} arbres)"
             return [Option(action="couper", target="defrichage", label=label, score=16.0)]
-        if wood >= WOOD_MAX:
+        # Le chantier en cours fixe la réserve visée : il faut assez de bûches pour le finir
+        missing = self.architect.wood_missing()
+        target = max(WOOD_TARGET, wood + missing) if missing else WOOD_TARGET
+        if wood >= (max(WOOD_MAX, target) if missing else WOOD_MAX):
             return []
-        score = round(4 + max(0, WOOD_TARGET - wood) / WOOD_TARGET * 20, 2)
+        score = round(4 + max(0, target - wood) / target * 20, 2)
         tool = "à la scie à chaîne" if self.economy.owns("scie") else "à la hache"
         return [Option(action="couper", label=f"coupe un arbre {tool} (réserve : {wood} bûches)", score=score)]
+
+    def _building_options(self, agent: Agent) -> list[Option]:
+        """Terrain : lancer le chantier, y travailler, ou engager un entrepreneur."""
+        architect = self.architect
+        room = architect.site_room() if architect.active else None
+        minute = self.clock.minute_of_day
+        if room is None or room.contractor or agent.persona.age < 16:
+            return []
+        options: list[Option] = []
+        name = room.name.lower()
+        wood = self.economy.household.wood
+        if BUILD_HOURS[0] <= minute < BUILD_HOURS[1] and wood >= 1:
+            if room.materials_paid:
+                label = f"travaille sur le chantier de la {name} ({room.fraction * 100:.0f} % fait)"
+                bonus = 6 if architect.skill(agent) > 1 else 0
+                options.append(Option(action="construire", target=room.id, label=label, score=12.0 + bonus))
+            elif architect.can_afford_materials(room):
+                label = (f"lance le chantier de la {name} ({room.materials_cost:.0f} $ de matériaux, "
+                         f"{room.wood_needed} bûches, {room.work_needed:.0f} h de travail)")
+                options.append(Option(action="construire", target=room.id, label=label, score=14.0))
+        if agent.persona.is_adult and architect.can_hire(room):
+            price, days = architect.quote(room)
+            label = f"engage un entrepreneur pour finir la {name} ({price:.0f} $, ~{days} jours)"
+            options.append(Option(action="engager", target=room.id, label=label, score=4.0))
+        return options
 
     def _purchase_options(self, agent: Agent) -> list[Option]:
         """Achats permis seulement s'il reste un coussin de deux semaines de dépenses."""
@@ -804,6 +844,8 @@ class Engine:
                 self._leave(agent, action)
             elif not self._eat(agent, action.name) or not self._burn_wood(agent, action):
                 agent.action = None
+            elif action.name == "construire" and not self.architect.start_session(agent, action.target):
+                agent.action = None  # plus de bois, ou pas les moyens d'acheter les matériaux
             return
 
         definition = ACTIONS[action.name]
@@ -828,6 +870,10 @@ class Engine:
             self._buy(agent, action.target)
         elif action.name == "couper" and action.target:
             self._fell_tree(agent, action.target)
+        elif action.name == "construire":
+            self.architect.work(agent, action.target, ACTIONS["construire"].duration / 60)
+        elif action.name == "engager":
+            self.architect.hire(agent, action.target)
         elif action.name == "tondre":
             self.economy.household.lawn = 0.0
             self.remember(agent, "J'ai tondu la pelouse. Ça sent l'été.", 2)

@@ -59,6 +59,9 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("tondre", "tond la pelouse", None, 60, {"fun": -5, "energy": -4}, selectable=False),
     ActionDef("couper", "coupe un {target}", "arbre", 60, {"energy": -12, "fun": -4, "hygiene": -8},
               selectable=False, daytime_only=True),
+    ActionDef("construire", "travaille sur le chantier : {target}", None, 60,
+              {"energy": -10, "fun": -2, "hygiene": -6}, selectable=False, daytime_only=True),
+    ActionDef("engager", "appelle un entrepreneur pour : {target}", None, 10, {}, selectable=False),
 ]}
 
 DAYTIME_HOURS = (7 * 60, 21 * 60)  # activités extérieures
@@ -98,7 +101,7 @@ class Option(BaseModel):
 
 
 # Cible par défaut quand elle n'est pas encore connue (plan du jour : « coupe un arbre »)
-DEFAULT_TARGETS = {"couper": "arbre"}
+DEFAULT_TARGETS = {"couper": "arbre", "construire": "la maison", "engager": "la maison"}
 
 
 def action_label(name: str, target_name: str | None = None) -> str:

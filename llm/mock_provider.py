@@ -108,6 +108,8 @@ REASONS: dict[str, list[str]] = {
     "flaner": ["Je sais pas trop quoi faire.", "Je tourne en rond un peu."],
     "couper": ["Faut du bois pour le feu.", "Chaque arbre, c'est de la place pour la maison."],
     "veiller": ["Rien de mieux qu'un feu de camp.", "Une petite veillée sous les étoiles."],
+    "construire": ["Encore un mur et on y est.", "J'ai hâte de dormir au chaud."],
+    "engager": ["On n'y arrivera jamais tout seuls.", "Ça va coûter cher, mais on va gagner des mois."],
 }
 
 

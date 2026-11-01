@@ -9,6 +9,7 @@ world.terrain.instant_build bâtit une pièce dès que son emplacement est déga
 
 from __future__ import annotations
 
+import math
 from concurrent.futures import Future
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,13 @@ if TYPE_CHECKING:
     from world.house import InteractiveObject
 
 PLAN_HOURS = (19 * 60, 21 * 60 + 30)   # le couple dessine sa maison en soirée, au coin du feu
+CONTRACTOR_RATE = 40.0                 # $ par heure de main-d'œuvre d'un entrepreneur
+CONTRACTOR_HOURS = (8 * 60, 16 * 60)   # l'entrepreneur travaille en semaine, de 8 h à 16 h
+CONTRACTOR_SPEED = 1.5                 # une équipe de métier avance plus vite qu'une personne
+LUMBER_PRICE = 6.0                     # $ par bûche que l'entrepreneur doit acheter
+MATERIALS_RESERVE_WEEKS = 1            # garder une semaine de dépenses en banque après les matériaux
+SKILLED_WORDS = ("charpent", "menuis", "bricol")
+SKILL = 1.5                            # un charpentier ou un bricoleur avance 50 % plus vite
 SITE_GAP = 7                           # la première pièce se pose ~7 cases au nord du campement
 
 FALLBACK_ROOMS = [  # plan sans LLM (ou si le LLM échoue) : petit et raisonnable
@@ -79,6 +87,8 @@ class Architect:
         room = self.plan.next_room()
         if room is not None and room.status == "pret" and engine.config.world.terrain.instant_build:
             self.build(room)
+        elif room is not None and room.contractor and room.status == "chantier":
+            self._contractor_tick(room)
 
     def _evening_together(self) -> bool:
         couple = self.couple()
@@ -144,8 +154,119 @@ class Architect:
         room = self.clearing_room()
         return trees_in(self.engine.house, room) if room is not None else []
 
+    # ------------------------------------------------------------------ chantier
+
+    def site_room(self) -> PlannedRoom | None:
+        """Pièce en cours ou prochaine à bâtir, une fois son emplacement dégagé."""
+        room = self.plan.next_room() if self.plan else None
+        return room if room is not None and room.status in ("pret", "chantier") else None
+
+    @staticmethod
+    def skill(agent: Agent) -> float:
+        p = agent.persona
+        text = " ".join(p.traits + p.interests + p.routines).lower()
+        return SKILL if any(word in text for word in SKILLED_WORDS) else 1.0
+
+    def wood_per_hour(self, room: PlannedRoom) -> int:
+        return max(1, math.ceil(room.wood_needed / room.work_needed))
+
+    def wood_missing(self) -> int:
+        """Bûches qui manquent encore pour finir la pièce du chantier (soi-même)."""
+        room = self.site_room()
+        if room is None or room.contractor:
+            return 0
+        return max(0, room.wood_needed - room.wood_used - self.engine.economy.household.wood)
+
+    def can_afford_materials(self, room: PlannedRoom) -> bool:
+        eco = self.engine.economy
+        keep = eco.reserve(self.engine.alive_count()) * MATERIALS_RESERVE_WEEKS / 2
+        return eco.household.money >= room.materials_cost + keep
+
+    def start_session(self, agent: Agent, room_id: str | None) -> bool:
+        """Début d'une séance : au premier coup de marteau, on achète les matériaux. False s'il faut annuler."""
+        room = self.plan.room(room_id or "") if self.plan else None
+        if room is None or room.status not in ("pret", "chantier") or room.contractor:
+            return False
+        if self.engine.economy.household.wood < 1:
+            return False
+        if not room.materials_paid:
+            if not self.can_afford_materials(room):
+                return False
+            eco = self.engine.economy
+            eco.transaction(self.engine.clock.total_minutes, f"Matériaux : {room.name.lower()}", -room.materials_cost)
+            room.materials_paid = True
+            room.status = "chantier"
+            self.engine.publish("chantier_debut", room=room.name,
+                                text=f"Chantier lancé : {room.name} ({room.materials_cost:.0f} $ de matériaux)")
+            for other in self.couple():
+                self.engine.remember(other, f"On a acheté les matériaux de la {room.name.lower()} "
+                                            f"({room.materials_cost:.0f} $). Le chantier commence !", 7)
+        return True
+
+    def work(self, agent: Agent, room_id: str | None, hours: float) -> None:
+        """Fin d'une séance : du bois posé et des heures de travail en plus ; pièce finie, on la bâtit."""
+        room = self.plan.room(room_id or "") if self.plan else None
+        if room is None or room.status != "chantier":
+            return
+        household = self.engine.economy.household
+        wanted = min(self.wood_per_hour(room) * hours, room.wood_needed - room.wood_used)
+        logs = min(household.wood, math.ceil(wanted))
+        household.wood -= logs
+        room.wood_used += logs
+        share = 1.0 if wanted <= 0 else min(1.0, logs / wanted)  # sans assez de bois, on avance moins
+        room.progress += hours * self.skill(agent) * share
+        if room.progress >= room.work_needed and room.wood_used >= room.wood_needed:
+            self.build(room)
+        else:
+            self.engine.remember(agent, f"J'ai travaillé sur la {room.name.lower()} "
+                                        f"({room.fraction * 100:.0f} % fait).", 2)
+
+    def quote(self, room: PlannedRoom) -> tuple[float, int]:
+        """Prix demandé par un entrepreneur pour finir la pièce, et nombre de jours ouvrables."""
+        remaining = max(0.0, room.work_needed - room.progress)
+        labor = remaining * CONTRACTOR_RATE
+        materials = 0.0 if room.materials_paid else room.materials_cost
+        lumber = max(0, room.wood_needed - room.wood_used - self.engine.economy.household.wood) * LUMBER_PRICE
+        days = max(1, math.ceil(remaining / CONTRACTOR_SPEED / 8))
+        return round(labor + materials + lumber, -1), days
+
+    def can_hire(self, room: PlannedRoom) -> bool:
+        eco = self.engine.economy
+        price, _days = self.quote(room)
+        return eco.household.money >= price + eco.reserve(self.engine.alive_count()) / 2
+
+    def hire(self, agent: Agent, room_id: str | None) -> None:
+        engine = self.engine
+        room = self.plan.room(room_id or "") if self.plan else None
+        if room is None or room.status not in ("pret", "chantier") or room.contractor:
+            return
+        price, days = self.quote(room)
+        if engine.economy.household.money < price:
+            engine.remember(agent, "Finalement, on n'a pas les moyens d'un entrepreneur.", 4)
+            return
+        engine.economy.transaction(engine.clock.total_minutes, f"Entrepreneur : {room.name.lower()}", -price)
+        household = engine.economy.household
+        logs = min(household.wood, room.wood_needed - room.wood_used)  # il prend notre bois, achète le reste
+        household.wood -= logs
+        room.wood_used = room.wood_needed
+        room.materials_paid, room.contractor, room.status = True, True, "chantier"
+        engine.publish("entrepreneur", room=room.name,
+                       text=f"Entrepreneur engagé : {room.name} ({price:.0f} $, ~{days} jours)")
+        for other in self.couple():
+            engine.remember(other, f"On a engagé un entrepreneur pour la {room.name.lower()} : {price:.0f} $, "
+                                   f"environ {days} jours.", 7)
+
+    def _contractor_tick(self, room: PlannedRoom) -> None:
+        clock = self.engine.clock
+        if clock.weekday >= 5 or not CONTRACTOR_HOURS[0] <= clock.minute_of_day < CONTRACTOR_HOURS[1]:
+            return
+        room.progress += clock.tick_minutes / 60 * CONTRACTOR_SPEED
+        if room.progress >= room.work_needed:
+            self.build(room)
+
     def build(self, room: PlannedRoom) -> None:
         engine = self.engine
+        room.progress = max(room.progress, room.work_needed)
         furniture = build_room(engine.house, self.plan, room)
         self._assign_beds(furniture)
         engine.publish("piece_batie", room=room.name, size=f"{room.width}×{room.height}",
@@ -169,23 +290,33 @@ class Architect:
         parts = []
         for room in self.plan.rooms:
             money, wood = room_cost(room.type, room.width, room.height)
-            state = {"bati": "bâtie", "pret": "emplacement dégagé",
-                     "plan": f"{len(trees_in(self.engine.house, room))} arbres à couper"}[room.status]
-            parts.append(f"{room.name} {room.width}×{room.height} ({state} ; {money:.0f} $, {wood} bûches)")
-        return f"Projet de maison : {self.plan.vision} Pièces dans l'ordre : " + " ; ".join(parts) + "."
+            parts.append(f"{room.name} {room.width}×{room.height} ({self._state(room)} ; matériaux {money:.0f} $, "
+                         f"{wood} bûches, {room.work_needed:.0f} h de travail)")
+        line = f"Projet de maison : {self.plan.vision} Pièces dans l'ordre : " + " ; ".join(parts) + "."
+        missing = self.wood_missing()
+        if missing:
+            line += f" Il manque {missing} bûches pour finir le chantier en cours."
+        return line
+
+    def _state(self, room: PlannedRoom) -> str:
+        if room.status == "bati":
+            return "bâtie"
+        if room.status == "chantier":
+            who = "entrepreneur" if room.contractor else "chantier"
+            return f"{who} {room.fraction * 100:.0f} %"
+        if room.status == "pret":
+            return "terrain prêt"
+        return f"{len(trees_in(self.engine.house, room))} arbres à couper"
 
     def hud_lines(self) -> list[str]:
         if self.plan is None:
             return ["Pas encore de plan : le couple en jasera un soir au coin du feu."] if self.active else []
         lines = [f"« {self.plan.vision} »"] if self.plan.vision else []
         for room in self.plan.rooms:
-            if room.status == "bati":
-                state = "bâtie"
-            elif room.status == "pret":
-                state = "terrain prêt"
-            else:
-                state = f"{len(trees_in(self.engine.house, room))} arbres à couper"
-            lines.append(f"{room.name} {room.width}×{room.height} : {state}")
+            lines.append(f"{room.name} {room.width}×{room.height} : {self._state(room)}")
+        missing = self.wood_missing()
+        if missing:
+            lines.append(f"Manque {missing} bûches pour finir")
         return lines
 
     def to_dict(self) -> dict | None:

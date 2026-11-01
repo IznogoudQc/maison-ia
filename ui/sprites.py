@@ -563,6 +563,44 @@ def draw_stake_line(surf: pygame.Surface, rect: pygame.Rect, ready: bool) -> Non
         surf.fill((120, 84, 50), (cx, cy - 2, 2, 5))
 
 
+def draw_construction(surf: pygame.Surface, outer: tuple[int, int, int, int], fraction: float,
+                      contractor: bool) -> None:
+    """Chantier : dalle de béton, charpente qui monte le long des murs, pile de planches."""
+    x0, y0, x1, y1 = outer
+    slab = pygame.Rect((x0 + 1) * TILE, (y0 + 1) * TILE, (x1 - x0 - 1) * TILE, (y1 - y0 - 1) * TILE)
+    pygame.draw.rect(surf, (178, 176, 168), slab)
+    for gx in range(slab.left, slab.right, TILE):
+        pygame.draw.line(surf, (160, 158, 150), (gx, slab.top), (gx, slab.bottom - 1))
+    ring = ([(x, y0) for x in range(x0, x1 + 1)] + [(x1, y) for y in range(y0 + 1, y1 + 1)]
+            + [(x, y1) for x in range(x1 - 1, x0 - 1, -1)] + [(x0, y) for y in range(y1 - 1, y0, -1)])
+    built = int(len(ring) * min(1.0, fraction * 1.25))  # la charpente précède la finition
+    for x, y in ring[:built]:
+        r = pygame.Rect(x * TILE, y * TILE, TILE, TILE)
+        pygame.draw.rect(surf, (206, 168, 110), (r.x, r.y + 2, TILE, 2))      # lisse du haut
+        pygame.draw.rect(surf, (206, 168, 110), (r.x, r.bottom - 3, TILE, 2))  # lisse du bas
+        for sx in (r.x + 2, r.x + 8, r.x + 14):
+            pygame.draw.line(surf, (176, 132, 80), (sx, r.y + 2), (sx, r.bottom - 2))  # montants
+    if fraction > 0.6:  # la toiture commence : contreplaqué sur la dalle
+        roof = slab.copy()
+        roof.height = int(slab.height * (fraction - 0.6) / 0.4)
+        pygame.draw.rect(surf, (196, 160, 112), roof)
+    pile = pygame.Rect(slab.right - 14, slab.bottom - 8, 12, 6)
+    for i in range(3):
+        pygame.draw.rect(surf, (214, 178, 120), (pile.x, pile.y + i * 2, pile.width, 2))
+    if contractor:  # pancarte de l'entrepreneur
+        sign = pygame.Rect((x1 + 1) * TILE + 2, y1 * TILE - 2, 12, 8)
+        pygame.draw.line(surf, (110, 80, 50), (sign.centerx, sign.bottom), (sign.centerx, sign.bottom + 6))
+        box(surf, sign, (240, 200, 40))
+        pygame.draw.line(surf, (40, 40, 40), (sign.x + 2, sign.centery), (sign.right - 3, sign.centery))
+
+
+def draw_hammer(surf: pygame.Surface, x: int, y: int, t: float) -> None:
+    swing = abs(math.sin(t * 7))
+    tip = (x + 3, y - 1 - round(swing * 4))
+    pygame.draw.line(surf, (120, 84, 50), (x, y + 2), tip, 1)
+    pygame.draw.rect(surf, (90, 90, 96), (tip[0] - 1, tip[1] - 1, 3, 2))
+
+
 def draw_tree_ribbon(surf: pygame.Surface, x: int, y: int) -> None:
     """Ruban rouge sur le tronc : cet arbre est sur l'emplacement de la maison."""
     surf.fill((220, 40, 40), (x * TILE + TILE // 2 - 2, y * TILE + TILE - 5, 5, 2))

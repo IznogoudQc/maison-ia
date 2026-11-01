@@ -127,6 +127,10 @@ class Mind:
         if engine.economy.enabled:
             if engine.house.layout.wild and agent.persona.age >= 16:
                 options.append(Option(action="couper", label="coupe un arbre", score=0))
+                site = engine.architect.site_room()
+                if site is not None and not site.contractor:
+                    options.append(Option(action="construire", target=site.id, score=0,
+                                          label=f"travaille sur le chantier de la {site.name.lower()}"))
             if not engine.house.layout.wild and agent.persona.age >= 13 and engine.economy.owns("tondeuse"):
                 options.append(Option(action="tondre", label="tond la pelouse", score=0))
             if agent.persona.is_adult:

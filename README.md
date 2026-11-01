@@ -63,9 +63,25 @@ console et passe en mode mock.
   selon le type de pièce sont ajoutés automatiquement ; chaque meuble reste accessible.
 - Le plan apparaît au sol (piquets et corde, nom des pièces) ; les arbres sur l'emplacement portent
   un ruban rouge et deviennent prioritaires à couper (« défriche l'emplacement de la cuisine »).
-- La construction elle-même (matériaux, heures de travail) vient au lot C4. Pour voir la maison
-  tout de suite : `world.terrain.instant_build: true` bâtit chaque pièce dès que son emplacement est
-  dégagé ; avec la chambre, le couple quitte la tente pour un vrai lit.
+
+**Le chantier**
+- Une pièce se bâtit dans l'ordre du plan, une fois son emplacement dégagé. Au premier coup de
+  marteau, on achète les matériaux (de 1 000 à 5 000 $ selon la pièce ; la cuisine et la salle de
+  bain coûtent plus cher à cause de la plomberie), seulement s'il reste une semaine de dépenses en
+  banque.
+- Chaque séance de travail (une heure, de 8 h à 20 h) pose des bûches et avance la pièce ; il faut
+  8 h + 1,2 h par case de plancher. Un charpentier ou un bricoleur (Maxime) avance 50 % plus vite.
+  Sans assez de bois, on avance moins, et la coupe devient pressante (la réserve visée monte jusqu'à
+  ce qu'il manque pour finir).
+- Ou on engage un entrepreneur (proposé quand on en a les moyens ; l'IA décide) : 40 $ de l'heure
+  de travail restante, plus les matériaux et le bois qui manque (6 $ la bûche). Son équipe vient en
+  semaine, de 8 h à 16 h, et avance plus vite.
+- Sur la carte : dalle de béton, charpente qui monte le long des murs, toiture vers la fin, pile de
+  planches, pourcentage au-dessus ; la pancarte jaune de l'entrepreneur quand il y en a un.
+- Pièce finie : murs, portes, fenêtres et meubles ; avec la chambre, le couple quitte la tente.
+  On peut se promettre de bâtir (« samedi on monte les murs »).
+- Pour essayer sans attendre : `world.terrain.instant_build: true` bâtit chaque pièce dès que son
+  emplacement est dégagé (ni matériaux, ni travail).
 
 Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
 `uv run python main.py --nouveau`. Une sauvegarde d'un scénario n'est pas rechargée dans l'autre.
