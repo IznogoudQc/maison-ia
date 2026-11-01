@@ -1,0 +1,36 @@
+name: Installateur Windows
+
+# Une etiquette v1.2.3 poussee sur GitHub construit l'installateur et l'attache a la page Releases.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  installateur:
+    runs-on: windows-latest
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Aucun secret dans le depot
+        run: uv run python scripts/verifier_secrets.py
+      - name: Tests
+        run: uv run pytest -q
+      - name: Executable (PyInstaller)
+        run: uv run pyinstaller --noconfirm --windowed --name MaisonIA --add-data "data;data" --add-data "config.yaml;." --hidden-import keyring.backends.Windows main.py
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging\installateur.iss
+      - name: Publication
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MaisonIA-Setup-*.exe
+          generate_release_notes: true

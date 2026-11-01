@@ -5,7 +5,30 @@ et les horaires sont du code déterministe ; un LLM choisit certaines activités
 quand des membres de la famille se croisent, et résume leur mémoire. Inspiré du papier
 « Generative Agents » (Stanford, 2023), en version simplifiée.
 
-## Installation
+![Le campement](docs/captures/terrain_campement.png)
+
+## Télécharger et jouer (Windows)
+
+1. Va dans la page [Releases](https://github.com/IznogoudQc/maison-ia/releases) et télécharge
+   `MaisonIA-Setup-x.y.z.exe`.
+2. Lance l'installateur : raccourcis dans le menu Démarrer (et sur le bureau si tu veux), désinstallation
+   propre.
+3. Par défaut, le jeu tourne en **mode simulé** (réponses factices, gratuit, sans clé).
+
+**Avec la vraie IA (Claude)** : il faut ta propre clé d'API Anthropic. Menu Démarrer → *Maison IA* →
+*Entrer ma clé Claude* ; elle est rangée dans le Gestionnaire d'identifiants Windows, jamais dans un
+fichier. Ensuite, dans *Mes sauvegardes et réglages*, ouvre `config.yaml` et mets `llm.provider: claude`.
+Les sauvegardes, journaux, réglages et le catalogue d'objets modifiable sont dans `%APPDATA%\MaisonIA`.
+
+| | |
+|---|---|
+| ![Le plan dessiné par l'IA, puis la maison bâtie](docs/captures/c3_maison_soir.png) | ![La famille grandit](docs/captures/c5_famille.png) |
+| ![Objets achetés](docs/captures/e1_objets.png) | ![Journal de la famille](docs/captures/f2_journal.png) |
+
+**Ta clé reste à toi** : `.env` est ignoré par git, et `scripts/verifier_secrets.py` (crochet
+pre-commit et GitHub Actions) bloque tout commit qui contiendrait une clé.
+
+## Installation (depuis le code source)
 
 Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python 3.12 au besoin).
 
@@ -284,6 +307,17 @@ Ajouter une entrée sous `family:` dans `data/family.yaml` :
 - La table compte 4 places : au souper, un membre de trop fait autre chose et retente de s'asseoir
   pendant 30 minutes simulées ; ajouter des `use_positions` à `table` pour l'éviter.
 - Penser à ajouter la relation inverse dans les fiches des autres membres.
+
+## Publier une version
+
+Pousser une étiquette `vX.Y.Z` (`git tag v0.2.0` puis `git push origin v0.2.0`) : GitHub Actions lance
+les tests, construit l'exécutable (PyInstaller) et l'installateur (Inno Setup, `packaging/installateur.iss`)
+et l'attache à la page Releases. Après un clone : `git config core.hooksPath .githooks` active le crochet
+anti-secret.
+
+## Licence
+
+MIT : chacun peut utiliser, modifier et redonner le jeu, en gardant la mention de licence (`LICENSE`).
 
 ## Tests
 

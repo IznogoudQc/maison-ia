@@ -17,6 +17,7 @@ from llm.service import LLMService
 from sim.clock import SimClock
 from sim.config import load_config
 from sim.engine import Engine
+from sim.paths import ask_and_store_api_key, load_api_key, prepare_installed_app
 from sim.events import EventBus
 from sim.journal import JsonlJournal
 from ui import theme
@@ -61,9 +62,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Simulation Maison IA")
     parser.add_argument("--nouveau", action="store_true", help="ignorer save.json et repartir de zéro")
     parser.add_argument("--config", help="fichier de configuration (défaut : config.yaml)")
+    parser.add_argument("--cle", action="store_true",
+                        help="saisir la clé Claude une fois (rangée dans le Gestionnaire d'identifiants Windows)")
     args = parser.parse_args()
 
+    if args.cle:
+        ask_and_store_api_key()
+        return
+    prepare_installed_app()  # installée : config, données et sauvegardes dans %APPDATA%\MaisonIA
     load_dotenv()
+    load_api_key()
     try:
         # Chemin explicite : il doit exister ; config.yaml absent : valeurs par défaut
         config = load_config(args.config or "config.yaml", required=args.config is not None)
