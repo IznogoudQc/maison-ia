@@ -157,6 +157,9 @@ class Engine:
                 return None
         elif name == "flaner":
             use_pos = self.house.random_tile(self.rng, self.room_of(agent))
+        elif name == "partir":
+            # La porte est un passage : plusieurs agents peuvent s'y diriger en même temps
+            use_pos = self.house.objects_of_kind("porte")[0].use_positions[0]
         elif definition.object_kind is not None:
             use_pos = self._object_spot(agent, definition.object_kind)
             if use_pos is None:
@@ -436,11 +439,16 @@ class Engine:
         if scheduled is not None:
             action = self.make_action(agent, scheduled.action, scheduled.target, forced=True,
                                       until=scheduled.until)
+            started = False
             if action is not None:
                 if scheduled.target:
                     action.target_name = away_phrase(scheduled.target)
-                if self.start_action(agent, action):
-                    self._cancel_decision(agent)
+                started = self.start_action(agent, action)
+            if started:
+                self._cancel_decision(agent)
+            else:
+                # Objet occupé ou chemin bloqué : on retentera au prochain tick (dans la fenêtre)
+                agent.fired.pop(scheduled.key, None)
 
         if agent.thinking:
             self._check_decision_timeout(agent)
