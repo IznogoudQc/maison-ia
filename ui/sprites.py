@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import random
+from functools import lru_cache
 
 import pygame
 
@@ -17,8 +18,10 @@ TILE = 16
 Color = tuple[int, int, int]
 
 OUTLINE: Color = (34, 28, 36)
-WALL_TOP: Color = (66, 58, 66)
-WALL_FACE: Color = (176, 156, 136)
+WALL_TOP: Color = (70, 64, 64)
+WALL_FACE: Color = (166, 150, 132)
+EARTH: Color = (128, 116, 98)      # teinte vers laquelle on adoucit les couleurs (palette terreuse)
+SHADOW_ALPHA = 70
 GLASS: Color = (150, 200, 232)
 FRAME: Color = (232, 226, 214)
 WOOD: Color = (150, 104, 64)
@@ -26,6 +29,55 @@ WOOD: Color = (150, 104, 64)
 
 def shade(color: Color, delta: int) -> Color:
     return tuple(max(0, min(255, c + delta)) for c in color)  # type: ignore[return-value]
+
+
+def mute(color: Color, k: float = 0.2) -> Color:
+    """Couleur adoucie : un peu ramenée vers une teinte terreuse, moins saturée."""
+    return tuple(round(c + (e - c) * k) for c, e in zip(color, EARTH))  # type: ignore[return-value]
+
+
+def _noise(x: int, y: int, salt: int = 0) -> float:
+    """Valeur pseudo-aléatoire stable dans [-1, 1] pour une case (pas de motif répété)."""
+    n = (x * 374761393 + y * 668265263 + salt * 2147483647) & 0xFFFFFFFF
+    n = (n ^ (n >> 13)) * 1274126177 & 0xFFFFFFFF
+    return ((n ^ (n >> 16)) & 0xFFFF) / 32767.5 - 1.0
+
+
+def _smooth_noise(x: int, y: int, cell: int, salt: int = 0) -> float:
+    """Bruit lissé (interpolé entre les coins d'une grande cellule) : des taches douces, pas des carrés."""
+    gx, gy = x / cell, y / cell
+    x0, y0 = math.floor(gx), math.floor(gy)
+    fx, fy = gx - x0, gy - y0
+    fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+    top = _noise(x0, y0, salt) * (1 - fx) + _noise(x0 + 1, y0, salt) * fx
+    bottom = _noise(x0, y0 + 1, salt) * (1 - fx) + _noise(x0 + 1, y0 + 1, salt) * fx
+    return top * (1 - fy) + bottom * fy
+
+
+@lru_cache(maxsize=256)
+def _shadow_image(width: int, height: int, ellipse: bool, alpha: int) -> pygame.Surface:
+    image = pygame.Surface((max(1, width), max(1, height)), pygame.SRCALPHA)
+    if ellipse:
+        pygame.draw.ellipse(image, (20, 16, 18, alpha), image.get_rect())
+    else:
+        pygame.draw.rect(image, (20, 16, 18, alpha), image.get_rect(), border_radius=3)
+    return image
+
+
+def draw_shadow(surf: pygame.Surface, rect: pygame.Rect, ellipse: bool = False, alpha: int = SHADOW_ALPHA,
+                offset: tuple[int, int] = (2, 3)) -> None:
+    """Ombre douce et translucide, décalée vers le bas à droite (lumière venant du nord-ouest)."""
+    surf.blit(_shadow_image(rect.width, rect.height, ellipse, alpha), (rect.x + offset[0], rect.y + offset[1]))
+
+
+def draw_wall_shade(surf: pygame.Surface, x: int, y: int, north: bool, west: bool) -> None:
+    """Le mur jette son ombre sur le plancher juste au sud et à l'est de lui."""
+    t = TILE
+    if north:
+        surf.blit(_shadow_image(t, 4, False, 60), (x * t, y * t))
+        surf.blit(_shadow_image(t, 2, False, 40), (x * t, y * t + 4))
+    if west:
+        surf.blit(_shadow_image(3, t, False, 50), (x * t, y * t))
 
 
 def box(surf: pygame.Surface, rect: pygame.Rect, color: Color, outline: int = -55) -> None:
@@ -46,48 +98,66 @@ FLOOR_STYLES = {
 def draw_floor(surf: pygame.Surface, x: int, y: int, style: str, base: Color) -> None:
     t = TILE
     ox, oy = x * t, y * t
+    base = mute(base)
+    rng = random.Random(x * 7919 + y * 104729)
     if style == "wood":
         plank = t // 4
+        span = t * 3                       # longueur d'une planche
         for i in range(4):
-            color = shade(base, 5 if (y * 4 + i) % 2 else -5)
-            pygame.draw.rect(surf, color, (ox, oy + i * plank, t, plank))
-            pygame.draw.line(surf, shade(base, -28), (ox, oy + (i + 1) * plank - 1),
-                             (ox + t - 1, oy + (i + 1) * plank - 1))
-            # Joints décalés d'une rangée de planches à l'autre
-            joint = (x * t + (y * 4 + i) * 11) % (t * 3)
-            if joint < t:
-                pygame.draw.line(surf, shade(base, -28), (ox + joint, oy + i * plank),
-                                 (ox + joint, oy + (i + 1) * plank - 2))
+            row = y * 4 + i
+            start = (row * 11) % span      # les joints sont décalés d'une rangée à l'autre
+            top = oy + i * plank
+            # Une planche après l'autre le long de la rangée, chacune avec son ton
+            px = ox
+            while px < ox + t:
+                index = (px - start) // span
+                end = min(ox + t, start + (index + 1) * span)
+                color = shade(base, round(_noise(index, row, 1) * 9))
+                pygame.draw.rect(surf, color, (px, top, end - px, plank))
+                gx = px + rng.randrange(max(1, end - px))
+                pygame.draw.line(surf, shade(color, -10), (gx, top + 1), (min(end - 1, gx + 3), top + 1))
+                if end < ox + t:
+                    pygame.draw.line(surf, shade(base, -30), (end, top), (end, top + plank - 2))
+                px = end
+            pygame.draw.line(surf, shade(base, -30), (ox, top + plank - 1), (ox + t - 1, top + plank - 1))
     elif style == "ceramic":
         half = t // 2
+        grout = shade(base, -34)
+        pygame.draw.rect(surf, grout, (ox, oy, t, t))
         for j in range(2):
             for i in range(2):
-                color = base if (x * 2 + i + y * 2 + j) % 2 else shade(base, -14)
-                rect = pygame.Rect(ox + i * half, oy + j * half, half, half)
-                pygame.draw.rect(surf, color, rect)
-                pygame.draw.rect(surf, shade(base, 18), rect, 1)
-    else:  # tapis : bruit léger et déterministe
+                tone = round(_noise(x * 2 + i, y * 2 + j, 2) * 5)
+                tile = pygame.Rect(ox + i * half, oy + j * half, half - 1, half - 1)
+                pygame.draw.rect(surf, shade(base, tone), tile)
+                pygame.draw.line(surf, shade(base, tone + 14), tile.topleft, (tile.right - 2, tile.top))
+                surf.set_at((tile.right - 1, tile.bottom - 1), shade(base, tone - 10))
+    else:  # tapis : tissage fin et bruit léger
         pygame.draw.rect(surf, base, (ox, oy, t, t))
-        rng = random.Random(x * 7919 + y * 104729)
-        for _ in range(12):
-            delta = rng.choice((-14, -8, 8))
+        for k in range(0, t, 4):
+            pygame.draw.line(surf, shade(base, -6), (ox + k, oy), (ox + k, oy + t - 1))
+        for _ in range(18):
+            delta = rng.choice((-14, -8, 8, 10))
             surf.set_at((ox + rng.randrange(t), oy + rng.randrange(t)), shade(base, delta))
 
 
-GRASS: Color = (96, 158, 72)
+GRASS: Color = (98, 132, 66)
 
 
 def draw_grass(surf: pygame.Surface, x: int, y: int, lawn: float) -> None:
     """Gazon : plus il est long, plus il est foncé et plein de touffes (et de pissenlits)."""
     t = TILE
-    base = shade(GRASS, -int(lawn * 0.25))
+    # Grandes plaques plus claires ou plus foncées : le terrain n'a pas l'air d'un damier
+    patch = round(_smooth_noise(x, y, 5, 3) * 6 + _smooth_noise(x, y, 13, 4) * 5)
+    base = shade(GRASS, patch - int(lawn * 0.22))
     pygame.draw.rect(surf, base, (x * t, y * t, t, t))
     rng = random.Random(x * 92821 + y * 68917)
+    for _ in range(5):  # terre et brins secs
+        surf.set_at((x * t + rng.randrange(t), y * t + rng.randrange(t)), shade(base, rng.choice((-14, 12))))
     tufts = 4 + int(lawn / 8)
     for _ in range(tufts):
         px, py = x * t + rng.randrange(t), y * t + rng.randrange(1, t)
         height = 1 + int(lawn / 35)
-        pygame.draw.line(surf, shade(base, 28), (px, py), (px, py - height))
+        pygame.draw.line(surf, shade(base, 18), (px, py), (px, py - height))
     if lawn >= 60 and rng.random() < (lawn - 50) / 100:
         surf.set_at((x * t + rng.randrange(2, t - 2), y * t + rng.randrange(2, t - 2)), (250, 220, 60))
 
@@ -108,9 +178,10 @@ def draw_surface(surf: pygame.Surface, x: int, y: int, kind: str) -> None:
         pygame.draw.line(surf, (160, 158, 152), rect.topleft, (rect.left, rect.bottom - 1))
         pygame.draw.line(surf, (170, 168, 162), rect.topleft, (rect.right - 1, rect.top))
     elif kind == "dirt":
-        pygame.draw.rect(surf, (156, 124, 86), rect)
-        for _ in range(7):
-            surf.set_at((rect.x + rng.randrange(t), rect.y + rng.randrange(t)), (132, 104, 72))
+        dirt = shade((146, 120, 88), round(_smooth_noise(x, y, 4, 5) * 6))
+        pygame.draw.rect(surf, dirt, rect)
+        for _ in range(9):
+            surf.set_at((rect.x + rng.randrange(t), rect.y + rng.randrange(t)), shade(dirt, rng.choice((-20, -12, 10))))
     else:  # pavés de l'allée
         pygame.draw.rect(surf, (176, 150, 126), rect)
         for j in range(0, t, 4):
@@ -381,10 +452,10 @@ def _swing(surf: pygame.Surface, r: pygame.Rect) -> None:
 def _tree(surf: pygame.Surface, r: pygame.Rect) -> None:
     trunk = pygame.Rect(r.centerx - 2, r.bottom - 8, 4, 7)
     pygame.draw.rect(surf, (100, 70, 44), trunk)
-    for dx, dy, radius, color in ((-5, -2, 9, (54, 112, 52)), (6, -1, 8, (60, 124, 56)),
-                                  (0, -7, 10, (68, 136, 60)), (0, -3, 7, (84, 156, 70))):
+    for dx, dy, radius, color in ((-5, -2, 9, (48, 94, 50)), (6, -1, 8, (54, 106, 54)),
+                                  (0, -7, 10, (62, 116, 58)), (0, -3, 7, (76, 134, 66))):
         pygame.draw.circle(surf, color, (r.centerx + dx, r.centery + dy), radius)
-    pygame.draw.circle(surf, (110, 176, 86), (r.centerx - 3, r.centery - 9), 3)
+    pygame.draw.circle(surf, (100, 152, 80), (r.centerx - 3, r.centery - 9), 3)
 
 
 def _mailbox(surf: pygame.Surface, r: pygame.Rect) -> None:
@@ -447,6 +518,7 @@ def draw_vehicle(surf: pygame.Surface, obj: InteractiveObject) -> None:
     x, y, w, h = obj.rect
     r = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
     color = VEHICLE_COLORS.get(kind, (200, 60, 50))
+    draw_shadow(surf, r.inflate(-3, -2), alpha=80)
     if kind == "velo":
         pygame.draw.circle(surf, (30, 30, 30), (r.centerx, r.y + 3), 3, 1)
         pygame.draw.circle(surf, (30, 30, 30), (r.centerx, r.bottom - 4), 3, 1)
@@ -498,8 +570,8 @@ def draw_swimmer(surf: pygame.Surface, persona: Persona, center: tuple[int, int]
 # ---------------------------------------------------------------------- terrain (scénario « terrain »)
 
 TREE_COLORS = {
-    "Érable": ((54, 112, 52), (68, 136, 60), (92, 160, 72)),
-    "Bouleau": ((96, 150, 70), (120, 172, 84), (150, 196, 104)),
+    "Érable": ((48, 94, 50), (62, 114, 58), (84, 136, 70)),
+    "Bouleau": ((86, 126, 64), (106, 146, 76), (134, 166, 96)),
 }
 
 
@@ -509,7 +581,7 @@ def _small_tree(surf: pygame.Surface, r: pygame.Rect, species: str) -> None:
     rng = random.Random(r.x * 7 + r.y * 13)
     if species == "Sapin":
         pygame.draw.rect(surf, (90, 62, 40), (cx - 1, bottom - 4, 3, 4))
-        for i, (half, color) in enumerate(((8, (34, 86, 52)), (6, (42, 102, 60)), (4, (52, 118, 70)))):
+        for i, (half, color) in enumerate(((8, (34, 78, 50)), (6, (42, 94, 58)), (4, (54, 110, 68)))):
             top = bottom - 7 - i * 5
             pygame.draw.polygon(surf, color, [(cx - half, top + 6), (cx + half, top + 6), (cx, top - 3)])
         return
@@ -898,6 +970,7 @@ def draw_dog(surf: pygame.Surface, center: tuple[int, int], t: float, facing: in
     """Petit chien brun vu de côté, la queue qui bat."""
     cx, cy = center
     body = (150, 100, 56)
+    draw_shadow(surf, pygame.Rect(cx - 5, cy + 1, 10, 4), ellipse=True, offset=(1, 1))
     pygame.draw.ellipse(surf, body, (cx - 4, cy - 2, 8, 4))
     pygame.draw.circle(surf, body, (cx + 4 * facing, cy - 3), 2)
     surf.set_at((cx + 5 * facing, cy - 3), (30, 24, 20))
@@ -915,11 +988,31 @@ LABEL_DRAWERS.update({"Poêle à bois": _wood_stove, "Laveuse-sécheuse": _washe
                       "Lits superposés": _bunk_bed})
 
 
+# Objets à plat au sol : pas d'ombre
+FLAT_KINDS = {"patio", "piscine", "potager", "feu", "foyer", "porte"}
+FLAT_IDS = {"patio", "piscine", "tapis"}
+
+
+def _object_shadow(surf: pygame.Surface, obj: InteractiveObject, rect: pygame.Rect) -> None:
+    if obj.kind == "arbre":
+        size = 18 if rect.width <= TILE else rect.width
+        draw_shadow(surf, pygame.Rect(rect.centerx - size // 2 + 2, rect.bottom - 6, size, 7), ellipse=True,
+                    alpha=80, offset=(0, 0))
+    elif obj.id == "tente":
+        draw_shadow(surf, pygame.Rect(rect.x + 2, rect.bottom - 7, rect.width, 9), ellipse=True, offset=(0, 0))
+    elif obj.kind in ("chien", "berceau") or obj.label.startswith(("Puits", "Ruche")):
+        draw_shadow(surf, rect.inflate(-2, -4), ellipse=True)
+    else:
+        draw_shadow(surf, rect.inflate(-2, -2))
+
+
 def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
     x, y, w, h = obj.rect
     rect = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
     if obj.kind in ("auto", "vehicule") or obj.id == "corde_bois":
         return  # dessinées à chaque image : l'auto part et revient, la corde de bois grossit
+    if w and h and obj.kind not in FLAT_KINDS and obj.id not in FLAT_IDS:
+        _object_shadow(surf, obj, rect)
     if obj.kind == "arbre":
         if w == 1 and h == 1:
             _small_tree(surf, rect, obj.label)

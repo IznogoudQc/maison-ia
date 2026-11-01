@@ -178,6 +178,8 @@ class Renderer:
             style = house.room_styles.get(room) or sprites.FLOOR_STYLES.get(room, "wood")
             color = theme.ROOM_COLORS.get(room) or STYLE_COLORS.get(style, (200, 200, 200))
             sprites.draw_floor(surf, x, y, style, color)
+            sprites.draw_wall_shade(surf, x, y, house.is_wall((x, y - 1)) and (x, y - 1) not in house.doors,
+                                    house.is_wall((x - 1, y)) and (x - 1, y) not in house.doors)
         elif pos in house.street:
             sprites.draw_surface(surf, x, y, "street")
         elif pos in house.fences:
@@ -539,9 +541,9 @@ class Renderer:
         left = cx - sprite.get_width() // 2
         top = feet - sprite.get_height() + 1
         if pose != "shower":
-            shadow = pygame.Rect(0, 0, 10, 4)
-            shadow.center = (cx, feet)
-            pygame.draw.ellipse(low, (40, 32, 36), shadow)
+            shadow = pygame.Rect(0, 0, 11, 5)
+            shadow.center = (cx + 1, feet)
+            sprites.draw_shadow(low, shadow, ellipse=True, alpha=90, offset=(0, 0))
         low.blit(sprite, (left, top))
         head_top = top + self._top_row(sprite)
         if pose == "shower":
