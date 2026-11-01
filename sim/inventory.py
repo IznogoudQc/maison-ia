@@ -299,9 +299,16 @@ class Inventory:
         if engine.clock.minute_of_day < 7 * 60 or household.last_harvest_day == engine.clock.day:
             return
         household.last_harvest_day = engine.clock.day
-        food = sum(o.food for o in self.items)
-        if food:
-            household.pantry = round(household.pantry + food, 2)
+        for owned in self.items:
+            if owned.food:  # le potager donne des légumes, les poules des œufs
+                food_id = "oeufs" if owned.kind == "poulailler" else "legumes"
+                engine.economy.add_food(food_id, owned.food, engine.clock.day)
+        spoiled = engine.economy.spoil(engine.clock.day)
+        if spoiled:
+            text = ", ".join(f"{name} ({portions:.0f})" for name, portions in spoiled)
+            for agent in engine.agents:
+                if agent.persona.is_adult and not agent.dead:
+                    engine.remember(agent, f"Il a fallu jeter de la bouffe périmée : {text}.", 3)
 
     def restore(self) -> None:
         """Après un chargement : les objets possédés reprennent leur place."""

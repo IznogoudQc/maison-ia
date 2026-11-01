@@ -1,0 +1,19 @@
+# Aliments du garde-manger. L'épicerie remplit un panier selon le style (economique, equilibre, gaterie).
+#   prix : $ par paquet ; portions : repas par paquet ; conserve : jours avant de périmer (congelable : x3 au congélateur)
+#   plaisir : moral gagné en mangeant (négatif = plate) ; styles : paniers où on le met
+aliments:
+  - {id: pain, label: pain, prix: 4, portions: 4, conserve: 5, plaisir: 0, styles: [economique, equilibre, gaterie]}
+  - {id: lait, label: lait, prix: 6, portions: 6, conserve: 7, plaisir: 1, styles: [economique, equilibre, gaterie]}
+  - {id: oeufs, label: œufs, prix: 5, portions: 6, conserve: 21, plaisir: 2, styles: [economique, equilibre, gaterie]}
+  - {id: cereales, label: céréales, prix: 6, portions: 8, conserve: 60, plaisir: 1, styles: [economique, equilibre]}
+  - {id: pates, label: pâtes et sauce, prix: 5, portions: 5, conserve: 180, plaisir: 1, styles: [economique, equilibre]}
+  - {id: kraft_dinner, label: Kraft Dinner, prix: 2, portions: 3, conserve: 365, plaisir: -2, styles: [economique]}
+  - {id: soupe, label: soupe en conserve, prix: 2, portions: 2, conserve: 365, plaisir: -1, styles: [economique]}
+  - {id: legumes, label: légumes, prix: 8, portions: 6, conserve: 6, plaisir: 1, congelable: true, styles: [equilibre, gaterie]}
+  - {id: fruits, label: fruits, prix: 8, portions: 6, conserve: 6, plaisir: 3, styles: [equilibre, gaterie]}
+  - {id: poulet, label: poulet, prix: 14, portions: 5, conserve: 3, plaisir: 4, congelable: true, styles: [equilibre, gaterie]}
+  - {id: boeuf_hache, label: bœuf haché, prix: 10, portions: 5, conserve: 3, plaisir: 3, congelable: true, styles: [equilibre]}
+  - {id: tourtiere, label: tourtière, prix: 16, portions: 6, conserve: 4, plaisir: 6, congelable: true, styles: [gaterie]}
+  - {id: steak, label: steaks, prix: 24, portions: 4, conserve: 3, plaisir: 7, congelable: true, styles: [gaterie]}
+  - {id: pouding_chomeur, label: pouding chômeur, prix: 9, portions: 6, conserve: 5, plaisir: 8, styles: [gaterie]}
+  - {id: sirop_erable, label: sirop d'érable, prix: 12, portions: 10, conserve: 365, plaisir: 5, styles: [gaterie]}

@@ -135,6 +135,10 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
   chaque vendredi. Un solde négatif mine le moral des parents.
 - **Nourriture** : chaque repas et chaque lunch prennent une portion du garde-manger. Un adulte va
   faire l'épicerie quand il baisse, dans la limite de l'argent disponible. Frigo vide : pas de repas.
+- **Aliments** (`data/aliments.yaml`) : le panier change selon le budget (économique sous 400 $,
+  gâteries au-dessus de 5 000 $). Chaque aliment périme (le congélateur triple la durée), on mange
+  d'abord ce qui périme en premier ; le potager donne des légumes, les poules des œufs. Chacun a ses
+  plats préférés (`aime:` dans le YAML de la famille) qui remontent le moral.
 - **Heures supplémentaires** : proposées aux parents quand l'argent manque.
 - **Santé et mort** : faim ou épuisement à zéro font baisser la santé ; à zéro, la personne meurt
   (cadre avec ruban noir au salon, deuil des survivants). Quand toute la famille est morte, la partie

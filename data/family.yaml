@@ -20,6 +20,7 @@ family:
       enfant: "Son garçon ; il répond à ses mille questions avec des réponses absurdes, puis la vraie."
     speech_style: "Phrases courtes, humour à froid, sacres légers (genre « voyons donc », « c'est ben correct »)."
     bed: lit_parents
+    aime: [steak, tourtiere]
     favorite_actions: [tele, collation]
     salary_per_day: 200       # paie nette par journée de travail
     schedule:

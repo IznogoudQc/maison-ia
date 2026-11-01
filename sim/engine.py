@@ -42,6 +42,7 @@ from sim.clock import SimClock, parse_hhmm
 from sim.config import AppConfig
 from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
+from sim.food import FOODS
 from sim.architect import Architect
 from sim.family import FamilyLife
 from sim.credit import Credit
@@ -731,6 +732,9 @@ class Engine:
         lines = []
         if self.economy.enabled:
             lines.append(self.economy.summary(self.alive_count()) + ".")
+            pantry = self.economy.pantry_lines(self.clock.day)
+            if pantry:
+                lines.append("Dans le garde-manger : " + " ; ".join(pantry[:8]) + ".")
             if self.house.layout.wild:
                 trees = len(self.house.objects_of_kind("arbre"))
                 roof = "" if self.has_roof() else " On vit encore sous la tente, sans maison."
@@ -1157,10 +1161,24 @@ class Engine:
         """Prend la nourriture du garde-manger au début d'un repas ; False si le frigo est vide."""
         portions = self.economy.portions_for(action_name)
         if self.economy.consume(portions):
+            self._meal_pleasure(agent, action_name)
             return True
         self.publish("frigo_vide", agent=agent.id, name=agent.name, action=action_name)
         self.remember(agent, "Le frigo est vide, rien à manger.", 6)
         return False
+
+    def _meal_pleasure(self, agent: Agent, action_name: str) -> None:
+        """Un bon repas remonte le moral (surtout un plat préféré), un repas plate le baisse."""
+        eaten = [FOODS[f] for f in getattr(self.economy, "last_eaten", []) if f in FOODS]
+        if not eaten or action_name not in ACTIONS or not ACTIONS[action_name].effects.get("hunger"):
+            return
+        pleasure = sum(f.plaisir for f in eaten) / len(eaten)
+        favorite = next((f for f in eaten if f.id in agent.persona.aime), None)
+        if favorite is not None:
+            pleasure += 5
+            if action_name == "souper":
+                self.remember(agent, f"Du {favorite.label} pour souper : mon préféré !", 2)
+        agent.needs.apply({"fun": pleasure})
 
     def _leave(self, agent: Agent, action: ActiveAction) -> None:
         now = self.clock.total_minutes

@@ -17,6 +17,7 @@ family:
       camille: "Sa blonde depuis 6 ans ; il la trouve plus brillante que lui et lui fait confiance pour le budget."
     speech_style: "Enthousiaste, parle de projets, « ça va être malade », « on s'en occupe »."
     bed: tente
+    aime: [tourtiere, steak]
     favorite_actions: [jardin, lire]
     salary_per_day: 190
     schedule:
@@ -43,6 +44,7 @@ family:
       maxime: "Son chum ; elle adore son énergie mais le ramène sur terre quand il rêve trop grand."
     speech_style: "Pince-sans-rire, pose des questions pratiques, « on a-tu les moyens ? », « bon, ok »."
     bed: tente
+    aime: [legumes, oeufs]
     favorite_actions: [lire, telephone]
     salary_per_day: 175
     schedule:

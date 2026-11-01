@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from sim.clock import SimClock, parse_hhmm
 from sim.config import EconomyConfig
+from sim.food import FOODS, FREEZER_FACTOR, FoodStock, describe_stock
 
 # Portions consommées par personne et par jour : déjeuner, lunch, souper, une demi-collation
 PORTIONS_PER_PERSON_DAY = 3.5
@@ -114,6 +115,7 @@ class Household(BaseModel):
     last_item_day: int = -1          # un seul achat d'objet par jour (sauf un lit qui manque)
     vehicles: list[OwnedVehicle] = Field(default_factory=list)
     loans: list[Loan] = Field(default_factory=list)
+    foods: list[FoodStock] = Field(default_factory=list)  # détail du garde-manger par aliment
     credit_score: int = 680          # dossier de crédit (300 à 900)
     next_loan_uid: int = 1
     last_vehicle_day: int = -100
@@ -217,8 +219,61 @@ class Economy:
             return True
         if self.household.pantry + 1e-9 < portions:
             return False
+        # Ce qui périme le plus tôt part en premier ; last_eaten sert au plaisir du repas
+        self.last_eaten = []
+        remaining = portions
+        for stock in sorted(self.household.foods, key=lambda s: s.expires_day):
+            if remaining <= 1e-9:
+                break
+            take = min(stock.portions, remaining)
+            stock.portions = round(stock.portions - take, 2)
+            remaining -= take
+            self.last_eaten.append(stock.food)
+        self.household.foods = [s for s in self.household.foods if s.portions > 0.01]
         self.household.pantry = round(self.household.pantry - portions, 2)
         return True
+
+    def has_freezer(self) -> bool:
+        return any(o.item_id == "congelateur" for o in self.household.items)
+
+    def add_food(self, food_id: str, portions: float, day: int) -> None:
+        """Ajoute un aliment (épicerie, potager, poules) au garde-manger."""
+        food = FOODS.get(food_id)
+        if food is None or portions <= 0:
+            self.household.pantry = round(self.household.pantry + max(0.0, portions), 2)
+            return
+        keep = food.conserve * (FREEZER_FACTOR if food.congelable and self.has_freezer() else 1)
+        self.household.foods.append(FoodStock(food=food_id, portions=round(portions, 2), expires_day=day + keep))
+        self.household.pantry = round(self.household.pantry + portions, 2)
+
+    def spoil(self, day: int) -> list[tuple[str, float]]:
+        """Aliments périmés jetés : [(nom, portions)]."""
+        spoiled = [s for s in self.household.foods if s.expires_day < day]
+        for stock in spoiled:
+            self.household.foods.remove(stock)
+            self.household.pantry = round(max(0.0, self.household.pantry - stock.portions), 2)
+        return [(FOODS[s.food].label if s.food in FOODS else s.food, s.portions) for s in spoiled]
+
+    def grocery_style(self) -> str:
+        money = self.household.money
+        return "economique" if money < 400 else "gaterie" if money > 5000 else "equilibre"
+
+    def pantry_lines(self, day: int) -> list[str]:
+        return describe_stock(self.household.foods, day)
+
+    def _fill_basket(self, portions: int, day: int) -> None:
+        """Répartit les portions achetées entre les aliments du panier (économique, équilibré, gâterie)."""
+        choices = [f for f in FOODS.values() if self.grocery_style() in f.styles]
+        if not choices:
+            self.household.pantry = round(self.household.pantry + portions, 2)
+            return
+        left, index = float(portions), 0
+        while left > 0.01:
+            food = choices[index % len(choices)]
+            take = min(food.portions, left)
+            self.add_food(food.id, take, day)
+            left -= take
+            index += 1
 
     def pantry_days(self, alive: int) -> float:
         """Jours de nourriture restants pour la famille."""
@@ -236,7 +291,7 @@ class Economy:
         bought = max(0, min(math.ceil(wanted), affordable))
         cost = round(bought * price, 2)
         if bought:
-            self.household.pantry = round(self.household.pantry + bought, 2)
+            self._fill_basket(bought, minute // (24 * 60))
             self.transaction(minute, f"Épicerie ({shopper})", -cost)
         return bought, cost
 
