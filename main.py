@@ -11,6 +11,7 @@ from agents.persona import load_family
 from sim.clock import SimClock
 from sim.config import load_config
 from sim.engine import Engine
+from sim.events import EventBus
 from ui import theme
 from ui.hud import Hud
 from ui.renderer import Renderer
@@ -28,7 +29,9 @@ def main() -> None:
     personas = load_family(config.family_file)
     agents = [Agent(persona=p, pos=house.random_tile(rng)) for p in personas]
     clock = SimClock(config.sim.start_day, config.sim.start_time, config.sim.tick_minutes)
-    engine = Engine(config, house, agents, clock, rng)
+    bus = EventBus()
+    engine = Engine(config, house, agents, clock, rng, bus)
+    engine.initialize()
 
     pygame.init()
     pygame.display.set_caption("Maison IA — famille Gagnon")
@@ -73,8 +76,9 @@ def main() -> None:
 
         renderer.update_display(agents, dt)
         screen.fill(theme.BACKGROUND)
-        renderer.draw(screen, agents, selected_id)
-        hud.draw(screen, clock, speed, paused)
+        renderer.draw(screen, agents, selected_id, clock.minute_of_day)
+        selected = engine.agent_by_id(selected_id) if selected_id else None
+        hud.draw(screen, clock, speed, paused, agents, selected)
         pygame.display.flip()
 
     pygame.quit()

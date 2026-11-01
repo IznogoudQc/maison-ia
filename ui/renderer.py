@@ -76,17 +76,40 @@ class Renderer:
                 best, best_dist = agent, dist
         return best
 
-    def draw(self, surface: pygame.Surface, agents: list[Agent], selected_id: str | None) -> None:
+    def draw(self, surface: pygame.Surface, agents: list[Agent], selected_id: str | None,
+             minute_of_day: int) -> None:
         surface.blit(self.background, (0, 0))
         radius = int(self.ts * 0.45)
         for agent in agents:
+            if agent.is_away:
+                continue
             cx, cy = self.agent_screen_pos(agent)
             if agent.id == selected_id:
                 pygame.draw.circle(surface, theme.ACCENT, (cx, cy), radius + 4, 3)
             pygame.draw.circle(surface, (20, 20, 24), (cx + 1, cy + 2), radius)
-            pygame.draw.circle(surface, agent.persona.color, (cx, cy), radius)
+            color = _shade(agent.persona.color, -50) if agent.is_sleeping else agent.persona.color
+            pygame.draw.circle(surface, color, (cx, cy), radius)
             initial = theme.font(13, bold=True).render(agent.name[0], True, (255, 255, 255))
             surface.blit(initial, initial.get_rect(center=(cx, cy)))
+            if agent.is_sleeping:
+                zzz = theme.font(12, bold=True).render("z z", True, (240, 240, 255))
+                surface.blit(zzz, (cx + radius - 2, cy - radius - 10))
+        self._draw_night(surface, minute_of_day)
+
+    def _draw_night(self, surface: pygame.Surface, minute_of_day: int) -> None:
+        # Assombrissement progressif entre 19 h et 22 h, éclaircissement entre 5 h et 7 h
+        hour = minute_of_day / 60.0
+        if 7 <= hour < 19:
+            return
+        if 19 <= hour < 22:
+            alpha = (hour - 19) / 3 * 90
+        elif 5 <= hour < 7:
+            alpha = (7 - hour) / 2 * 90
+        else:
+            alpha = 90
+        overlay = pygame.Surface(self.size, pygame.SRCALPHA)
+        overlay.fill((10, 15, 50, int(alpha)))
+        surface.blit(overlay, (0, 0))
 
 
 def _shade(color: tuple[int, int, int], delta: int) -> tuple[int, int, int]:
