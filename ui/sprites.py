@@ -1019,13 +1019,16 @@ def _object_shadow(surf: pygame.Surface, obj: InteractiveObject, rect: pygame.Re
         draw_shadow(surf, rect.inflate(-2, -2))
 
 
-def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
+def draw_object(surf: pygame.Surface, obj: InteractiveObject, body: bool = True) -> None:
+    """body=False : seulement l'ombre (l'objet est dessiné en haute résolution, voir ui/props.py)."""
     x, y, w, h = obj.rect
     rect = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
     if obj.kind in ("auto", "vehicule") or obj.id == "corde_bois":
         return  # dessinées à chaque image : l'auto part et revient, la corde de bois grossit
     if w and h and obj.kind not in FLAT_KINDS and obj.id not in FLAT_IDS:
         _object_shadow(surf, obj, rect)
+    if not body:
+        return
     if obj.kind == "arbre":
         if w == 1 and h == 1:
             _small_tree(surf, rect, obj.label)

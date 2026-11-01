@@ -7,7 +7,7 @@ import math
 import pygame
 
 from agents.agent import Agent
-from ui import pawns, sprites, theme
+from ui import pawns, props, sprites, theme
 from ui.sprites import TILE
 from world.house import House
 
@@ -48,7 +48,9 @@ class Renderer:
         self.night = pygame.Surface(self.low_size, pygame.SRCALPHA)
         self.tint = pygame.Surface(self.low_size, pygame.SRCALPHA)
         self.overlay = pygame.Surface(self.low_size, pygame.SRCALPHA)  # accessoires tenus, devant les personnages
-        self._pawn_jobs: list[tuple[Agent, float, float, str, bool, bool]] = []
+        self._pawn_jobs: list[tuple] = []   # (profondeur, genre, ...) : personnages et dormeurs lisses
+        self._props: tuple[int, list[tuple]] = (-1, [])   # (révision, [(objet, clé, bas)]) meubles lisses
+        self._lit_props: dict[tuple, pygame.Surface] = {}
         self._light: tuple[int, set[str], float, float] = (0, set(), 0.0, 0.0)
         self._label_cache: dict[str, pygame.Surface] = {}
         indoor = {n: r for n, r in house.rooms.items() if n not in house.outdoor_rooms}
@@ -202,7 +204,7 @@ class Renderer:
             for x in range(house.width):
                 self._draw_tile(surf, (x, y), lawn)
         for obj in sorted(house.objects.values(), key=lambda o: o.rect[1]):
-            sprites.draw_object(surf, obj)
+            sprites.draw_object(surf, obj, body=props.prop_key(obj) is None)
         return surf
 
     def _refresh_background(self) -> None:
@@ -223,7 +225,7 @@ class Renderer:
                 if o.rect[0] <= x1 and o.rect[0] + max(1, o.rect[2]) - 1 >= x0
                 and o.rect[1] <= y1 and o.rect[1] + max(1, o.rect[3]) - 1 >= y0]
         for obj in sorted(near, key=lambda o: o.rect[1]):
-            sprites.draw_object(self.background, obj)
+            sprites.draw_object(self.background, obj, body=props.prop_key(obj) is None)
         self._built_key = (house.revision, self._lawn_bucket())
 
     def _draw_labels(self, surface: pygame.Surface) -> None:
@@ -378,24 +380,25 @@ class Renderer:
         self._draw_windows(low, hour)
         self._draw_memorials(low, agents)
         visible = [a for a in agents if not a.is_away and not a.dead]
-        steam_points = self._draw_object_states(low, visible)
+        # Couche du dessus (pas éclairée) : animations des meubles, accessoires, vapeur, bulles
+        self.overlay.fill((0, 0, 0, 0), view)
+        steam_points = self._draw_object_states(self.overlay, visible)
 
         # Personnages du haut vers le bas pour que ceux du bas passent devant
         self._pawn_jobs = []
-        self.overlay.fill((0, 0, 0, 0), view)
         overlays: list[tuple[Agent, int, int]] = []  # (agent, centre x, haut de la tête) en basse résolution
         for agent in sorted(visible, key=lambda a: self.display_pos.get(a.id, a.pos)[1]):
             overlays.append(self._draw_agent(low, agent))
 
         for x, y in steam_points:
-            sprites.draw_steam(low, x, y, t)
+            sprites.draw_steam(self.overlay, x, y, t)
         self._draw_lighting(low, hour, visible, view)
 
         # Après l'éclairage, pour rester lisibles la nuit
         for agent, cx, top in overlays:
-            bubble_shown = self._draw_feelings(low, agent, cx, top)
+            bubble_shown = self._draw_feelings(self.overlay, agent, cx, top)
             if agent.id == selected_id:
-                self._draw_marker(low, cx, top - (12 if bubble_shown else 0))
+                self._draw_marker(self.overlay, cx, top - (12 if bubble_shown else 0))
 
         low.set_clip(None)
         map_area = pygame.Rect((0, 0), self.size)
@@ -405,7 +408,7 @@ class Renderer:
                                         (round(view.w * self.scale), round(view.h * self.scale)))
         surface.fill((20, 22, 26), map_area)
         surface.blit(scaled, (0, 0))
-        self._draw_pawns(surface)
+        self._draw_depth(surface, view)
         surface.blit(pygame.transform.scale(self.overlay.subsurface(view), scaled.get_size()), (0, 0))
         self._draw_labels(surface)
         for agent in visible:
@@ -518,11 +521,10 @@ class Renderer:
             return agent, round(hx), round(hy) - 6  # dans la tente : on ne voit que les « z z »
         if pose == "lying":
             hx, hy = self._head_low_pos(agent)
-            sprites.draw_blanket_bump(low, agent.bed_id, (hx, hy), agent.persona.age < 13)
-            head = sprites.sleeping_head(agent.persona)
-            rect = head.get_rect(center=(round(hx), round(hy)))
-            low.blit(head, rect)
-            return agent, rect.centerx, rect.top
+            bed = self.house.objects.get(agent.bed_id)
+            bottom = (bed.rect[1] + bed.rect[3]) * TILE if bed is not None else hy + 10
+            self._pawn_jobs.append((bottom + 0.5, "dormeur", agent, hx, hy, bed))
+            return agent, round(hx), round(hy) - 5
         if pose == "swimming":
             center = self._swim_spot(agent)
             sprites.draw_swimmer(low, agent.persona, center, self.time)
@@ -548,27 +550,71 @@ class Renderer:
             shadow = pygame.Rect(0, 0, 11, 5)
             shadow.center = (round(cx) + 1, round(feet))
             sprites.draw_shadow(low, shadow, ellipse=True, alpha=90, offset=(0, 0))
-        self._pawn_jobs.append((agent, cx, feet - bob, direction, sitting, pose == "shower"))
+        depth = feet
+        used = self._shower_of(agent) if pose == "shower" else self._used_object(agent)
+        if used is not None and (pose == "shower" or (agent.action.started and props.prop_key(used) is not None)):
+            depth = max(feet, (used.rect[1] + used.rect[3]) * TILE + 0.5)  # assis ou debout devant : par-dessus
+        self._pawn_jobs.append((depth, "pion", agent, cx, feet - bob, direction, sitting, pose == "shower"))
         top = round(feet - height)
         if pose != "shower":
             # Les accessoires gardent le repère de l'ancien sprite de 16 px de large
             self._draw_accessory(self.overlay, agent, direction, round(cx) - 8, top + 4)
         return agent, round(cx), top
 
-    def _draw_pawns(self, surface: pygame.Surface) -> None:
-        """Personnages en haute résolution, éclairés comme la pièce où ils sont."""
+    def _visible_props(self, view: pygame.Rect) -> list[tuple]:
+        revision = self.house.revision
+        if self._props[0] != revision:
+            found = []
+            for obj in self.house.objects.values():
+                key = props.prop_key(obj)
+                if key is not None:
+                    found.append((obj, key, (obj.rect[1] + obj.rect[3]) * TILE))
+            self._props = (revision, found)
+        area = view.inflate(4 * TILE, 4 * TILE)
+        return [(obj, key, bottom) for obj, key, bottom in self._props[1]
+                if area.colliderect(pygame.Rect(obj.rect[0] * TILE, obj.rect[1] * TILE,
+                                                obj.rect[2] * TILE, obj.rect[3] * TILE))]
+
+    def _draw_depth(self, surface: pygame.Surface, view: pygame.Rect) -> None:
+        """Meubles, arbres et personnages lisses, du nord au sud, éclairés comme leur pièce."""
         alpha, lit_rooms, golden, dawn = self._light
         tint = (255, 168, 80, round(golden)) if golden >= 1 else (255, 150, 140, round(dawn)) if dawn >= 1 else None
-        for agent, cx, feet, direction, sitting, shower in sorted(self._pawn_jobs, key=lambda job: job[2]):
-            height = round(pawns.pawn_height(agent.persona) * TILE * self.scale)
-            image = pawns.pawn_image(agent.persona, direction, sitting, height)
-            room = self.house.room_at(agent.pos)
-            darkness = alpha / 255 * (LIT_ROOM_FACTOR if room in lit_rooms else 1.0)
-            image = pawns.lit(image, darkness, tint)
-            rect = image.get_rect(midbottom=self.to_screen(cx, feet))
-            surface.blit(image, rect)
-            if shower:
-                self._draw_shower_glass(surface, self._shower_of(agent))
+
+        def darkness(room: str | None) -> float:
+            return alpha / 255 * (LIT_ROOM_FACTOR if room in lit_rooms else 1.0)
+
+        jobs = [(bottom, 0, "meuble", obj, key) for obj, key, bottom in self._visible_props(view)]
+        jobs += [(job[0], 1) + job[1:] for job in self._pawn_jobs]
+        if len(self._lit_props) > 3000:
+            self._lit_props.clear()
+        for job in sorted(jobs, key=lambda j: (j[0], j[1])):
+            kind = job[2]
+            if kind == "meuble":
+                obj, key = job[3], job[4]
+                dark = darkness(obj.room)
+                cache = (key, self.scale, round(dark * 24), tint)
+                image = self._lit_props.get(cache)
+                if image is None:
+                    image = self._lit_props[cache] = pawns.lit(props.prop_image(key, self.scale), dark, tint)
+                x0, y0, _x1, _y1 = props.bounds(key)
+                surface.blit(image, self.to_screen(obj.rect[0] * TILE + x0, obj.rect[1] * TILE + y0))
+            elif kind == "dormeur":
+                agent, hx, hy, bed = job[3:]
+                bed_key = props.prop_key(bed) if bed is not None else None
+                blanket = (bed_key[4] if bed_key and bed_key[0] == "lit"
+                           else sprites.BLANKETS.get(agent.bed_id, (110, 132, 190)))
+                image = pawns.lit(pawns.sleeper_image(agent.persona, blanket, self.scale),
+                                  darkness(self.house.room_at(agent.pos)), tint)
+                sx, sy = self.to_screen(hx, hy)
+                surface.blit(image, (round(sx - image.get_width() / 2), round(sy - 4.5 * self.scale)))
+            else:
+                agent, cx, feet, direction, sitting, shower = job[3:]
+                height = round(pawns.pawn_height(agent.persona) * TILE * self.scale)
+                image = pawns.pawn_image(agent.persona, direction, sitting, height)
+                image = pawns.lit(image, darkness(self.house.room_at(agent.pos)), tint)
+                surface.blit(image, image.get_rect(midbottom=self.to_screen(cx, feet)))
+                if shower:
+                    self._draw_shower_glass(surface, self._shower_of(agent))
 
     def _draw_shower_glass(self, surface: pygame.Surface, shower) -> None:
         """Vitre embuée devant la personne dans la douche (en haute résolution)."""

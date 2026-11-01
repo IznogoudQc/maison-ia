@@ -9,7 +9,7 @@ from agents.persona import load_family
 from sim.clock import SimClock
 from sim.config import load_config
 from sim.engine import Engine
-from ui import pawns
+from ui import pawns, props
 from ui.renderer import Renderer
 from world.house import House
 
@@ -47,4 +47,20 @@ def test_rendu_dans_la_carte():
     screen = pygame.Surface((800, 600))
     renderer.update_display(agents, 1 / 60)
     renderer.draw(screen, agents, agents[0].id, engine.clock.minute_of_day)
-    assert len(renderer._pawn_jobs) == sum(1 for a in agents if not a.is_away and renderer._pose(a) != "lying")
+    kinds = [job[1] for job in renderer._pawn_jobs]
+    lying = [a for a in agents if not a.is_away and renderer._pose(a) == "lying" and a.bed_id != "tente"]
+    assert kinds.count("dormeur") == len(lying)
+    assert kinds.count("pion") == sum(1 for a in agents if not a.is_away and renderer._pose(a) != "lying")
+
+
+def test_meubles_et_arbres_lisses():
+    pygame.init()
+    house = House()
+    keys = {obj.id: props.prop_key(obj) for obj in house.objects.values()}
+    assert keys["lit_parents"][0] == "lit" and keys["canape"][0] == "canape" and keys["arbre_1"][0] == "arbre"
+    assert keys["porte"] is None and keys["jouets"] is None        # restent en pixel art
+    for key in filter(None, keys.values()):
+        image = props.prop_image(key, 2.0)
+        x0, y0, x1, y1 = props.bounds(key)
+        assert image.get_size() == (round((key[1] * 16 + x1 - x0) * 2), round((key[2] * 16 + y1 - y0) * 2))
+        assert any(image.get_at((x, image.get_height() // 2)).a for x in range(image.get_width()))

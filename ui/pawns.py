@@ -116,3 +116,33 @@ def lit(image: pygame.Surface, darkness: float, tint: tuple[int, int, int, int] 
         out.fill((round(255 * f * 0.78), round(255 * f * 0.84), round(255 * min(1.0, f * 1.05)), 255),
                  special_flags=pygame.BLEND_RGBA_MULT)
     return out
+
+
+@lru_cache(maxsize=256)
+def _render_sleeper(persona_key: tuple, blanket: tuple, child: bool, scale: float) -> pygame.Surface:
+    _shirt, _pants, skin, hair, eyes, long_hair = persona_key
+    w, h = 12, (16 if child else 21)              # en px de base : la tête et la bosse sous la douillette
+    s = SUPERSAMPLE
+    u = scale * s
+    canvas = pygame.Surface((round(w * u), round(h * u)), pygame.SRCALPHA)
+    line = 1.0 * u
+    body = pygame.Rect(round(1 * u), round(5 * u), round(10 * u), round((h - 5.5) * u))
+    pygame.draw.ellipse(canvas, shade(blanket, -40), body.inflate(line, line))
+    pygame.draw.ellipse(canvas, shade(blanket, 14), body)
+    center = (w / 2 * u, 4.5 * u)
+    pygame.draw.circle(canvas, OUTLINE, center, 4.3 * u + line)
+    pygame.draw.circle(canvas, hair, center, 4.3 * u)
+    pygame.draw.circle(canvas, skin, (center[0], center[1] + 0.9 * u), 3.4 * u)
+    if long_hair:
+        pygame.draw.ellipse(canvas, hair, (center[0] - 4.8 * u, center[1] - 1 * u, 9.6 * u, 4 * u), max(1, round(u)))
+    for dx in (-1.4, 1.4):  # yeux fermés
+        pygame.draw.line(canvas, shade(skin, -90), (center[0] + (dx - 0.7) * u, center[1] + 1.2 * u),
+                         (center[0] + (dx + 0.7) * u, center[1] + 1.2 * u), max(1, round(0.5 * u)))
+    return pygame.transform.smoothscale(canvas, (max(1, round(w * scale)), max(1, round(h * scale))))
+
+
+def sleeper_image(persona: Persona, blanket: tuple, scale: float) -> pygame.Surface:
+    """Dormeur vu de dessus : la tête sur l'oreiller, le corps en bosse sous la douillette."""
+    palette, style = _palette(persona)
+    key = tuple(tuple(palette[k]) for k in ("T", "P", "S", "H", "E")) + (bool(style["long_hair"]),)
+    return _render_sleeper(key, tuple(blanket), persona.age < 13, round(scale, 3))
