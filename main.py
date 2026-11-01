@@ -32,11 +32,15 @@ MAX_TICKS_PER_FRAME = 60
 def main() -> None:
     parser = argparse.ArgumentParser(description="Simulation Maison IA")
     parser.add_argument("--nouveau", action="store_true", help="ignorer save.json et repartir de zéro")
-    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--config", help="fichier de configuration (défaut : config.yaml)")
     args = parser.parse_args()
 
     load_dotenv()
-    config = load_config(args.config)
+    try:
+        # Chemin explicite : il doit exister ; config.yaml absent : valeurs par défaut
+        config = load_config(args.config or "config.yaml", required=args.config is not None)
+    except FileNotFoundError as exc:
+        parser.error(str(exc))
     rng = random.Random(config.sim.seed)
 
     try:

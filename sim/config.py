@@ -68,10 +68,16 @@ class AppConfig(BaseModel):
     log_dir: str = "logs"
 
 
-def load_config(path: str | Path = "config.yaml") -> AppConfig:
-    """Lit le YAML ; un fichier absent donne la config par défaut."""
+def load_config(path: str | Path = "config.yaml", required: bool = False) -> AppConfig:
+    """Lit le YAML ; un fichier absent donne la config par défaut, sauf si required.
+
+    required=True sert aux chemins donnés explicitement (--config) : une faute de frappe
+    ne doit pas faire tourner la simulation en silence avec d'autres fichiers de sauvegarde.
+    """
     path = Path(path)
     if not path.exists():
+        if required:
+            raise FileNotFoundError(f"Fichier de configuration introuvable : {path.resolve()}")
         return AppConfig()
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return AppConfig.model_validate(data)
