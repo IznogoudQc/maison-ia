@@ -125,6 +125,7 @@ class TerrainConfig(BaseModel):
     weekly_bills: dict[str, float] = Field(default_factory=lambda: {
         "Taxes du terrain": 35.0, "Cellulaires": 45.0, "Assurances": 15.0,
     })
+    instant_build: bool = False   # essai : une pièce se bâtit dès que son emplacement est dégagé
 
 
 class WorldConfig(BaseModel):
@@ -148,19 +149,24 @@ class AppConfig(BaseModel):
     log_dir: str = "logs"
 
 
-def load_config(path: str | Path = "config.yaml", required: bool = False) -> AppConfig:
+def load_config(path: str | Path = "config.yaml", required: bool = False,
+                scenario: str | None = None) -> AppConfig:
     """Lit le YAML ; un fichier absent donne la config par défaut, sauf si required.
 
     required=True sert aux chemins donnés explicitement (--config) : une faute de frappe
     ne doit pas faire tourner la simulation en silence avec d'autres fichiers de sauvegarde.
+    scenario force le scénario (tests indépendants du choix fait dans config.yaml).
     """
     path = Path(path)
     if not path.exists():
         if required:
             raise FileNotFoundError(f"Fichier de configuration introuvable : {path.resolve()}")
-        return AppConfig()
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return apply_scenario(AppConfig.model_validate(data))
+        config = AppConfig()
+    else:
+        config = AppConfig.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    if scenario is not None:
+        config.world.scenario = scenario
+    return apply_scenario(config)
 
 
 def apply_scenario(config: AppConfig) -> AppConfig:

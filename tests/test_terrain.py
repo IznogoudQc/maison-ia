@@ -21,10 +21,9 @@ DAY = 24 * 60
 
 
 def terrain_config():
-    config = load_config("config.yaml")
-    config.world.scenario = "terrain"
+    config = load_config("config.yaml", scenario="terrain")
     config.events.frequency = 0.0
-    return apply_scenario(config)
+    return config
 
 
 @pytest.fixture
@@ -137,7 +136,7 @@ def test_sauvegarde_garde_les_arbres_coupes_et_refuse_un_autre_scenario(setup, t
     other = Engine(config, build_house("terrain", 120, 80, 42), agents, SimClock(), random.Random(1), EventBus())
     other.load_state(tmp_path / "save.json")
     assert all(t not in other.house.objects for t in trees)
-    maison_cfg = load_config("config.yaml")
+    maison_cfg = load_config("config.yaml", scenario="maison")
     family = [Agent(persona=p, pos=(0, 0)) for p in load_family(maison_cfg.family_file)]
     maison = Engine(maison_cfg, House(), family, SimClock(), random.Random(1), EventBus())
     with pytest.raises(ValueError, match="terrain"):
@@ -246,7 +245,7 @@ def test_on_dort_moins_bien_sous_la_tente(setup):
 
 
 def test_la_maison_n_offre_ni_coupe_ni_scie():
-    config = load_config("config.yaml")
+    config = load_config("config.yaml", scenario="maison")
     agents = [Agent(persona=p, pos=(0, 0)) for p in load_family(config.family_file)]
     engine = Engine(config, House(), agents, SimClock(5, "10:00"), random.Random(1), EventBus())
     engine.initialize()

@@ -15,6 +15,7 @@ ZOOM_LEVELS = (1.0, 1.5, 2.0, 3.0)
 WILD_GRASS = 55.0      # herbe d'un terrain sauvage (jamais tondu)
 MINIMAP_WIDTH = 180    # px à l'écran
 FIRE_HOURS = (17, 23)  # le feu de camp brûle en soirée (ou quand on cuisine / veille autour)
+STYLE_COLORS = {"wood": (186, 138, 94), "ceramic": (230, 224, 206), "carpet": (150, 128, 170)}
 WALK_FPS = 8          # images de marche par seconde
 SPRITE_LIFT = 4       # le personnage déborde un peu sur la tuile du dessus (effet de profondeur)
 NIGHT_ALPHA = 135     # opacité du voile bleu en pleine nuit
@@ -53,6 +54,9 @@ class Renderer:
         self.purchases: set[str] = set()  # achats du ménage qui changent le dessin (scie à chaîne)
         self._minimap: pygame.Surface | None = None
         self._minimap_revision = -1
+        self._rooms_count = len(house.rooms)
+        self.blueprint: list[tuple[tuple[int, int, int, int], str, str]] = []  # (extérieur, nom, statut)
+        self.marked_trees: list[tuple[int, int]] = []
         # Position affichée (lissée), orientation et état de marche de chaque agent
         self.display_pos: dict[str, tuple[float, float]] = {}
         self.facing: dict[str, str] = {}
@@ -67,6 +71,21 @@ class Renderer:
         self.lawn = lawn
         self.car_home = car_home
         self.wood = wood
+
+    def set_plan(self, plan, marked_trees: list[tuple[int, int]]) -> None:
+        """Pièces prévues pas encore bâties (piquets au sol) et arbres marqués à couper."""
+        self.blueprint = [] if plan is None else [(r.outer(), r.name, r.status) for r in plan.rooms
+                                                  if r.status != "bati"]
+        self.marked_trees = marked_trees
+
+    def _refresh_rooms(self) -> None:
+        """Une pièce vient d'être bâtie : nouvelles zones d'éclairage."""
+        house = self.house
+        indoor = {n: r for n, r in house.rooms.items() if n not in house.outdoor_rooms}
+        self.room_rects = {name: pygame.Rect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE)
+                           for name, (x0, y0, x1, y1) in indoor.items()}
+        self.room_glows = {name: _warm_glow(rect.size) for name, rect in self.room_rects.items()}
+        self._rooms_count = len(house.rooms)
 
     # ------------------------------------------------------------------ caméra
 
@@ -151,8 +170,9 @@ class Renderer:
                 sprites.draw_grass(surf, x, y, lawn)
         elif not house.is_wall(pos):
             room = house.room_at(pos) or ""
-            sprites.draw_floor(surf, x, y, sprites.FLOOR_STYLES.get(room, "wood"),
-                               theme.ROOM_COLORS.get(room, (200, 200, 200)))
+            style = house.room_styles.get(room) or sprites.FLOOR_STYLES.get(room, "wood")
+            color = theme.ROOM_COLORS.get(room) or STYLE_COLORS.get(style, (200, 200, 200))
+            sprites.draw_floor(surf, x, y, style, color)
         elif pos in house.street:
             sprites.draw_surface(surf, x, y, "street")
         elif pos in house.fences:
@@ -196,10 +216,13 @@ class Renderer:
 
     def _draw_labels(self, surface: pygame.Surface) -> None:
         """Noms des pièces en haute résolution, pour rester lisibles après agrandissement."""
-        if not self.house.layout.labels:
-            return
+        house = self.house
         font = theme.font(12, bold=True)
-        for name, (x0, _y0, _x1, y1) in self.house.rooms.items():
+        labels = [(name, rect) for name, rect in house.rooms.items()
+                  if house.layout.labels or name not in house.outdoor_rooms]
+        # Pièces prévues : le nom sur le plan au sol (rectangle extérieur, d'où le décalage d'une case)
+        labels += [(f"{name} (plan)", (x0 + 1, y0, x1, y1 - 1)) for (x0, y0, x1, y1), name, _s in self.blueprint]
+        for name, (x0, _y0, _x1, y1) in labels:
             text = self._label_cache.get(name)
             if text is None:
                 text = self._label_cache[name] = font.render(name, True, (250, 248, 240))
@@ -264,7 +287,7 @@ class Renderer:
     def _pose(self, agent: Agent) -> str:
         if self._active(agent, *LYING_ACTIONS):
             return "lying"
-        if self._active(agent, "douche") and "douche" in self.house.objects:
+        if self._active(agent, "douche") and self._shower_of(agent) is not None:
             return "shower"  # cabine de douche (au baril d'eau, on reste debout)
         if self._active(agent, "baignade") and "piscine" in self.house.objects:
             return "swimming"
@@ -294,7 +317,7 @@ class Renderer:
 
     def _head_low_pos(self, agent: Agent) -> tuple[float, float]:
         """Centre de la tête d'un dormeur, sur l'oreiller de sa place dans le lit."""
-        bed = self.house.objects[agent.persona.bed]
+        bed = self.house.objects.get(agent.bed_id) or self.house.objects[agent.persona.bed]
         slot = 0
         if agent.action is not None and agent.action.use_pos in bed.use_positions:
             slot = bed.use_positions.index(agent.action.use_pos)
@@ -317,9 +340,16 @@ class Renderer:
                 self.background = self._build_background()  # le gazon a poussé
             else:
                 self._refresh_background()                  # achat, arbre coupé
+        if self._rooms_count != len(self.house.rooms):
+            self._refresh_rooms()
         view = self.view_rect()
         low.set_clip(view)
         low.blit(self.background, view.topleft, view)
+        for (x0, y0, x1, y1), _name, status in self.blueprint:
+            sprites.draw_stake_line(low, pygame.Rect(x0 * TILE + 3, y0 * TILE + 3, (x1 - x0 + 1) * TILE - 6,
+                                                     (y1 - y0 + 1) * TILE - 6), status == "pret")
+        for x, y in self.marked_trees:
+            sprites.draw_tree_ribbon(low, x, y)
         pile = self.house.objects.get("corde_bois")
         if pile is not None:
             sprites.draw_woodpile(low, pile, self.wood)
@@ -369,7 +399,7 @@ class Renderer:
     def _draw_windows(self, low: pygame.Surface, hour: float) -> None:
         sky = sprites.sky_color(hour)
         stars = hour >= 21 or hour < 5
-        for x, y, vertical in self.house.layout.windows:
+        for x, y, vertical in self.house.windows:
             sprites.draw_window(low, x, y, vertical, on_face=(x, y + 1) in self.house.floor, sky=sky, stars=stars)
 
     def _draw_memorials(self, low: pygame.Surface, agents: list[Agent]) -> None:
@@ -415,12 +445,12 @@ class Renderer:
 
     def _draw_agent(self, low: pygame.Surface, agent: Agent) -> tuple[Agent, int, int]:
         pose = self._pose(agent)
-        if pose == "lying" and agent.persona.bed == "tente":
+        if pose == "lying" and agent.bed_id == "tente":
             hx, hy = self._head_low_pos(agent)
             return agent, round(hx), round(hy) - 6  # dans la tente : on ne voit que les « z z »
         if pose == "lying":
             hx, hy = self._head_low_pos(agent)
-            sprites.draw_blanket_bump(low, agent.persona.bed, (hx, hy), agent.persona.age < 13)
+            sprites.draw_blanket_bump(low, agent.bed_id, (hx, hy), agent.persona.age < 13)
             head = sprites.sleeping_head(agent.persona)
             rect = head.get_rect(center=(round(hx), round(hy)))
             low.blit(head, rect)
@@ -437,7 +467,8 @@ class Renderer:
         frames = sprites.character_frames(agent.persona)
         if pose == "shower":
             # Dans la cabine, derrière la vitre embuée
-            x, y, w, h = self.house.objects["douche"].rect
+            shower = self._shower_of(agent)
+            x, y, w, h = shower.rect
             cx, feet, direction = x * TILE + w * TILE // 2, (y + h) * TILE - 3, "down"
             sprite = frames[(direction, 0)]
         elif pose == "sitting":
@@ -457,7 +488,7 @@ class Renderer:
         low.blit(sprite, (left, top))
         head_top = top + self._top_row(sprite)
         if pose == "shower":
-            self._draw_shower_glass(low)
+            self._draw_shower_glass(low, self._shower_of(agent))
         else:
             self._draw_accessory(low, agent, direction, left, top)
         return agent, cx, head_top
@@ -470,8 +501,15 @@ class Renderer:
         py = min(max(ay * TILE + TILE // 2, y * TILE + 8), (y + h) * TILE - 8)
         return px, py
 
-    def _draw_shower_glass(self, low: pygame.Surface) -> None:
-        x, y, w, h = self.house.objects["douche"].rect
+    def _shower_of(self, agent: Agent):
+        """Cabine de douche utilisée par l'agent (None pour le baril d'eau)."""
+        obj = self.house.object_at_spot(agent.pos)
+        if obj is None and agent.action is not None and agent.action.use_pos is not None:
+            obj = self.house.object_at_spot(agent.action.use_pos)
+        return obj if obj is not None and obj.kind == "douche" and obj.id != "baril" else None
+
+    def _draw_shower_glass(self, low: pygame.Surface, shower) -> None:
+        x, y, w, h = shower.rect
         glass = pygame.Surface((w * TILE, h * TILE // 2 + 2), pygame.SRCALPHA)
         glass.fill((225, 240, 248, 170))
         low.blit(glass, (x * TILE, y * TILE + h * TILE // 2 - 2))

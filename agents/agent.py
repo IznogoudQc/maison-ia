@@ -61,6 +61,7 @@ class Agent(BaseModel):
     goal: Goal | None = None             # objectif tiré de la réflexion du soir
     reflected_day: int = -1              # dernier jour réfléchi (au coucher)
     relations: dict[str, Relation] = Field(default_factory=dict)  # id d'un autre agent -> ressenti
+    bed: str | None = None               # lit attribué en cours de partie (sinon celui de la fiche)
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property
@@ -70,6 +71,10 @@ class Agent(BaseModel):
     @property
     def name(self) -> str:
         return self.persona.name
+
+    @property
+    def bed_id(self) -> str:
+        return self.bed or self.persona.bed
 
     def relation(self, other_id: str) -> Relation:
         """Ressenti envers un autre membre (créé à la valeur de base au premier besoin)."""

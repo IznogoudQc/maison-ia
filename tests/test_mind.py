@@ -23,7 +23,7 @@ DAY = 24 * 60
 
 @pytest.fixture
 def setup():
-    config = load_config("config.yaml")
+    config = load_config("config.yaml", scenario="maison")
     config.events.frequency = 0.0
     llm = LLMService(MockProvider((0.0, 0.0), 0.0, seed=2), 100_000, 2)
     bus = EventBus()
@@ -189,7 +189,7 @@ def test_sauvegarde_garde_plan_constats_et_memoire_longue(setup, tmp_path):
     engine, _ = setup
     run_until(engine, DAY + parse_hhmm("07:00"))
     engine.save_state(tmp_path / "save.json")
-    other_cfg = load_config("config.yaml")
+    other_cfg = load_config("config.yaml", scenario="maison")
     agents = [Agent(persona=p, pos=(0, 0)) for p in load_family(other_cfg.family_file)]
     other = Engine(other_cfg, House(), agents, SimClock(), random.Random(1), EventBus())
     other.load_state(tmp_path / "save.json")

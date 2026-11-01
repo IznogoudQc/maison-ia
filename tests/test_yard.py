@@ -18,7 +18,7 @@ DAY = 24 * 60
 
 
 def make_engine(day: int = 0, time: str = "06:00", money: float = 1500.0):
-    config = load_config("config.yaml")
+    config = load_config("config.yaml", scenario="maison")
     config.events.frequency = 0.0
     bus = EventBus()
     events = []

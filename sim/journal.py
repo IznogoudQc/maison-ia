@@ -12,7 +12,8 @@ from sim.events import Event, EventBus
 
 LOGGED_KINDS = ("dialogue", "decision", "depart", "retour", "resume", "dialogue_echec",
                 "paie", "factures", "epicerie", "frigo_vide", "deces", "hopital", "fin", "evenement",
-                "plan", "reflexion", "bilan", "promesse", "promesse_tenue", "promesse_brisee", "coupe")
+                "plan", "reflexion", "bilan", "promesse", "promesse_tenue", "promesse_brisee", "coupe",
+                "plan_maison", "emplacement_pret", "piece_batie")
 
 
 class JsonlJournal:

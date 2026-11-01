@@ -23,7 +23,7 @@ DAY = 24 * 60
 
 @pytest.fixture
 def setup():
-    config = load_config("config.yaml")
+    config = load_config("config.yaml", scenario="maison")
     config.events.frequency = 0.0
     llm = LLMService(MockProvider((0.0, 0.0), 0.0, seed=5), 100_000, 2)
     bus = EventBus()
@@ -213,7 +213,7 @@ def test_sauvegarde_garde_relations_et_promesses(setup, tmp_path):
     engine.social.promises.append(Promise(id=7, people=["ado"], by="ado", action="tondre",
                                           minute=DAY + 600, text="Léa tond le gazon"))
     engine.save_state(tmp_path / "save.json")
-    config = load_config("config.yaml")
+    config = load_config("config.yaml", scenario="maison")
     agents = [Agent(persona=p, pos=(0, 0)) for p in load_family(config.family_file)]
     other = Engine(config, House(), agents, SimClock(), random.Random(1), EventBus())
     other.load_state(tmp_path / "save.json")

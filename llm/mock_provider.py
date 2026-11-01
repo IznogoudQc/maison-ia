@@ -139,6 +139,8 @@ class MockProvider(LLMProvider):
                 text = self._line(request)
             elif request.kind == "debrief":
                 text = self._debrief(request)
+            elif request.kind == "house_plan":
+                text = self._house_plan(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -304,6 +306,39 @@ class MockProvider(LLMProvider):
         return json.dumps({"importance": self.rng.randint(2, 5),
                            "summary": f"{' et '.join(names)} ont jasé de tout et de rien.",
                            "promises": promises, "feelings": feelings}, ensure_ascii=False)
+
+
+    def _house_plan(self, request: LLMRequest) -> str:
+        """Plan raisonnable : cuisine d'abord, puis salle de bain, chambre, salon, parfois un atelier."""
+        couple = request.meta.get("couple", [])
+        existing = request.meta.get("existing") or []
+        r = self.rng
+        if existing:
+            rooms = [{"id": f"chambre_{len(existing) + 1}", "type": "chambre", "name": "Chambre du bébé",
+                      "width": 3, "height": 3, "anchor": existing[-1], "side": r.choice(["est", "nord"]),
+                      "why": "Il faut une place pour le bébé."}]
+        else:
+            rooms = [
+                {"id": "cuisine", "type": "cuisine", "name": "Cuisine", "width": r.randint(5, 7),
+                 "height": r.randint(4, 5), "anchor": None, "side": None, "why": "Manger au chaud avant tout."},
+                {"id": "sdb", "type": "salle_de_bain", "name": "Salle de bain", "width": 3, "height": 3,
+                 "anchor": "cuisine", "side": "ouest", "why": "Fini le baril d'eau froide."},
+                {"id": "chambre", "type": "chambre", "name": "Chambre des maîtres", "width": r.randint(4, 5),
+                 "height": 4, "anchor": "cuisine", "side": "est", "why": "Dormir dans un vrai lit."},
+                {"id": "salon", "type": "salon", "name": "Salon", "width": r.randint(6, 8), "height": 5,
+                 "anchor": "cuisine", "side": "nord", "why": "Une place pour recevoir la famille."},
+            ]
+            if r.random() < 0.5:
+                rooms.append({"id": "atelier", "type": "atelier", "name": "Atelier", "width": 4, "height": 4,
+                              "anchor": "chambre", "side": "nord", "why": "Pour bricoler les meubles nous-mêmes."})
+        names = [p["name"] for p in couple] or ["Maxime", "Camille"]
+        discussion = [
+            {"speaker": names[0], "text": "Moi je vois une grande cuisine, avec un îlot. Ça va être malade!"},
+            {"speaker": names[-1], "text": "On a-tu les moyens? On commence petit, on agrandira avec les paies."},
+        ]
+        vision = r.choice(["Une petite maison de bois, chaleureuse, qui grandira avec nous.",
+                           "Un chalet simple au bord du bois, bâti de nos mains."])
+        return json.dumps({"vision": vision, "discussion": discussion, "rooms": rooms}, ensure_ascii=False)
 
 
 PROPOSALS: dict[str, list[str]] = {

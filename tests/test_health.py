@@ -16,7 +16,7 @@ DAY = 24 * 60
 
 
 def make_engine(mortality: bool = True):
-    config = load_config("config.yaml")
+    config = load_config("config.yaml", scenario="maison")
     config.health.mortality = mortality
     bus = EventBus()
     events = []

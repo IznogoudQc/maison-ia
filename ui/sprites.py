@@ -545,6 +545,29 @@ def _barrel(surf: pygame.Surface, r: pygame.Rect) -> None:
     pygame.draw.ellipse(surf, (110, 160, 210), r.inflate(-8, -8))
 
 
+def draw_stake_line(surf: pygame.Surface, rect: pygame.Rect, ready: bool) -> None:
+    """Plan au sol : piquets aux coins et corde tendue en pointillés (terrain défriché : sol gratté)."""
+    if ready:
+        scratch = pygame.Surface(rect.size, pygame.SRCALPHA)
+        scratch.fill((170, 136, 96, 90))
+        surf.blit(scratch, rect.topleft)
+    color = (250, 240, 200)
+    for x in range(rect.left, rect.right, 4):
+        surf.fill(color, (x, rect.top, 2, 1))
+        surf.fill(color, (x, rect.bottom - 1, 2, 1))
+    for y in range(rect.top, rect.bottom, 4):
+        surf.fill(color, (rect.left, y, 1, 2))
+        surf.fill(color, (rect.right - 1, y, 1, 2))
+    for cx, cy in (rect.topleft, (rect.right - 2, rect.top), (rect.left, rect.bottom - 4),
+                   (rect.right - 2, rect.bottom - 4)):
+        surf.fill((120, 84, 50), (cx, cy - 2, 2, 5))
+
+
+def draw_tree_ribbon(surf: pygame.Surface, x: int, y: int) -> None:
+    """Ruban rouge sur le tronc : cet arbre est sur l'emplacement de la maison."""
+    surf.fill((220, 40, 40), (x * TILE + TILE // 2 - 2, y * TILE + TILE - 5, 5, 2))
+
+
 def draw_woodpile(surf: pygame.Surface, pile: InteractiveObject, logs: int) -> None:
     """Corde de bois : une rangée de bûches par tranche de 10, jusqu'à 5 rangées."""
     x, y, w, _h = pile.rect
@@ -593,6 +616,18 @@ OBJECT_DRAWERS = {
 }
 
 
+def _workbench(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -4), (150, 108, 66))
+    pygame.draw.line(surf, (90, 90, 96), (r.x + 4, r.centery - 1), (r.x + 10, r.centery - 1), 2)  # marteau
+    pygame.draw.rect(surf, (200, 60, 50), (r.right - 9, r.centery - 2, 5, 3))                   # coffre à outils
+
+
+# Meubles de la maison bâtie sur le terrain : ids générés, on les reconnaît par type puis par nom
+KIND_DRAWERS = {"frigo": _fridge, "cuisiniere": _stove, "table": _table, "douche": _shower, "tele": _sofa,
+                "livres": _bookshelf, "ordi": _computer, "jouets": _toys}
+LABEL_DRAWERS = {"Comptoir": _counter, "Toilette": _toilet, "Télé": _tv, "Commode": _dresser, "Établi": _workbench}
+
+
 def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
     x, y, w, h = obj.rect
     rect = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
@@ -607,6 +642,10 @@ def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
         _bed(surf, rect, obj)
     elif obj.id in OBJECT_DRAWERS:
         OBJECT_DRAWERS[obj.id](surf, rect)
+    elif obj.kind in KIND_DRAWERS:
+        KIND_DRAWERS[obj.kind](surf, rect)
+    elif any(obj.label.startswith(name) for name in LABEL_DRAWERS):
+        LABEL_DRAWERS[next(n for n in LABEL_DRAWERS if obj.label.startswith(n))](surf, rect)
     elif w and h:  # les objets sans tuile (places autour du feu) ne se dessinent pas
         box(surf, rect.inflate(-2, -2), (156, 136, 112))
 

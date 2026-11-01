@@ -19,7 +19,7 @@ from world.house import House
 
 @pytest.fixture
 def setup():
-    config = load_config("config.yaml")
+    config = load_config("config.yaml", scenario="maison")
     config.llm.max_calls_per_minute = 100_000
     llm = LLMService(MockProvider((0.0, 0.0), 0.0, seed=1), 100_000, 2)
     bus = EventBus()

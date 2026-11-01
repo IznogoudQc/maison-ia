@@ -36,7 +36,8 @@ class Hud:
     def draw(self, surface: pygame.Surface, clock: SimClock, speed: float, paused: bool,
              agents: list[Agent], selected: Agent | None, llm: LLMService | None = None,
              llm_label: str = "", economy: Economy | None = None, alive: int = 0,
-             promises: list[str] | None = None, extra: list[str] | None = None) -> None:
+             promises: list[str] | None = None, extra: list[str] | None = None,
+             project: list[str] | None = None) -> None:
         self.agents = agents
         pygame.draw.rect(surface, theme.PANEL, self.rect)
         pygame.draw.line(surface, theme.PANEL_BORDER, self.rect.topleft, self.rect.bottomleft, 2)
@@ -60,6 +61,8 @@ class Hud:
             y = self._draw_family(surface, x, y, agents)
             if promises:
                 y = self._draw_promises(surface, x, y + 6, promises)
+            if project:
+                y = self._draw_promises(surface, x, y + 6, project, "Maison", theme.TEXT_DIM)
             if economy is not None and economy.enabled:
                 self._draw_ledger(surface, x, y + 8, economy, controls_top - 8)
         else:
@@ -221,13 +224,14 @@ class Hud:
             y += 16
         return y + 8
 
-    def _draw_promises(self, surface: pygame.Surface, x: int, y: int, promises: list[str]) -> int:
-        surface.blit(theme.font(14, bold=True).render("Promesses", True, theme.TEXT), (x, y))
+    def _draw_promises(self, surface: pygame.Surface, x: int, y: int, promises: list[str],
+                       title: str = "Promesses", color: tuple[int, int, int] = theme.ACCENT) -> int:
+        surface.blit(theme.font(14, bold=True).render(title, True, theme.TEXT), (x, y))
         y += 20
         font = theme.font(12)
-        for text in promises[:4]:
+        for text in promises[:9]:
             for line in wrap_text(text, font, self.rect.width - 28)[:2]:
-                surface.blit(font.render(line, True, theme.ACCENT), (x, y))
+                surface.blit(font.render(line, True, color), (x, y))
                 y += 15
         return y + 4
 

@@ -103,6 +103,7 @@ world:
       Taxes du terrain: 35
       Cellulaires: 45
       Assurances: 15
+    instant_build: false      # essai : une pièce du plan se bâtit dès que son emplacement est défriché
 
 family_file: data/family.yaml
 save_file: save.json

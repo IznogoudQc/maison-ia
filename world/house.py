@@ -156,7 +156,6 @@ class House:
         self.layout = layout
         self.width = layout.width
         self.height = layout.height
-        self.rooms = layout.rooms
         self.outdoor_rooms = layout.outdoor_rooms
         self.purchase_objects = layout.purchase_objects
         # Nom de pièce par tuile ; None = mur, clôture, rue, eau (ou porte, voir self.doors)
@@ -174,6 +173,9 @@ class House:
         self.street: set[Pos] = set(layout.street)
         self.fences: set[Pos] = set(layout.fences)
         self.water: set[Pos] = set(layout.water)
+        self.rooms = dict(layout.rooms)          # pièces : celles du plan s'ajoutent en cours de partie
+        self.windows = list(layout.windows)      # fenêtres (recalculées quand une pièce est bâtie)
+        self.room_styles: dict[str, str] = {}    # plancher des pièces bâties : wood, ceramic, carpet
         self.objects: dict[str, InteractiveObject] = {}
         self.blocked: set[Pos] = set()
         self._spots: dict[Pos, InteractiveObject] = {}
@@ -224,6 +226,28 @@ class House:
         obj.use_positions = positions
         for pos in positions:
             self._spots.setdefault(pos, obj)
+
+    def add_room(self, name: str, rect: tuple[int, int, int, int], walls: list[Pos], doors: list[Pos],
+                 style: str = "wood") -> None:
+        """Pièce bâtie : l'intérieur devient du plancher, le pourtour des murs, avec ses portes."""
+        x0, y0, x1, y1 = rect
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                self.room_grid[y][x] = name
+                self.floor.add((x, y))
+        for x, y in walls:
+            if (x, y) in self.doors:
+                continue  # porte déjà percée par la pièce voisine
+            self.room_grid[y][x] = None
+            self.floor.discard((x, y))
+        for x, y in doors:
+            self.room_grid[y][x] = None
+            self.floor.add((x, y))
+            self.doors.add((x, y))
+        self.rooms[name] = rect
+        self.room_styles[name] = style
+        self.dirty |= {(x, y) for x in range(x0 - 1, x1 + 2) for y in range(y0 - 1, y1 + 2)}
+        self.revision += 1
 
     def object_at_spot(self, pos: Pos) -> InteractiveObject | None:
         """Objet dont pos est une case d'usage (pour la qualité et l'orientation)."""

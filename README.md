@@ -50,6 +50,23 @@ console et passe en mode mock.
 - **Sans toit** : la tente repose moins bien, le baril lave moins bien, et vivre sans maison use le
   moral petit à petit. Les prompts savent qu'on vit encore sous la tente et combien de bois il reste.
 
+**L'IA architecte**
+- Un soir où le couple est au campement (entre 19 h et 21 h 30), un appel LLM dessine la maison :
+  l'IA décide des pièces (cuisine, salle de bain, chambre, salon, bureau, atelier), de leur taille
+  (dans des bornes réalistes), de leur nombre (jusqu'à 8) et de l'ordre de construction, avec une
+  courte discussion du couple affichée en bulles. Elle connaît le coût estimé de chaque pièce
+  (argent et bûches), leurs moyens et leurs personnalités.
+- L'IA ne donne pas de coordonnées : seulement « collée à la cuisine, côté est ». Le moteur place
+  chaque pièce sur la grille sans chevauchement, loin du campement et de l'étang ; une pièce
+  impossible est refusée avec la raison (gardée en mémoire). Les murs, les portes entre pièces
+  voisines, la porte d'entrée (côté campement), les fenêtres sur les murs extérieurs et les meubles
+  selon le type de pièce sont ajoutés automatiquement ; chaque meuble reste accessible.
+- Le plan apparaît au sol (piquets et corde, nom des pièces) ; les arbres sur l'emplacement portent
+  un ruban rouge et deviennent prioritaires à couper (« défriche l'emplacement de la cuisine »).
+- La construction elle-même (matériaux, heures de travail) vient au lot C4. Pour voir la maison
+  tout de suite : `world.terrain.instant_build: true` bâtit chaque pièce dès que son emplacement est
+  dégagé ; avec la chambre, le couple quitte la tente pour un vrai lit.
+
 Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
 `uv run python main.py --nouveau`. Une sauvegarde d'un scénario n'est pas rechargée dans l'autre.
 
@@ -147,7 +164,7 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | `economy` | `enabled`, `start_money`, `start_pantry`, `portion_price`, `weekly_bills`, `bills_weekday`, `grocery_days`, `low_pantry_days`, `overtime_below` |
 | `health` | `mortality`, `starvation_per_hour`, `exhaustion_per_hour`, `regen_per_hour`, `hospital_days`, `grief_days` |
 | `events` | `enabled`, `check_time`, `frequency` (0 = jamais, 2 = deux fois plus souvent) |
-| `world` | `scenario` (`maison` ou `terrain`) ; `terrain` : `width`, `height`, `seed`, `tree_density`, `family_file`, `start_money`, `start_pantry`, `weekly_bills` |
+| `world` | `scenario` (`maison` ou `terrain`) ; `terrain` : `width`, `height`, `seed`, `tree_density`, `family_file`, `start_money`, `start_pantry`, `weekly_bills`, `instant_build` |
 
 Le compteur d'appels et de tokens est affiché en haut du panneau, avec le solde, le garde-manger
 et les derniers mouvements d'argent. Chaque dialogue, décision LLM, départ, retour, résumé, paie,
@@ -202,10 +219,10 @@ réflexion, répliques tour par tour (point de vue de chacun), relations et prom
 
 ```
 main.py              boucle pygame (tick fixe, poll LLM non bloquant, rendu)
-world/               monde générique (house.py : Layout + maison des Gagnon), terrain boisé (terrain.py), A*
+world/               monde générique (house.py), terrain boisé (terrain.py), pièces et meubles (building.py), A*
 agents/              persona, besoins, actions, horaire, mémoire pondérée, plan du jour, relations, état de l'agent
 llm/                 interface + factory, Claude, Ollama, mock, prompts (décision, plan, réplique, bilan), service
-sim/                 horloge, moteur, vie intérieure (mind.py), conversations et promesses (social.py), économie,
+sim/                 horloge, moteur, vie intérieure (mind.py), conversations (social.py), architecte (architect.py), économie,
                      événements aléatoires, bus, journal, config
 ui/                  rendu pixel art (sprites générés dans sprites.py), bulles et historique, HUD
 data/family.yaml     les personas

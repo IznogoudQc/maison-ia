@@ -67,7 +67,7 @@ def test_factures_une_fois_par_semaine():
 
 @pytest.fixture
 def engine():
-    config = load_config("config.yaml")
+    config = load_config("config.yaml", scenario="maison")
     bus = EventBus()
     events = []
     bus.subscribe(ALL, events.append)

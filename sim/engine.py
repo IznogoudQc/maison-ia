@@ -38,6 +38,7 @@ from sim.clock import SimClock, parse_hhmm
 from sim.config import AppConfig
 from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
+from sim.architect import Architect
 from sim.mind import Mind
 from sim.social import Social
 from sim.random_events import RandomEvents
@@ -120,6 +121,7 @@ class Engine:
         self.game_over = False
         self.mind = Mind(self)
         self.social = Social(self)
+        self.architect = Architect(self)
 
     # ------------------------------------------------------------------ utilitaires
 
@@ -150,7 +152,8 @@ class Engine:
 
     def _object_spot(self, agent: Agent, kind: str) -> Pos | None:
         if kind == "lit":
-            candidates = [self.house.objects[agent.persona.bed]]
+            bed = self.house.objects.get(agent.bed_id) or self.house.objects.get(agent.persona.bed)
+            candidates = [bed] if bed is not None else self.house.objects_of_kind("lit")
         else:
             candidates = self.house.objects_of_kind(kind)
         spots = [s for s in (self._free_spot(agent, o) for o in candidates) if s is not None]
@@ -213,7 +216,7 @@ class Engine:
         elif name == "tondre":
             use_pos = self.rng.choice(self.house.lawn_tiles())
         elif name == "couper":
-            found = self._nearest_tree(agent)
+            found = self._nearest_tree(agent, clearing=target == "defrichage")
             if found is None:
                 return None
             tree, use_pos = found
@@ -229,19 +232,35 @@ class Engine:
                             remaining=duration, until_minute=until, forced=forced,
                             reason=reason)
 
-    def _nearest_tree(self, agent: Agent) -> tuple[InteractiveObject, Pos] | None:
-        """Arbre le plus proche qu'on peut atteindre (par la lisière) et que personne d'autre ne coupe."""
+    def _nearest_tree(self, agent: Agent, clearing: bool = False) -> tuple[InteractiveObject, Pos] | None:
+        """Arbre le plus proche qu'on peut atteindre (par la lisière) et que personne d'autre ne coupe.
+
+        clearing : seulement les arbres sur l'emplacement de la prochaine pièce ; s'ils sont encore hors
+        d'atteinte, l'arbre accessible le plus proche de l'emplacement (on ouvre le chemin).
+        """
         occupied = self._occupied(agent)
         taken = {a.action.target for a in self.agents
                  if a is not agent and a.action is not None and a.action.name == "couper"}
+        trees = self.house.objects_of_kind("arbre")
+        origin = agent.pos
+        if clearing:
+            wanted = self.architect.clearing_trees()
+            ids = {t.id for t in wanted}
+            reachable = [t for t in wanted if any(s not in occupied for s in t.use_positions)]
+            if reachable:
+                trees = reachable
+            elif wanted:
+                x0, y0 = wanted[0].rect[:2]
+                origin = (x0, y0)  # aucun accessible : on coupe vers l'emplacement
+                trees = [t for t in trees if t.id not in ids]
         best: tuple[int, InteractiveObject, Pos] | None = None
-        for tree in self.house.objects_of_kind("arbre"):
+        for tree in trees:
             if tree.id in taken:
                 continue
             for spot in tree.use_positions:
                 if spot in occupied:
                     continue
-                distance = manhattan(spot, agent.pos)
+                distance = manhattan(spot, origin)
                 if best is None or distance < best[0]:
                     best = (distance, tree, spot)
         return (best[1], best[2]) if best else None
@@ -326,9 +345,16 @@ class Engine:
         """Terrain : couper du bois (dès 16 ans, de jour), d'autant plus pressant que la réserve est basse."""
         wood = self.economy.household.wood
         minute = self.clock.minute_of_day
-        if not self.house.layout.wild or agent.persona.age < 16 or wood >= WOOD_MAX:
+        if not self.house.layout.wild or agent.persona.age < 16:
             return []
         if not CUT_HOURS[0] <= minute < CUT_HOURS[1] or not self.house.objects_of_kind("arbre"):
+            return []
+        clearing = self.architect.clearing_trees()
+        if clearing:
+            room = self.architect.clearing_room()
+            label = f"défriche l'emplacement de la future {room.name.lower()} ({len(clearing)} arbres)"
+            return [Option(action="couper", target="defrichage", label=label, score=16.0)]
+        if wood >= WOOD_MAX:
             return []
         score = round(4 + max(0, WOOD_TARGET - wood) / WOOD_TARGET * 20, 2)
         tool = "à la scie à chaîne" if self.economy.owns("scie") else "à la hache"
@@ -497,6 +523,7 @@ class Engine:
         self._poll_summaries()
         self.mind.poll()
         self.social.poll()
+        self.architect.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -547,6 +574,7 @@ class Engine:
         for agent in self.agents:
             self._update_agent(agent)
         self.social.update()
+        self.architect.update()
         self._detect_encounters()
 
     def _roll_events(self) -> None:
@@ -564,6 +592,9 @@ class Engine:
                 roof = "" if self.has_roof() else " On vit encore sous la tente, sans maison."
                 lines.append(f"Bois coupé en réserve : {self.economy.household.wood} bûches ; "
                              f"il reste {trees} arbres sur le terrain.{roof}")
+                project = self.architect.context_line()
+                if project:
+                    lines.append(project)
         departed = [a for a in self.agents if a.dead]
         if departed:
             names = ", ".join(f"{a.name} (jour {(a.died_minute or 0) // (24 * 60) + 1})" for a in departed)
@@ -1025,6 +1056,7 @@ class Engine:
             "household": self.economy.household.model_dump(mode="json"),
             "social": self.social.to_dict(),
             "world": {"scenario": self.house.layout.name, "removed": sorted(self.house.removed)},
+            "construction": self.architect.to_dict(),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -1044,6 +1076,7 @@ class Engine:
         self.clock.total_minutes = data["total_minutes"]
         for obj_id in world.get("removed", []):
             self.house.remove_object(obj_id)
+        self.architect.load_dict(data.get("construction"))
         self.pair_last_talk = dict(data.get("pair_last_talk", {}))
         if "household" in data:
             self.economy.household = Household.model_validate(data["household"])
