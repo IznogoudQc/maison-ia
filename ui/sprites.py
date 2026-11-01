@@ -5,6 +5,7 @@ Tout est dessiné en basse résolution (TILE px par tuile) puis agrandi par le r
 
 from __future__ import annotations
 
+import math
 import random
 
 import pygame
@@ -96,7 +97,9 @@ def draw_wall(surf: pygame.Surface, x: int, y: int, floor_below: bool) -> None:
                          (face.right - 1, face.bottom - 1))
 
 
-def draw_window(surf: pygame.Surface, x: int, y: int, vertical: bool, on_face: bool) -> None:
+def draw_window(surf: pygame.Surface, x: int, y: int, vertical: bool, on_face: bool,
+                sky: Color = GLASS, stars: bool = False) -> None:
+    """Fenêtre dont la vitre prend la couleur du ciel (aube, jour, soir, nuit étoilée)."""
     t = TILE
     if vertical:
         glass = pygame.Rect(x * t + t // 2 - 3, y * t + 2, 6, t - 4)
@@ -104,9 +107,27 @@ def draw_window(surf: pygame.Surface, x: int, y: int, vertical: bool, on_face: b
         glass = pygame.Rect(x * t + 3, y * t + t // 2 + 1, t - 6, t // 2 - 4)
     else:
         glass = pygame.Rect(x * t + 2, y * t + t // 2 - 3, t - 4, 6)
-    pygame.draw.rect(surf, GLASS, glass)
+    pygame.draw.rect(surf, sky, glass)
     pygame.draw.rect(surf, FRAME, glass, 1)
-    surf.set_at((glass.x + 2, glass.y + 2), (235, 245, 255))
+    if stars:
+        surf.set_at((glass.x + 2 + (x + y) % max(1, glass.width - 4), glass.y + 2), (250, 245, 200))
+    else:
+        surf.set_at((glass.x + 2, glass.y + 2), shade(sky, 50))
+
+
+SKY_KEYS: list[tuple[float, Color]] = [
+    (0.0, (20, 28, 70)), (5.0, (40, 42, 92)), (6.3, (238, 160, 124)), (8.0, (150, 200, 232)),
+    (17.0, (150, 200, 232)), (19.0, (238, 150, 92)), (21.0, (40, 42, 92)), (24.0, (20, 28, 70)),
+]
+
+
+def sky_color(hour: float) -> Color:
+    """Couleur du ciel interpolée entre des heures clés."""
+    for (h0, c0), (h1, c1) in zip(SKY_KEYS, SKY_KEYS[1:]):
+        if h0 <= hour <= h1:
+            k = (hour - h0) / (h1 - h0)
+            return tuple(round(a + (b - a) * k) for a, b in zip(c0, c1))  # type: ignore[return-value]
+    return SKY_KEYS[0][1]
 
 
 # ====================================================================== meubles
@@ -160,12 +181,18 @@ def _counter(surf: pygame.Surface, r: pygame.Rect) -> None:
     surf.set_at((sink.centerx, sink.y + 1), (90, 96, 104))
 
 
+def table_plates(r: pygame.Rect) -> list[tuple[int, int]]:
+    """Centres des assiettes (une par place) pour une table de rectangle r."""
+    inner = r.inflate(-2, -2)
+    return [(inner.left + 6, inner.centery), (inner.right - 7, inner.centery),
+            (inner.centerx - 4, inner.top + 5), (inner.centerx + 4, inner.bottom - 6)]
+
+
 def _table(surf: pygame.Surface, r: pygame.Rect) -> None:
     inner = r.inflate(-2, -2)
     box(surf, inner, (146, 100, 62))
     pygame.draw.rect(surf, shade((146, 100, 62), 18), inner.inflate(-4, -4), 1)
-    for px, py in ((inner.left + 6, inner.centery), (inner.right - 7, inner.centery),
-                   (inner.centerx - 4, inner.top + 5), (inner.centerx + 4, inner.bottom - 6)):
+    for px, py in table_plates(r):
         pygame.draw.circle(surf, (244, 244, 240), (px, py), 3)
         pygame.draw.circle(surf, (200, 200, 196), (px, py), 3, 1)
 
@@ -309,7 +336,15 @@ LEGS = {
     ],
 }
 LEGS["up"] = LEGS["down"]
+# Assis : cuisses repliées (vues de face) ou allongées devant soi (de profil)
+SIT_LEGS = {
+    "down": ["....PPPPPPPP....", "....BBB..BBB...."],
+    "up": ["....PPPPPPPP...."],
+    "left": ["...PPPPPPPP.....", "...BB..........."],
+}
+SIT_FRAME = 3   # index de l'image « assis » dans character_frames
 EMPTY_ROW = "." * 16
+SPRITE_ROWS = 16  # hauteur utile ; une rangée vide est ajoutée pour le contour
 
 # Apparence par persona ; les personas ajoutés ont un style par défaut
 STYLES: dict[str, dict] = {
@@ -342,15 +377,16 @@ def _long_hair(rows: list[str], direction: str) -> None:
         _set(rows, 7, (9, 10), "H")
 
 
-def _body_rows(direction: str, frame: int, long_hair: bool, child: bool) -> list[str]:
-    rows = HEADS[direction] + TORSOS[direction] + LEGS[direction][frame]
-    rows = list(rows)
+def _body_rows(direction: str, legs: list[str], long_hair: bool, child: bool) -> list[str]:
+    rows = list(HEADS[direction] + TORSOS[direction] + legs)
     if long_hair:
         _long_hair(rows, direction)
     if child:
-        # Enfant : un rang de torse et un rang de jambes en moins, grosse tête conservée
-        rows = [r for i, r in enumerate(rows) if i not in (8, 13)]
-        rows = [EMPTY_ROW, EMPTY_ROW] + rows
+        # Enfant : un rang de torse (et de jambes debout) en moins, grosse tête conservée
+        dropped = (8, 13) if len(legs) == 4 else (8,)
+        rows = [r for i, r in enumerate(rows) if i not in dropped]
+    # Pieds alignés en bas : un personnage assis ou un enfant est plus bas
+    rows = [EMPTY_ROW] * (SPRITE_ROWS - len(rows)) + rows
     return rows + [EMPTY_ROW]  # place pour le contour sous les pieds
 
 
@@ -393,16 +429,20 @@ _HEADS: dict[str, pygame.Surface] = {}
 
 
 def character_frames(persona: Persona) -> dict[tuple[str, int], pygame.Surface]:
-    """Images (direction, image) : direction parmi down/up/left/right, image 0 = immobile."""
+    """Images (direction, image) : direction parmi down/up/left/right.
+
+    Image 0 = immobile, 1 et 2 = marche, SIT_FRAME = assis.
+    """
     if persona.id not in _FRAMES:
         palette, style = _palette(persona)
         child = persona.age < 13
         frames: dict[tuple[str, int], pygame.Surface] = {}
         for direction in ("down", "up", "left"):
-            for frame in range(3):
-                rows = _body_rows(direction, frame, style["long_hair"], child)
+            poses = LEGS[direction] + [SIT_LEGS[direction]]
+            for frame, legs in enumerate(poses):
+                rows = _body_rows(direction, legs, style["long_hair"], child)
                 frames[(direction, frame)] = add_outline(sprite_from_rows(rows, palette))
-        for frame in range(3):
+        for frame in range(SIT_FRAME + 1):
             frames[("right", frame)] = pygame.transform.flip(frames[("left", frame)], True, False)
         _FRAMES[persona.id] = frames
     return _FRAMES[persona.id]
@@ -420,3 +460,139 @@ def sleeping_head(persona: Persona) -> pygame.Surface:
         palette = {**palette, "e": shade(SKIN, -70)}
         _HEADS[persona.id] = add_outline(sprite_from_rows(rows, palette))
     return _HEADS[persona.id]
+
+
+def draw_blanket_bump(surf: pygame.Surface, bed_id: str, head_center: tuple[float, float], child: bool) -> None:
+    """Bosse du corps sous la douillette, sous la tête du dormeur."""
+    color = BLANKETS.get(bed_id, (110, 132, 190))
+    hx, hy = head_center
+    body = pygame.Rect(0, 0, 10, 12 if child else 17)
+    body.midtop = (round(hx), round(hy) + 3)
+    pygame.draw.ellipse(surf, shade(color, 16), body)
+    pygame.draw.ellipse(surf, shade(color, -35), body, 1)
+
+
+# ====================================================================== icônes d'humeur
+
+ICON_PALETTE: dict[str, Color] = {
+    "R": (214, 54, 60), "G": (80, 150, 70), "W": (255, 255, 255), "B": (70, 120, 210),
+    "K": (60, 60, 70), "C": (150, 156, 168), "Y": (250, 206, 60),
+}
+ICONS: dict[str, list[str]] = {
+    "hunger": ["...G...", "..G....", ".RRRRR.", "RRRRRRR", "RRRRRWR", "RRRRRRR", ".RRRRR."],
+    "energy": ["BBBBBB.", "....B..", "...B...", "..B....", ".B.....", "BBBBBB.", "......."],
+    "hygiene": ["...B...", "..BBB..", "..BBB..", ".BBWBB.", ".BBBBB.", ".BBBBB.", "..BBB.."],
+    "social": [".KKKKK.", "KWWWWWK", "KWKWKWK", "KWWWWWK", ".KKKKK.", "..K....", ".K....."],
+    "fun": ["..CCC..", ".CCCCC.", "CCCCCCC", ".CCCCC.", "..B.B..", ".B.B...", "......."],
+    "heart": [".RR.RR.", "RRRRRRR", "RRRRRRR", ".RRRRR.", "..RRR..", "...R..."],
+    "star": ["...Y...", "...Y...", "YYYYYYY", ".YYYYY.", "..Y.Y..", ".Y...Y."],
+}
+_ICONS: dict[str, pygame.Surface] = {}
+
+
+def icon(name: str) -> pygame.Surface:
+    if name not in _ICONS:
+        _ICONS[name] = sprite_from_rows(ICONS[name], ICON_PALETTE)
+    return _ICONS[name]
+
+
+def draw_mood_bubble(surf: pygame.Surface, name: str, center_x: int, bottom: int) -> None:
+    """Petite bulle de pensée pixel contenant l'icône du besoin."""
+    bubble = pygame.Rect(0, 0, 11, 10)
+    bubble.midbottom = (center_x, bottom - 2)
+    pygame.draw.rect(surf, (252, 252, 250), bubble, border_radius=3)
+    pygame.draw.rect(surf, OUTLINE, bubble, 1, border_radius=3)
+    surf.set_at((center_x, bottom - 2), (252, 252, 250))
+    surf.set_at((center_x, bottom - 1), OUTLINE)
+    surf.blit(icon(name), (bubble.x + 2, bubble.y + 2))
+
+
+# ====================================================================== accessoires et effets
+
+_PUFF: pygame.Surface | None = None
+
+
+def draw_steam(surf: pygame.Surface, x: int, y: int, t: float, count: int = 3, height: int = 10) -> None:
+    """Bouffées de vapeur qui montent en ondulant puis s'estompent."""
+    global _PUFF
+    if _PUFF is None:
+        _PUFF = pygame.Surface((5, 5), pygame.SRCALPHA)
+        pygame.draw.circle(_PUFF, (245, 245, 250, 210), (2, 2), 2)
+    for i in range(count):
+        phase = (t * 0.7 + i / count) % 1.0
+        px = x + round(math.sin(phase * 6.3 + i) * 2)
+        py = y - round(phase * height)
+        _PUFF.set_alpha(round(255 * (1 - phase)))
+        surf.blit(_PUFF, (px - 2, py - 2))
+
+
+def draw_floating(surf: pygame.Surface, name: str, x: int, y: int, t: float, period: float = 1.6) -> None:
+    """Icône (cœur, étoile) qui s'élève au-dessus d'un personnage et disparaît."""
+    phase = (t / period) % 1.0
+    image = icon(name)
+    image.set_alpha(round(255 * (1 - phase)))
+    surf.blit(image, (x - image.get_width() // 2, y - round(phase * 8) - image.get_height()))
+    image.set_alpha(255)
+
+
+def draw_phone(surf: pygame.Surface, x: int, y: int, t: float) -> None:
+    pygame.draw.rect(surf, (30, 30, 36), (x, y, 3, 4))
+    glow = (120, 200, 255) if int(t * 3) % 4 else (200, 240, 255)
+    pygame.draw.rect(surf, glow, (x + 1, y + 1, 1, 2))
+
+
+def draw_book(surf: pygame.Surface, x: int, y: int) -> None:
+    pygame.draw.rect(surf, (246, 244, 236), (x, y, 7, 4))
+    pygame.draw.rect(surf, (150, 60, 50), (x, y, 7, 4), 1)
+    pygame.draw.line(surf, (150, 60, 50), (x + 3, y), (x + 3, y + 3))
+
+
+LEGO_COLORS: list[Color] = [(230, 60, 60), (60, 120, 230), (250, 210, 50), (70, 180, 90), (240, 240, 240)]
+
+
+def draw_lego(surf: pygame.Surface, cx: int, cy: int) -> None:
+    """Briques éparpillées autour de l'enfant (disposition fixe)."""
+    for i, (dx, dy) in enumerate(((-9, 3), (7, 5), (-5, 7), (10, -1), (2, 8), (-11, -2))):
+        pygame.draw.rect(surf, LEGO_COLORS[i % len(LEGO_COLORS)], (cx + dx, cy + dy, 3, 2))
+
+
+def draw_mug(surf: pygame.Surface, x: int, y: int) -> None:
+    pygame.draw.rect(surf, (240, 240, 236), (x, y, 3, 3))
+    surf.set_at((x + 1, y + 1), (110, 70, 40))
+    surf.set_at((x + 3, y + 1), (240, 240, 236))
+
+
+def draw_food(surf: pygame.Surface, plate: tuple[int, int], dinner: bool) -> None:
+    px, py = plate
+    if dinner:  # spaghat' sauce tomate
+        pygame.draw.circle(surf, (236, 200, 120), (px, py), 2)
+        surf.set_at((px, py), (200, 60, 40))
+    else:       # rôties
+        pygame.draw.rect(surf, (210, 160, 90), (px - 1, py - 1, 3, 3))
+
+
+def draw_pan(surf: pygame.Surface, stove: InteractiveObject) -> tuple[int, int]:
+    """Poêle sur le rond gauche ; renvoie le point d'où monte la vapeur."""
+    x, y, w, _h = stove.rect
+    cx, cy = x * TILE + 1 + (w * TILE - 2) // 4, y * TILE + TILE // 2
+    pygame.draw.circle(surf, (50, 50, 56), (cx, cy), 4)
+    pygame.draw.circle(surf, (200, 170, 90), (cx, cy), 2)
+    pygame.draw.line(surf, (50, 50, 56), (cx + 4, cy), (cx + 8, cy))
+    return cx, cy - 3
+
+
+def draw_fridge_open(surf: pygame.Surface, fridge: InteractiveObject) -> None:
+    x, y, w, h = fridge.rect
+    door = pygame.Rect(x * TILE + 1, (y + h) * TILE - 2, w * TILE // 2, 4)
+    box(surf, door, (232, 236, 242), -70)
+    pygame.draw.line(surf, (255, 250, 200), (door.x + 2, door.y + 1), (door.right - 3, door.y + 1))
+
+
+def draw_computer_screen(surf: pygame.Surface, computer: InteractiveObject, t: float) -> None:
+    x, y, w, _h = computer.rect
+    screen = pygame.Rect(x * TILE + 6, y * TILE + 4, w * TILE - 12, 4)
+    pygame.draw.rect(surf, (30, 60, 90), screen)
+    rng = random.Random(int(t * 4))
+    for _ in range(5):
+        surf.set_at((screen.x + rng.randrange(screen.width), screen.y + rng.randrange(screen.height)),
+                    rng.choice(((120, 230, 140), (240, 200, 80), (140, 200, 255))))
