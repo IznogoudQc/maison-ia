@@ -58,6 +58,14 @@ economy:
   low_pantry_days: 2          # sous ce seuil, l'épicerie devient une option
   overtime_below: 400         # heures sup proposées sous ce solde
 
+health:
+  mortality: true             # false : santé à 0 => hôpital quelques jours au lieu de la mort
+  starvation_per_hour: 2      # perte de santé par heure quand la faim est à 0
+  exhaustion_per_hour: 1      # perte de santé par heure quand l'énergie est à 0
+  regen_per_hour: 1.5
+  hospital_days: 3
+  grief_days: 3
+
 family_file: data/family.yaml
 save_file: save.json
 log_dir: logs

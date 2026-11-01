@@ -486,7 +486,23 @@ ICONS: dict[str, list[str]] = {
     "fun": ["..CCC..", ".CCCCC.", "CCCCCCC", ".CCCCC.", "..B.B..", ".B.B...", "......."],
     "heart": [".RR.RR.", "RRRRRRR", "RRRRRRR", ".RRRRR.", "..RRR..", "...R..."],
     "star": ["...Y...", "...Y...", "YYYYYYY", ".YYYYY.", "..Y.Y..", ".Y...Y."],
+    "health": ["..RRR..", "..RRR..", "RRRRRRR", "RRRRRRR", "RRRRRRR", "..RRR..", "..RRR.."],
 }
+
+
+def draw_memorial(surf: pygame.Surface, x: int, y: int, persona: Persona) -> None:
+    """Cadre photo au mur (coin supérieur gauche en x, y) avec un ruban noir en coin."""
+    frame = pygame.Rect(x, y, 11, 8)
+    box(surf, frame, (150, 110, 60), -50)
+    photo = frame.inflate(-2, -2)
+    pygame.draw.rect(surf, shade(tuple(persona.color), 60), photo)
+    style = STYLES.get(persona.id, DEFAULT_STYLE)
+    pygame.draw.rect(surf, style["hair"], (photo.centerx - 2, photo.y, 5, 2))
+    pygame.draw.rect(surf, SKIN, (photo.centerx - 2, photo.y + 2, 5, 3))
+    pygame.draw.rect(surf, tuple(persona.color), (photo.centerx - 3, photo.bottom - 1, 7, 1))
+    # Ruban de deuil en diagonale dans le coin supérieur droit
+    pygame.draw.line(surf, (20, 18, 22), (frame.right - 4, frame.y), (frame.right - 1, frame.y + 3))
+    pygame.draw.line(surf, (20, 18, 22), (frame.right - 5, frame.y), (frame.right - 1, frame.y + 4))
 _ICONS: dict[str, pygame.Surface] = {}
 
 

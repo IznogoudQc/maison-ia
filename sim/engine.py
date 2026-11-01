@@ -91,11 +91,12 @@ class Engine:
         # agent -> (future du résumé, nombre d'événements couverts)
         self.pending_summaries: dict[str, tuple[Future[StructuredResult[MemorySummary]], int]] = {}
         self.economy = Economy(config.economy)
+        self.game_over = False
 
     # ------------------------------------------------------------------ utilitaires
 
     def alive_count(self) -> int:
-        return len(self.agents)
+        return sum(not a.dead for a in self.agents)
 
     def agent_by_id(self, agent_id: str) -> Agent | None:
         return next((a for a in self.agents if a.id == agent_id), None)
@@ -387,6 +388,8 @@ class Engine:
     # ------------------------------------------------------------------ boucle
 
     def tick(self) -> None:
+        if self.game_over:
+            return
         self.clock.advance()
         if self.economy.bills_due(self.clock):
             self._charge_bills()
@@ -482,8 +485,14 @@ class Engine:
                          time=self.clock.hhmm, attempts=result.attempts)
 
     def _update_agent(self, agent: Agent) -> None:
+        if agent.dead:
+            return
         minutes = self.clock.tick_minutes
         now = self.clock.total_minutes
+        if agent.grieving_until is not None and now >= agent.grieving_until:
+            agent.grieving_until = None
+        if self._update_health(agent, minutes):
+            return  # vient de mourir ou d'être hospitalisé
 
         if agent.is_away:
             agent.needs.decay(minutes, "away")
@@ -552,6 +561,65 @@ class Engine:
             done = action.remaining <= 0
         if done:
             agent.action = None
+
+    # ------------------------------------------------------------------ santé et mort
+
+    def _update_health(self, agent: Agent, minutes: int) -> bool:
+        """Faim ou épuisement à 0 : la santé baisse ; sinon elle remonte. True si la santé a lâché."""
+        cfg = self.config.health
+        if agent.away_kind == "hopital":
+            return False
+        damage = 0.0
+        if agent.needs.hunger <= 0:
+            damage += cfg.starvation_per_hour
+        if agent.needs.energy <= 0:
+            damage += cfg.exhaustion_per_hour
+        if damage:
+            agent.health = max(0.0, agent.health - damage * minutes / 60)
+        elif agent.needs.hunger > 30 and agent.needs.energy > 20:
+            agent.health = min(100.0, agent.health + cfg.regen_per_hour * minutes / 60)
+        if agent.health > 0:
+            return False
+        if cfg.mortality:
+            self._die(agent)
+        else:
+            self._hospitalize(agent)
+        return True
+
+    def _die(self, agent: Agent) -> None:
+        now = self.clock.total_minutes
+        cause = "de faim" if agent.needs.hunger <= 0 else "d'épuisement"
+        self._cancel_decision(agent)
+        agent.dead, agent.died_minute = True, now
+        agent.action, agent.path = None, []
+        agent.away_until = agent.away_label = agent.away_kind = None
+        agent.grieving_until = None
+        self.publish("deces", agent=agent.id, name=agent.name, cause=cause, day=self.clock.day + 1)
+        grief_end = now + self.config.health.grief_days * 24 * 60
+        for other in self.agents:
+            if other.dead:
+                continue
+            other.grieving_until = grief_end
+            other.needs.apply({"fun": -40, "social": -30})
+            self.remember(other, f"{agent.name} nous a quittés ({cause}). Tout le monde a le cœur gros.")
+        if self.alive_count() == 0:
+            self.game_over = True
+            self.publish("fin", day=self.clock.day + 1, label=self.clock.label())
+
+    def _hospitalize(self, agent: Agent) -> None:
+        """Mode sans mortalité : quelques jours à l'hôpital (gratuit, merci la RAMQ), puis retour."""
+        self._cancel_decision(agent)
+        agent.action, agent.path = None, []
+        agent.away_until = self.clock.total_minutes + self.config.health.hospital_days * 24 * 60
+        agent.away_label, agent.away_kind, agent.away_pay = "hôpital", "hopital", 0.0
+        agent.health = 50.0
+        agent.needs.hunger = max(agent.needs.hunger, 70.0)
+        agent.needs.energy = max(agent.needs.energy, 70.0)
+        self.publish("hopital", agent=agent.id, name=agent.name)
+        self.remember(agent, "J'ai perdu connaissance : direction l'hôpital.")
+        for other in self.agents:
+            if other is not agent and not other.dead:
+                self.remember(other, f"{agent.name} est à l'hôpital pour quelques jours.")
 
     def _eat(self, agent: Agent, action_name: str) -> bool:
         """Prend la nourriture du garde-manger au début d'un repas ; False si le frigo est vide."""
@@ -651,6 +719,7 @@ class Engine:
         self.pending_decisions.clear()
         self.pending_dialogues.clear()
         self.pending_summaries.clear()
+        self.game_over = self.alive_count() == 0
         if self.llm is not None and "llm_stats" in data:
             for key, value in data["llm_stats"].items():
                 setattr(self.llm.stats, key, value)

@@ -25,6 +25,9 @@ MOOD_THRESHOLD = 30.0  # besoin sous ce seuil : icône au-dessus de la tête
 SITTING_ACTIONS = {"souper", "dejeuner", "tele"}
 LYING_ACTIONS = {"dormir", "sieste"}
 SOFA_SEAT_OFFSET = 10  # px : les spectateurs de la télé s'assoient sur le canapé, juste derrière leur case
+HEALTH_ICON_BELOW = 40.0
+# Cases de mur (face peinte visible) du salon où accrocher les cadres commémoratifs
+MEMORIAL_TILES = [(17, 12), (19, 12), (21, 12), (23, 12)]
 
 
 class Renderer:
@@ -153,7 +156,7 @@ class Renderer:
     def agent_at(self, agents: list[Agent], screen_pos: tuple[int, int]) -> Agent | None:
         best, best_dist = None, self.ts * 0.9
         for agent in agents:
-            if agent.is_away:
+            if agent.is_away or agent.dead:
                 continue
             ax, ay = self.agent_screen_pos(agent)
             dist = math.hypot(ax - screen_pos[0], ay - screen_pos[1])
@@ -180,7 +183,8 @@ class Renderer:
         hour = minute_of_day / 60.0
         low.blit(self.background, (0, 0))
         self._draw_windows(low, hour)
-        visible = [a for a in agents if not a.is_away]
+        self._draw_memorials(low, agents)
+        visible = [a for a in agents if not a.is_away and not a.dead]
         steam_points = self._draw_object_states(low, visible)
 
         # Personnages du haut vers le bas pour que ceux du bas passent devant
@@ -211,6 +215,13 @@ class Renderer:
         stars = hour >= 21 or hour < 5
         for x, y, vertical in WINDOWS:
             sprites.draw_window(low, x, y, vertical, on_face=(x, y + 1) in self.house.floor, sky=sky, stars=stars)
+
+    def _draw_memorials(self, low: pygame.Surface, agents: list[Agent]) -> None:
+        """Un cadre avec ruban noir par membre décédé, sur la face du mur nord du salon."""
+        departed = sorted((a for a in agents if a.dead), key=lambda a: a.died_minute or 0)
+        for index, agent in enumerate(departed):
+            tx, ty = MEMORIAL_TILES[index % len(MEMORIAL_TILES)]
+            sprites.draw_memorial(low, tx * TILE + 2, ty * TILE + TILE // 2, agent.persona)
 
     def _draw_object_states(self, low: pygame.Surface, agents: list[Agent]) -> list[tuple[int, int]]:
         """Objets animés selon les actions en cours ; renvoie les points d'où monte de la vapeur."""
@@ -350,6 +361,8 @@ class Renderer:
     def _mood_icon(agent: Agent) -> str | None:
         if agent.thinking or not agent.is_available:
             return None
+        if agent.health < HEALTH_ICON_BELOW:
+            return "health"
         need, value = agent.needs.lowest()
         return need if value < MOOD_THRESHOLD else None
 
@@ -357,9 +370,9 @@ class Renderer:
         """Icône de besoin ou petit effet de bonheur ; True si une bulle d'icône est affichée."""
         name = self._mood_icon(agent)
         if name is not None:
-            need_value = agent.needs.lowest()[1]
-            # Besoin critique : l'icône clignote
-            if need_value >= 15 or int(self.time * 3) % 2 == 0:
+            critical = agent.health < 20 if name == "health" else agent.needs.lowest()[1] < 15
+            # État critique : l'icône clignote
+            if not critical or int(self.time * 3) % 2 == 0:
                 sprites.draw_mood_bubble(low, name, cx, top)
                 return True
             return False

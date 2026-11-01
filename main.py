@@ -21,7 +21,7 @@ from sim.events import EventBus
 from sim.journal import JsonlJournal
 from ui import theme
 from ui.dialogue_box import DialogueBox
-from ui.hud import Hud
+from ui.hud import Hud, draw_game_over
 from ui.renderer import Renderer
 from world.house import House
 
@@ -125,10 +125,15 @@ def main() -> None:
         selected = engine.agent_by_id(selected_id) if selected_id else None
         hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label,
                  engine.economy, engine.alive_count())
+        if engine.game_over:
+            draw_game_over(screen, pygame.Rect(0, 0, map_w, map_h), clock)
         pygame.display.flip()
 
-    engine.save_state(save_path)
-    print(f"[Sauvegarde] état écrit dans {save_path} ({clock.label()})")
+    if engine.game_over:
+        print(f"[Sauvegarde] partie terminée : {save_path} n'est pas modifié (relancer avec --nouveau)")
+    else:
+        engine.save_state(save_path)
+        print(f"[Sauvegarde] état écrit dans {save_path} ({clock.label()})")
     llm.shutdown()
     journal.close()
     pygame.quit()

@@ -12,6 +12,8 @@ from sim.economy import Economy
 from ui import theme
 from ui.dialogue_box import wrap_text
 
+HEALTH_WARNING = 60.0  # vue famille : santé affichée sous ce seuil
+
 CONTROLS = [
     "Espace : pause / reprise",
     "1-4 : vitesse",
@@ -100,8 +102,11 @@ class Hud:
         surface.blit(theme.font(15, bold=True).render("Famille", True, theme.TEXT), (x, y))
         y += 24
         for agent in agents:
-            pygame.draw.circle(surface, agent.persona.color, (x + 7, y + 9), 7)
+            color = (90, 90, 100) if agent.dead else agent.persona.color
+            pygame.draw.circle(surface, color, (x + 7, y + 9), 7)
             text = f"{agent.name} — {agent.status_label}"
+            if not agent.dead and agent.health < HEALTH_WARNING:
+                text += f" (santé {agent.health:.0f})"
             surface.blit(theme.font(13).render(_clip(text, 44), True, theme.TEXT_DIM), (x + 20, y))
             y += 22
         return y
@@ -122,9 +127,14 @@ class Hud:
                                                theme.TEXT_DIM), (x, y))
             y += 18
         y += 6
+        if agent.dead:
+            when = SimClock(); when.total_minutes = agent.died_minute or 0
+            surface.blit(theme.font(13).render(f"Décès : {when.label()}", True, (200, 120, 120)), (x, y))
+            return y + 26
         bar_w = self.rect.width - 120
-        for name, value in agent.needs.as_dict().items():
-            surface.blit(theme.font(13).render(NEED_LABELS[name], True, theme.TEXT_DIM), (x, y))
+        rows = [("Santé", agent.health)] + [(NEED_LABELS[n], v) for n, v in agent.needs.as_dict().items()]
+        for label, value in rows:
+            surface.blit(theme.font(13, bold=label == "Santé").render(label, True, theme.TEXT_DIM), (x, y))
             bar = pygame.Rect(x + 80, y + 4, bar_w, 11)
             pygame.draw.rect(surface, (70, 70, 84), bar, border_radius=4)
             fill = bar.copy()
@@ -163,6 +173,23 @@ def _need_color(value: float) -> tuple[int, int, int]:
     if value < 50:
         return (230, 170, 60)
     return (90, 190, 110)
+
+
+def draw_game_over(surface: pygame.Surface, rect: pygame.Rect, clock: SimClock) -> None:
+    """Voile sombre sur la carte quand plus personne n'est en vie."""
+    veil = pygame.Surface(rect.size, pygame.SRCALPHA)
+    veil.fill((8, 8, 12, 200))
+    surface.blit(veil, rect.topleft)
+    lines = [
+        (theme.font(30, bold=True), "La famille n'a pas survécu", theme.TEXT),
+        (theme.font(18), f"Jours tenus : {clock.day + 1}  —  fin le {clock.label()}", theme.TEXT_DIM),
+        (theme.font(15), "Échap pour quitter ; relancer avec --nouveau pour une nouvelle partie", theme.TEXT_DIM),
+    ]
+    y = rect.centery - 60
+    for font, text, color in lines:
+        image = font.render(text, True, color)
+        surface.blit(image, image.get_rect(midtop=(rect.centerx, y)))
+        y += image.get_height() + 14
 
 
 def _money(amount: float) -> str:

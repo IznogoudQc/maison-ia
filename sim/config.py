@@ -79,6 +79,15 @@ class EconomyConfig(BaseModel):
     debt_fun_penalty_per_hour: float = 1.5
 
 
+class HealthConfig(BaseModel):
+    mortality: bool = True              # False : santé à 0 => quelques jours d'hôpital au lieu de la mort
+    starvation_per_hour: float = 2.0    # perte de santé quand la faim est à 0 (~2 jours avant la mort)
+    exhaustion_per_hour: float = 1.0    # perte de santé quand l'énergie est à 0
+    regen_per_hour: float = 1.5         # récupération quand on mange et dort assez
+    hospital_days: int = 3
+    grief_days: int = 3
+
+
 class AppConfig(BaseModel):
     sim: SimConfig = Field(default_factory=SimConfig)
     display: DisplayConfig = Field(default_factory=DisplayConfig)
@@ -86,6 +95,7 @@ class AppConfig(BaseModel):
     dialogue: DialogueConfig = Field(default_factory=DialogueConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     economy: EconomyConfig = Field(default_factory=EconomyConfig)
+    health: HealthConfig = Field(default_factory=HealthConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"

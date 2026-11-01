@@ -42,8 +42,12 @@ class Agent(BaseModel):
     action: ActiveAction | None = None
     away_until: int | None = None    # minute absolue de retour si absent
     away_label: str | None = None
-    away_kind: str | None = None     # travail, ecole, epicerie, heures_sup
+    away_kind: str | None = None     # travail, ecole, epicerie, heures_sup, hopital
     away_pay: float = 0.0            # paie versée au retour
+    health: float = 100.0
+    dead: bool = False
+    died_minute: int | None = None
+    grieving_until: int | None = None  # minute absolue de fin du deuil
     fired: dict[str, int] = Field(default_factory=dict)  # tâche d'horaire -> dernier jour exécuté
     last_decision_minute: int = -10**9   # dernière décision demandée au LLM
     memory: Memory = Field(default_factory=Memory)
@@ -67,15 +71,19 @@ class Agent(BaseModel):
 
     @property
     def is_available(self) -> bool:
-        """Présent, éveillé : peut participer à une conversation."""
-        return not self.is_away and not self.is_sleeping
+        """Vivant, présent, éveillé : peut participer à une conversation."""
+        return not self.dead and not self.is_away and not self.is_sleeping
 
     @property
     def mood(self) -> str:
+        if self.grieving_until is not None:
+            return "en deuil"
         return self.needs.mood()
 
     @property
     def status_label(self) -> str:
+        if self.dead:
+            return "† repose en paix"
         if self.is_away:
             return away_phrase(self.away_label or "travail")
         if self.action is None:
