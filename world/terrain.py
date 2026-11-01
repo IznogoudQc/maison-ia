@@ -88,7 +88,7 @@ def terrain_layout(width: int = 120, height: int = 80, seed: int | None = 42,
         rooms={ROOM: (0, 0, width - 1, sidewalk_y)}, outdoor_rooms={ROOM}, doors=[],
         street={(x, street_y) for x in range(width)}, surfaces=surfaces, fences=set(),
         objects=objects + trees, purchase_objects=purchase, spawn_tiles=spawn, water=water,
-        catalog=("bbq", "auto", "scie"), wild=True, labels=False,
+        catalog=("bbq", "scie"), wild=True, labels=False,
     )
 
 

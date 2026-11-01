@@ -27,6 +27,7 @@ class ActiveAction(BaseModel):
     forced: bool = False             # imposée par l'horaire
     started: bool = False            # arrivé sur place, action en cours
     reason: str = ""
+    vehicle: str | None = None       # véhicule prévu pour partir (id de l'objet garé)
 
     @property
     def label(self) -> str:
@@ -46,7 +47,8 @@ class Agent(BaseModel):
     away_label: str | None = None
     away_kind: str | None = None     # travail, ecole, epicerie, heures_sup, hopital
     away_pay: float = 0.0            # paie versée au retour
-    drove: bool = False              # parti avec l'auto familiale
+    drove: bool = False              # parti avec un véhicule de la famille
+    vehicle: str | None = None       # id du véhicule utilisé (il n'est plus dans l'entrée)
     health: float = 100.0
     dead: bool = False
     died_minute: int | None = None

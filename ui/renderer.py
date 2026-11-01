@@ -51,6 +51,7 @@ class Renderer:
         self.room_rects = {name: pygame.Rect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE)
                            for name, (x0, y0, x1, y1) in indoor.items()}
         self.room_glows = {name: _warm_glow(rect.size) for name, rect in self.room_rects.items()}
+        self.vehicles_out: set[str] = set()
         self.purchases: set[str] = set()  # achats du ménage qui changent le dessin (scie à chaîne)
         self._minimap: pygame.Surface | None = None
         self._minimap_revision = -1
@@ -357,9 +358,9 @@ class Renderer:
         pile = self.house.objects.get("corde_bois")
         if pile is not None:
             sprites.draw_woodpile(low, pile, self.wood)
-        car = self.house.objects.get("auto")
-        if car is not None and self.car_home:
-            sprites.draw_car(low, car)
+        for vehicle in self.house.objects_of_kind("vehicule"):
+            if vehicle.id not in self.vehicles_out:  # parti avec quelqu'un : l'entrée est vide
+                sprites.draw_vehicle(low, vehicle)
         if "piscine" in self.house.objects:
             sprites.draw_pool_shimmer(low, self.house.objects["piscine"], t)
         self._draw_windows(low, hour)

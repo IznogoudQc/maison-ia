@@ -147,7 +147,7 @@ def house_layout() -> Layout:
     return Layout("maison", WIDTH, HEIGHT, dict(ROOMS), set(OUTDOOR_ROOMS), list(DOORS), street,
                   surfaces, fences, list(OBJECTS), dict(PURCHASE_OBJECTS), spawn_room="Cuisine",
                   windows=list(WINDOWS), memorial_tiles=list(MEMORIAL_TILES),
-                  catalog=("tondeuse", "bbq", "piscine", "auto"))
+                  catalog=("tondeuse", "bbq", "piscine"))
 
 
 class House:

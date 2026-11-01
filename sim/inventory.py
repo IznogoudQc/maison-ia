@@ -209,6 +209,9 @@ class Inventory:
         if eco.household.money < item.prix:
             engine.remember(agent, f"Finalement, pas les moyens pour {item.label}.", 3)
             return
+        already = any(o.item_id == item.id for o in self.items)
+        if item.type != "lit" and (already or eco.household.last_item_day == engine.clock.day):
+            return  # quelqu'un d'autre vient d'acheter (décisions prises en même temps)
         replaced = self._replaced_by(item)
         previous = [a for a in engine.agents if replaced is not None and a.bed == replaced.object_id]
         if replaced is not None:

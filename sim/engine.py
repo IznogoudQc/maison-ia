@@ -44,6 +44,7 @@ from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
 from sim.architect import Architect
 from sim.family import FamilyLife
+from sim.garage import Garage
 from sim.inventory import Inventory
 from sim.mind import Mind
 from sim.social import Social
@@ -132,6 +133,7 @@ class Engine:
         self.architect = Architect(self)
         self.family = FamilyLife(self)
         self.inventory = Inventory(self)
+        self.garage = Garage(self)
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
 
@@ -142,7 +144,7 @@ class Engine:
 
     def car_home(self) -> bool:
         """L'auto est achetée et personne n'est parti avec."""
-        return "auto" in self.house.objects and not any(a.drove for a in self.agents)
+        return bool(self.garage.at_home())
 
     def agent_by_id(self, agent_id: str) -> Agent | None:
         return next((a for a in self.agents if a.id == agent_id), None)
@@ -203,6 +205,7 @@ class Engine:
         definition = ACTIONS[name]
         target_name = target
         use_pos: Pos | None = None
+        vehicle_id: str | None = None
         if name == "jaser":
             other = self.agent_by_id(target or "")
             if other is None or not other.is_available:
@@ -216,9 +219,10 @@ class Engine:
             nearby = [p for p in self.house.walkable_tiles(room) if manhattan(p, agent.pos) <= FLANER_RADIUS]
             use_pos = self.rng.choice(nearby) if nearby else agent.pos
         elif name in AWAY_ACTIONS:
-            # En auto si elle est à la maison (adultes) ; sinon l'arrêt d'autobus, partagé par tous
-            if agent.persona.is_adult and self.car_home():
-                use_pos = self.house.objects["auto"].use_positions[0]
+            # Le véhicule libre le plus utile s'il y en a un ; sinon l'arrêt d'autobus, partagé par tous
+            vehicle = self.garage.best_for(agent, "epicerie" if name == "epicerie" else "travail")
+            if vehicle is not None:
+                use_pos, vehicle_id = vehicle.uses[0], vehicle.object_id
             else:
                 use_pos = self.house.objects_of_kind("porte")[0].use_positions[0]
         elif name == "acheter":
@@ -274,12 +278,17 @@ class Engine:
             use_pos = self._object_spot(agent, definition.object_kind)
             if use_pos is None:
                 return None
+        if name == "acheter_vehicule":
+            model = self.garage.models.get(target or "")
+            if model is None:
+                return None
+            target_name = model.label
         duration = definition.duration
         if name == "couper" and self.economy.owns("scie"):
             duration = round(duration * SAW_FACTOR)
         return ActiveAction(name=name, target=target, target_name=target_name, use_pos=use_pos,
                             remaining=duration, until_minute=until, forced=forced,
-                            reason=reason)
+                            reason=reason, vehicle=vehicle_id)
 
     def _nearest_tree(self, agent: Agent, clearing: bool = False) -> tuple[InteractiveObject, Pos] | None:
         """Arbre le plus proche qu'on peut atteindre (par la lisière) et que personne d'autre ne coupe.
@@ -295,7 +304,7 @@ class Engine:
         if clearing:
             wanted = self.architect.clearing_trees()
             ids = {t.id for t in wanted}
-            reachable = [t for t in wanted if any(s not in occupied for s in t.use_positions)]
+            reachable = [t for t in wanted if t.id not in taken and any(s not in occupied for s in t.use_positions)]
             if reachable:
                 trees = reachable
             elif wanted:
@@ -375,7 +384,7 @@ class Engine:
         options = self._yard_options(agent) + self._wood_options(agent) + self._building_options(agent)
         if not agent.persona.is_adult:
             return options
-        options += self._purchase_options(agent) + self.inventory.options_for(agent)
+        options += self._purchase_options(agent) + self.inventory.options_for(agent) + self.garage.options_for(agent)
         return options + self._money_options(agent)
 
     def _yard_options(self, agent: Agent) -> list[Option]:
@@ -719,9 +728,9 @@ class Engine:
                 if project:
                     lines.append(project)
         lines += self.family.context_lines()
-        owned = self.inventory.context_line()
-        if owned:
-            lines.append(owned)
+        for line in (self.inventory.context_line(), self.garage.context_line()):
+            if line:
+                lines.append(line)
         departed = [a for a in self.agents if a.dead]
         if departed:
             names = ", ".join(f"{a.name} (jour {(a.died_minute or 0) // (24 * 60) + 1})" for a in departed)
@@ -964,6 +973,8 @@ class Engine:
             self.architect.work(agent, action.target, ACTIONS["construire"].duration / 60)
         elif action.name == "engager":
             self.architect.hire(agent, action.target)
+        elif action.name == "acheter_vehicule":
+            self.garage.buy(agent, action.target)
         elif action.name == "acheter_objet":
             self.inventory.buy(agent, action.target)
         elif action.name == "revendre":
@@ -1100,7 +1111,7 @@ class Engine:
         tree = self.house.remove_object(tree_id)
         if tree is None:
             return 0  # quelqu'un l'a abattu avant
-        logs = WOOD_YIELD.get(tree.label, 5)
+        logs = WOOD_YIELD.get(tree.label, 5) + self.garage.wood_bonus()  # camionnette, VTT
         self.economy.household.wood += logs
         x, y = tree.rect[:2]
         for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
@@ -1137,10 +1148,16 @@ class Engine:
     def _leave(self, agent: Agent, action: ActiveAction) -> None:
         now = self.clock.total_minutes
         cfg = self.economy.config
-        car = self.house.objects.get("auto")
-        agent.drove = car is not None and agent.pos in car.use_positions and self.car_home()
+        vehicle = self.garage.get(action.vehicle)
+        agent.drove = (vehicle is not None and agent.pos in vehicle.uses
+                       and vehicle.object_id not in self.garage.in_use())
+        model = self.garage.model(vehicle) if agent.drove else None
+        if model is not None:
+            agent.vehicle = vehicle.object_id
+            if model.plaisir:
+                agent.needs.apply({"fun": model.plaisir})
         if action.name == "epicerie":
-            minutes = CAR_GROCERY_MINUTES if agent.drove else cfg.grocery_minutes
+            minutes = model.epicerie_minutes if model is not None and model.epicerie else cfg.grocery_minutes
             agent.away_until, agent.away_label, agent.away_kind = now + minutes, "épicerie", "epicerie"
             agent.away_pay = 0.0
         elif action.name == "heures_sup":
@@ -1150,8 +1167,8 @@ class Engine:
         else:
             salary = agent.persona.salary_per_day
             agent.away_until = action.until_minute
-            if agent.drove and agent.away_until is not None:
-                agent.away_until -= CAR_COMMUTE_SAVING  # pas d'autobus à attendre au retour
+            if model is not None and agent.away_until is not None:
+                agent.away_until -= model.trajet  # pas d'autobus à attendre au retour
             agent.away_label = action.target or "travail"
             agent.away_kind = "travail" if salary > 0 else "ecole"
             agent.away_pay = salary
@@ -1167,16 +1184,16 @@ class Engine:
         self.remember(agent, f"Je pars {away_phrase(agent.away_label)}.", 1)
 
     def _return_home(self, agent: Agent) -> None:
-        drove = agent.drove
-        arrival = self.house.objects["auto" if drove and "auto" in self.house.objects else "porte"]
-        agent.pos = arrival.use_positions[0]
+        vehicle = self.garage.get(agent.vehicle) if agent.drove else None
+        by_car = vehicle is not None and self.garage.model(vehicle).epicerie
+        agent.pos = vehicle.uses[0] if vehicle is not None else self.house.objects["porte"].use_positions[0]
         agent.last_room = self.house.room_at(agent.pos)
         label, kind, pay = agent.away_label, agent.away_kind, agent.away_pay
         agent.away_until = None
         agent.away_label = None
         agent.away_kind = None
         agent.away_pay = 0.0
-        agent.drove = False
+        agent.drove, agent.vehicle = False, None
         self.publish("retour", agent=agent.id, name=agent.name, label=label)
         place = label or "travail"
         origin = f"de l'{place}" if away_phrase(place).startswith("à l'") else f"du {place}"
@@ -1190,7 +1207,7 @@ class Engine:
             self.publish("paie", agent=agent.id, name=agent.name, amount=pay, source=kind,
                          money=self.economy.household.money)
         if kind == "epicerie":
-            bought, cost = self.economy.buy_groceries(now, self.alive_count(), agent.name, by_car=drove)
+            bought, cost = self.economy.buy_groceries(now, self.alive_count(), agent.name, by_car=by_car)
             self.publish("epicerie", agent=agent.id, name=agent.name, portions=bought, amount=-cost,
                          money=self.economy.household.money)
             if bought:
@@ -1246,6 +1263,7 @@ class Engine:
                 self.agents[index] = Agent.model_validate({**saved[agent.id], "persona": agent.persona})
         self.family.after_load()
         self.inventory.restore()
+        self.garage.restore()
         self.pending_decisions.clear()
         self.pending_dialogues.clear()
         self.pending_summaries.clear()

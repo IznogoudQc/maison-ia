@@ -476,7 +476,7 @@ def place_in_room(house: House, name: str, rect: Rect, size: tuple[int, int], ca
 
 
 def place_outside(house: House, size: tuple[int, int], capacity: int, deco: bool, center: Pos,
-                  radius: int = 16) -> tuple[tuple[int, int, int, int], list[Pos]] | None:
+                  radius: int = 16, allow_surface: bool = False) -> tuple[tuple[int, int, int, int], list[Pos]] | None:
     """Place un objet dehors, près de center, sur des cases libres, sans boucher un passage."""
     w, h = size
     reserved = {p for o in house.objects.values() for p in o.use_positions} | set(house.doors)
@@ -485,7 +485,10 @@ def place_outside(house: House, size: tuple[int, int], capacity: int, deco: bool
                        key=lambda p: abs(p[0] - cx) + abs(p[1] - cy)):
         tiles = [(x + dx, y + dy) for dx in range(w) for dy in range(h)]
         ring = {(tx + ex, ty + ey) for tx, ty in tiles for ex in (-1, 0, 1) for ey in (-1, 0, 1)} - set(tiles)
-        if any(not house.is_walkable(t) or t in reserved or house.surface_at(t) for t in tiles):
+        def bad_surface(t: Pos) -> bool:  # un véhicule se gare sur l'asphalte, jamais sur le trottoir
+            surface = house.surface_at(t)
+            return bool(surface) and (not allow_surface or surface == "concrete")
+        if any(not house.is_walkable(t) or t in reserved or bad_surface(t) for t in tiles):
             continue
         if any(house.is_wall(p) or p in house.doors for p in ring):
             continue  # pas collé à un mur de la maison ni devant une porte

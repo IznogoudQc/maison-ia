@@ -179,6 +179,7 @@ def main() -> None:
 
         renderer.set_yard(engine.economy.household.lawn, engine.car_home(), engine.economy.household.wood)
         renderer.purchases = set(engine.economy.household.purchases)
+        renderer.vehicles_out = engine.garage.in_use()
         renderer.set_plan(engine.architect.plan, [t.rect[:2] for t in engine.architect.clearing_trees()])
         renderer.update_display(agents, dt)
         followed = engine.agent_by_id(selected_id) if follow and selected_id else None
@@ -197,7 +198,7 @@ def main() -> None:
                          f"Arbres : {len(house.objects_of_kind('arbre'))}")
         hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label,
                  engine.economy, engine.alive_count(), promises, extra, engine.architect.hud_lines(),
-                 engine.inventory.hud_lines())
+                 engine.garage.hud_lines() + engine.inventory.hud_lines())
         if engine.game_over:
             draw_game_over(screen, pygame.Rect(0, 0, map_w, map_h), clock)
         pygame.display.flip()

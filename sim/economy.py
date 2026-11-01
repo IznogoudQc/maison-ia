@@ -60,6 +60,21 @@ class OwnedItem(BaseModel):
         return f"objet_{self.uid}"
 
 
+class OwnedVehicle(BaseModel):
+    """Véhicule acheté et garé (section « vehicules » de data/catalogue.yaml)."""
+    uid: int
+    model: str
+    label: str
+    rect: tuple[int, int, int, int]
+    uses: list[tuple[int, int]] = Field(default_factory=list)
+    price: float = 0.0
+    weekly: float = 0.0
+
+    @property
+    def object_id(self) -> str:
+        return f"vehicule_{self.model}_{self.uid}"
+
+
 class LedgerEntry(BaseModel):
     minute: int
     label: str
@@ -83,6 +98,8 @@ class Household(BaseModel):
     next_item_uid: int = 1
     last_harvest_day: int = -1
     last_item_day: int = -1          # un seul achat d'objet par jour (sauf un lit qui manque)
+    vehicles: list[OwnedVehicle] = Field(default_factory=list)
+    last_vehicle_day: int = -100
     ledger: list[LedgerEntry] = Field(default_factory=list)
 
 
@@ -120,7 +137,11 @@ class Economy:
             if owned.hydro:
                 label = "Économie d'Hydro (panneaux solaires)"
                 items[label] = items.get(label, 0) - owned.hydro
+        items.update(self._vehicle_bills())
         return items
+
+    def _vehicle_bills(self) -> dict[str, float]:
+        return {f"Essence et assurance : {v.label}": v.weekly for v in self.household.vehicles if v.weekly}
 
     def grocery_discount(self) -> float:
         return max((o.discount for o in self.household.items), default=0.0)

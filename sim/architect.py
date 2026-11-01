@@ -239,7 +239,8 @@ class Architect:
             if not self.can_afford_materials(room):
                 return False
             eco = self.engine.economy
-            eco.transaction(self.engine.clock.total_minutes, f"Matériaux : {room.name.lower()}", -room.materials_cost)
+            cost = round(room.materials_cost * (1 - self.engine.garage.materials_discount()), -1)  # camionnette
+            eco.transaction(self.engine.clock.total_minutes, f"Matériaux : {room.name.lower()}", -cost)
             room.materials_paid = True
             room.status = "chantier"
             self.engine.publish("chantier_debut", room=room.name,

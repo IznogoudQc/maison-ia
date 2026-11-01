@@ -15,6 +15,12 @@ from world.house import House
 from world.pathfinding import find_path
 
 
+def buy(engine, agent, target):
+    """Achat direct (le test enchaîne plusieurs achats le même jour)."""
+    engine.economy.household.last_item_day = -1
+    engine.inventory.buy(agent, target)
+
+
 @pytest.fixture
 def setup():
     """Maison des Gagnon, samedi 10 h, compte bien garni."""
@@ -41,7 +47,7 @@ def test_achat_place_l_objet_et_ouvre_l_activite(setup):
     engine, events = setup
     pere = engine.agent_by_id("pere")
     assert not any(o.action == "console" for o in engine.options_for(pere))
-    engine.inventory.buy(pere, "console|Salon|")
+    buy(engine, pere, "console|Salon|")
     owned = engine.economy.household.items[-1]
     obj = engine.house.objects[owned.object_id]
     assert engine.economy.household.money == pytest.approx(19_500.0)
@@ -57,7 +63,7 @@ def test_tout_reste_accessible_apres_plusieurs_achats(setup):
     engine, _ = setup
     pere = engine.agent_by_id("pere")
     for target in ("bibliotheque|Salon|", "piano|Salon|", "console|Salon|", "ordinateur|Salon|"):
-        engine.inventory.buy(pere, target)
+        buy(engine, pere, target)
     for obj in engine.house.objects.values():
         for spot in obj.use_positions:
             assert find_path((5, 15), spot, engine.house.is_walkable) is not None, obj.id
@@ -66,8 +72,8 @@ def test_tout_reste_accessible_apres_plusieurs_achats(setup):
 def test_gamme_superieure_remplace_et_revend(setup):
     engine, _ = setup
     pere = engine.agent_by_id("pere")
-    engine.inventory.buy(pere, "canape_usage|Salon|")
-    engine.inventory.buy(pere, "canape_cuir|Salon|")
+    buy(engine, pere, "canape_usage|Salon|")
+    buy(engine, pere, "canape_cuir|Salon|")
     items = [o.item_id for o in engine.economy.household.items]
     assert items == ["canape_cuir"]
     assert any(e.label.startswith("Revente : un divan") and e.amount == 80 for e in engine.economy.household.ledger)
@@ -76,7 +82,7 @@ def test_gamme_superieure_remplace_et_revend(setup):
 def test_dans_le_rouge_on_peut_revendre(setup):
     engine, _ = setup
     pere = engine.agent_by_id("pere")
-    engine.inventory.buy(pere, "piano|Salon|")
+    buy(engine, pere, "piano|Salon|")
     engine.economy.household.money = -200.0
     pere.action = None
     sale = next(o for o in engine.options_for(pere) if o.action == "revendre")
@@ -90,7 +96,7 @@ def test_effets_potager_solaire_congelateur(setup):
     pere = engine.agent_by_id("pere")
     bills = engine.economy.weekly_bills()
     for target in ("potager|exterieur|", "panneaux_solaires|exterieur|", "congelateur|Cuisine|"):
-        engine.inventory.buy(pere, target)
+        buy(engine, pere, target)
     assert engine.economy.weekly_bills() == pytest.approx(bills - 30 + 4)  # solaire -30, congélateur +4
     pantry = engine.economy.household.pantry
     engine.economy.household.last_harvest_day = -1
@@ -110,7 +116,7 @@ def test_un_achat_par_jour(setup):
 
 def test_sauvegarde_replace_les_objets(setup, tmp_path):
     engine, _ = setup
-    engine.inventory.buy(engine.agent_by_id("pere"), "trampoline|exterieur|")
+    buy(engine, engine.agent_by_id("pere"), "trampoline|exterieur|")
     engine.save_state(tmp_path / "save.json")
     config = load_config("config.yaml", scenario="maison")
     agents = [Agent(persona=p, pos=(0, 0)) for p in load_family(config.family_file)]

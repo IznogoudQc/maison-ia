@@ -96,7 +96,7 @@ SURPRISE_BILLS = {  # (libellé, montant) selon le scénario
 
 def _surprise_bill(engine: Engine, rng: random.Random) -> str | None:
     choices = list(SURPRISE_BILLS.get(engine.house.layout.name, SURPRISE_BILLS["maison"]))
-    if "auto" in engine.economy.household.purchases:
+    if engine.garage.has_motor():
         choices.append(("La réparation de l'auto", 800))
     label, amount = rng.choice(choices)
     engine.economy.transaction(engine.clock.total_minutes, label, -amount)

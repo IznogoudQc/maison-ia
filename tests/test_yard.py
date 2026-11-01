@@ -104,7 +104,7 @@ def test_tondre_remet_le_gazon_a_zero():
 
 def test_auto_retour_plus_tot_et_absente_de_l_entree():
     eng, events = make_engine(money=20_000.0)
-    eng._buy(eng.agent_by_id("pere"), "auto")
+    eng.garage.buy(eng.agent_by_id("pere"), "compacte")
     run_until(eng, parse_hhmm("09:00"))
     pere = eng.agent_by_id("pere")
     assert pere.drove and not eng.car_home()

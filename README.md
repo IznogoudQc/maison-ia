@@ -146,6 +146,17 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
   accessible. Un objet de gamme supérieure remplace l'ancien (revendu 40 %) ; dans le rouge, on peut
   revendre. Un achat d'objet par jour au plus (sauf un lit qui manque).
 
+- **Véhicules** (section `vehicules` du catalogue) : vélo, moto, auto compacte, VUS familial,
+  camionnette et VTT (ces deux-là sur le terrain). Prix, frais d'essence et d'assurance chaque
+  semaine, places, minutes gagnées au retour du travail, capacité à rapporter l'épicerie (plus vite et
+  moins cher), moral, bûches de plus par arbre (camionnette, VTT), rabais de 15 % sur les matériaux du
+  chantier (camionnette). Chaque véhicule est garé près de l'entrée ; au départ, chacun prend le
+  véhicule libre le plus utile pour sa course (la moto ne rapporte pas l'épicerie, le VTT ne va pas au
+  travail, il faut l'âge pour conduire) et l'entrée se vide. Le moteur propose un véhicule utile (le
+  premier, un VUS quand la famille ne rentre plus dans l'auto, la camionnette pendant un chantier) ;
+  au plus un achat par semaine et trois véhicules. L'ancienne « auto » d'une sauvegarde devient une
+  auto compacte.
+
 Les prompts du LLM reçoivent l'état du ménage (argent, garde-manger, achats, chômage, santé,
 deuils, dernière nouvelle) : les dialogues en parlent naturellement.
 

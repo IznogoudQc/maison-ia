@@ -437,6 +437,46 @@ def draw_car(surf: pygame.Surface, car: InteractiveObject) -> None:
         pygame.draw.rect(surf, (252, 240, 180), (lx, body.y + 1, 2, 2))
 
 
+VEHICLE_COLORS = {"compacte": (200, 60, 50), "vus": (40, 70, 110), "pickup": (90, 110, 70), "moto": (30, 30, 34),
+                  "vtt": (200, 120, 30), "velo": (40, 140, 200)}
+
+
+def draw_vehicle(surf: pygame.Surface, obj: InteractiveObject) -> None:
+    """Véhicule garé, vu de dessus ; le type est dans l'id (vehicule_<type>_<n>)."""
+    kind = obj.id.split("_")[1] if obj.id.count("_") >= 2 else "compacte"
+    x, y, w, h = obj.rect
+    r = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
+    color = VEHICLE_COLORS.get(kind, (200, 60, 50))
+    if kind == "velo":
+        pygame.draw.circle(surf, (30, 30, 30), (r.centerx, r.y + 3), 3, 1)
+        pygame.draw.circle(surf, (30, 30, 30), (r.centerx, r.bottom - 4), 3, 1)
+        pygame.draw.line(surf, color, (r.centerx, r.y + 3), (r.centerx, r.bottom - 4), 2)
+        return
+    if kind in ("moto", "vtt"):
+        body = r.inflate(-6 if kind == "moto" else -2, -4)
+        pygame.draw.rect(surf, (25, 25, 25), (body.x - 1, body.y + 1, body.width + 2, 4))       # roue avant
+        pygame.draw.rect(surf, (25, 25, 25), (body.x - 1, body.bottom - 5, body.width + 2, 4))  # roue arrière
+        box(surf, body.inflate(0, -6), color)
+        pygame.draw.line(surf, (200, 200, 205), (body.x - 2, body.y + 6), (body.right + 1, body.y + 6))  # guidon
+        return
+    if kind == "compacte":
+        draw_car(surf, obj)
+        return
+    body = r.inflate(-3, -2)
+    box(surf, body, color)
+    pygame.draw.rect(surf, (170, 200, 220), (body.x + 2, body.y + 4, body.width - 4, 6))  # pare-brise
+    if kind == "pickup":
+        pygame.draw.rect(surf, (60, 70, 50), (body.x + 2, body.centery + 2, body.width - 4, body.height // 2 - 4))
+        for i in range(3):  # des planches dans la boîte
+            pygame.draw.line(surf, (214, 178, 120), (body.x + 3, body.centery + 5 + i * 3),
+                             (body.right - 4, body.centery + 5 + i * 3))
+    else:
+        pygame.draw.rect(surf, (170, 200, 220), (body.x + 2, body.bottom - 9, body.width - 4, 5))
+    for wx in (body.x - 1, body.right - 1):
+        for wy in (body.y + 3, body.bottom - 7):
+            pygame.draw.rect(surf, (20, 20, 20), (wx, wy, 2, 5))
+
+
 def draw_mower(surf: pygame.Surface, x: int, y: int) -> None:
     pygame.draw.rect(surf, (200, 40, 40), (x, y, 6, 5))
     pygame.draw.rect(surf, (30, 30, 30), (x, y, 6, 5), 1)
@@ -750,7 +790,7 @@ LABEL_DRAWERS = {"Panneaux": _solar, "Congélateur": _freezer, "Comptoir": _coun
 def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
     x, y, w, h = obj.rect
     rect = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
-    if obj.kind == "auto" or obj.id == "corde_bois":
+    if obj.kind in ("auto", "vehicule") or obj.id == "corde_bois":
         return  # dessinées à chaque image : l'auto part et revient, la corde de bois grossit
     if obj.kind == "arbre":
         if w == 1 and h == 1:

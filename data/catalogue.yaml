@@ -54,3 +54,23 @@ objets:
      utilite: "relaxer dans l'eau chaude"}
   - {id: panneaux_solaires, label: des panneaux solaires, prix: 5000, taille: [2, 1], type: deco,
      lieu: [exterieur], effet: {hydro: 30}, utilite: "la facture d'Hydro baisse de 30 $ par semaine"}
+
+# Véhicules : garés automatiquement près de l'entrée ; chacun part avec le plus utile qui reste libre.
+#   places : passagers ; trajet : minutes gagnées au retour du travail (0 = pas pour le travail)
+#   epicerie : peut rapporter l'épicerie (epicerie_minutes : durée de l'aller-retour)
+#   plaisir : moral gagné en partant ; bois : bûches de plus par arbre ; materiaux : rabais au chantier
+#   age_min : âge pour le conduire ; terrain : seulement dans le scénario terrain
+vehicules:
+  - {id: velo, label: un vélo, prix: 250, taille: [1, 1], places: 1, trajet: 10, plaisir: 5, age_min: 12,
+     utilite: "gratuit, bon pour le moral, un peu plus vite que l'autobus"}
+  - {id: moto, label: une moto, prix: 4000, hebdo: 25, taille: [1, 2], places: 1, trajet: 35, plaisir: 10,
+     age_min: 18, utilite: "rapide et grisante, mais pas pour l'épicerie"}
+  - {id: compacte, label: une auto compacte, prix: 8000, hebdo: 55, taille: [2, 3], places: 4, trajet: 30,
+     epicerie: true, epicerie_minutes: 60, age_min: 18, utilite: "trajet et épicerie plus rapides"}
+  - {id: vus, label: un VUS familial, prix: 20000, hebdo: 90, taille: [2, 3], places: 7, trajet: 30,
+     epicerie: true, epicerie_minutes: 55, age_min: 18, utilite: "sept places pour une grosse famille"}
+  - {id: pickup, label: une camionnette, prix: 16000, hebdo: 85, taille: [2, 3], places: 2, trajet: 30,
+     epicerie: true, epicerie_minutes: 60, bois: 2, materiaux: 0.15, age_min: 18, terrain: true,
+     utilite: "transporte bois et matériaux : chantier 15 % moins cher, plus de bûches par arbre"}
+  - {id: vtt, label: un VTT, prix: 7000, hebdo: 20, taille: [1, 2], places: 1, plaisir: 8, bois: 1, age_min: 16,
+     terrain: true, utilite: "rapporte plus de bûches par arbre, et c'est le fun"}
