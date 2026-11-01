@@ -44,6 +44,7 @@ console et passe en mode mock.
 
 | Section | Clés principales |
 |---|---|
+| `display` | `pixel_scale` (agrandissement du pixel art : 2 = fenêtre de 1544×768, 1.5 pour un petit écran), `fps`, `hud_width` |
 | `sim` | `tick_minutes` (minutes simulées par tick), `base_ticks_per_second`, `speed_multipliers`, `start_day` (0 = lundi), `start_time`, `seed` |
 | `llm` | `provider` (`mock`, `claude`, `ollama`), `claude_model`, `claude_effort`, `max_calls_per_minute` (limite par minute réelle), `decisions_enabled`, `decision_cooldown_minutes`, `decision_max_wait_minutes`, `mock_invalid_rate` |
 | `dialogue` | `pair_cooldown_minutes` (cooldown social par paire), `max_participants`, `line_display_s` |
@@ -103,7 +104,7 @@ world/               grille, pièces, objets ; A*
 agents/              persona, besoins, actions, horaire, mémoire, état de l'agent
 llm/                 interface + factory, Claude, Ollama, mock, prompts, service (threads, retry, repli)
 sim/                 horloge, moteur, bus d'événements, journal JSONL, config
-ui/                  rendu de la maison, bulles et historique, HUD
+ui/                  rendu pixel art (sprites générés dans sprites.py), bulles et historique, HUD
 data/family.yaml     les personas
 ```
 

@@ -105,7 +105,7 @@ class DialogueBox:
         for conv in self.active:
             speaker_id, text = conv.lines[conv.index]
             agent = next((a for a in self.agents if a.id == speaker_id), None)
-            if agent is not None and not agent.is_away:
+            if agent is not None and agent.is_available:
                 self._draw_bubble(surface, agent, text)
         if self.show_history:
             self._draw_history(surface)
@@ -118,7 +118,7 @@ class DialogueBox:
         height = line_h * len(lines) + 10
         cx, cy = self.renderer.agent_screen_pos(agent)
         rect = pygame.Rect(0, 0, width, height)
-        rect.midbottom = (cx, cy - self.renderer.ts // 2 - 10)
+        rect.midbottom = (cx, cy - self.renderer.ts // 2 - 16)  # au-dessus de la tête du sprite
         map_rect = pygame.Rect((0, 0), self.renderer.size)
         rect.clamp_ip(map_rect)
         tail_x = max(rect.left + 10, min(cx, rect.right - 10))

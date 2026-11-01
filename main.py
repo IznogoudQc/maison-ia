@@ -65,7 +65,7 @@ def main() -> None:
 
     pygame.init()
     pygame.display.set_caption("Maison IA — famille Gagnon")
-    renderer = Renderer(house, config.display.tile_size)
+    renderer = Renderer(house, config.display.pixel_scale)
     map_w, map_h = renderer.size
     screen = pygame.display.set_mode((map_w + config.display.hud_width, map_h))
     hud = Hud(pygame.Rect(map_w, 0, config.display.hud_width, map_h))

@@ -10,7 +10,7 @@ sim:
   seed: 42
 
 display:
-  tile_size: 24
+  pixel_scale: 2              # agrandissement du pixel art (tuiles de 16 px) ; 1.5 pour un petit écran
   fps: 60
   hud_width: 360
 
