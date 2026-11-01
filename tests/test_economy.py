@@ -93,6 +93,7 @@ def test_paie_versee_au_retour_du_travail(engine):
 
 def test_factures_prelevees_le_vendredi(engine):
     eng, events = engine
+    eng.economy.household.credit_score = 300  # pas de crédit : aucune auto ne s'ajoute aux factures
     run_until(eng, 4 * DAY + parse_hhmm("10:00"))
     bills = [e for e in events if e.kind == "factures"]
     assert len(bills) == 1 and bills[0].data["amount"] == pytest.approx(-515.0)

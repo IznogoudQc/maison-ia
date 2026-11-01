@@ -75,6 +75,20 @@ class OwnedVehicle(BaseModel):
         return f"vehicule_{self.model}_{self.uid}"
 
 
+class Loan(BaseModel):
+    """Prêt en cours : remboursé chaque vendredi avec les factures."""
+    uid: int
+    purpose: str                   # vehicule, objet, chantier
+    label: str                     # « le VUS familial »
+    target: str = ""               # id de l'objet ou du véhicule financé (saisie possible)
+    principal: float
+    balance: float
+    rate: float                    # taux annuel
+    weeks_left: int
+    payment: float                 # paiement hebdomadaire
+    missed: int = 0                # paiements manqués consécutifs
+
+
 class LedgerEntry(BaseModel):
     minute: int
     label: str
@@ -99,6 +113,9 @@ class Household(BaseModel):
     last_harvest_day: int = -1
     last_item_day: int = -1          # un seul achat d'objet par jour (sauf un lit qui manque)
     vehicles: list[OwnedVehicle] = Field(default_factory=list)
+    loans: list[Loan] = Field(default_factory=list)
+    credit_score: int = 680          # dossier de crédit (300 à 900)
+    next_loan_uid: int = 1
     last_vehicle_day: int = -100
     ledger: list[LedgerEntry] = Field(default_factory=list)
 

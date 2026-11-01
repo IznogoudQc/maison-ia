@@ -76,6 +76,8 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("acheter_objet", "commande {target}", None, 10, {"fun": 8}, selectable=False),
     ActionDef("revendre", "revend {target}", None, 10, {"fun": -5}, selectable=False),
     ActionDef("acheter_vehicule", "achète {target}", None, 15, {"fun": 12}, selectable=False),
+    ActionDef("emprunter", "signe un prêt pour {target}", None, 30, {"fun": 4}, selectable=False),
+    ActionDef("rembourser", "rembourse le prêt de {target}", None, 10, {"fun": 10}, selectable=False),
     # Bébé : boire, changer de couche, bercer (les parents s'en occupent)
     ActionDef("soigner", "s'occupe de {target}", None, 20, {"social": 10, "fun": 4, "energy": -3},
               selectable=False),
@@ -124,7 +126,7 @@ class Option(BaseModel):
 
 
 # Cible par défaut quand elle n'est pas encore connue (plan du jour : « coupe un arbre »)
-DEFAULT_TARGETS = {"acheter_vehicule": "un véhicule", "acheter_objet": "un objet", "revendre": "un objet", "couper": "arbre", "construire": "la maison", "engager": "la maison", "soigner": "bébé"}
+DEFAULT_TARGETS = {"emprunter": "un achat", "rembourser": "un achat", "acheter_vehicule": "un véhicule", "acheter_objet": "un objet", "revendre": "un objet", "couper": "arbre", "construire": "la maison", "engager": "la maison", "soigner": "bébé"}
 
 
 def action_label(name: str, target_name: str | None = None) -> str:

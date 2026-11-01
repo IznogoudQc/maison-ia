@@ -238,17 +238,26 @@ class Architect:
         if not room.materials_paid:
             if not self.can_afford_materials(room):
                 return False
-            eco = self.engine.economy
-            cost = round(room.materials_cost * (1 - self.engine.garage.materials_discount()), -1)  # camionnette
-            eco.transaction(self.engine.clock.total_minutes, f"Matériaux : {room.name.lower()}", -cost)
-            room.materials_paid = True
-            room.status = "chantier"
-            self.engine.publish("chantier_debut", room=room.name,
-                                text=f"Chantier lancé : {room.name} ({room.materials_cost:.0f} $ de matériaux)")
-            for other in self.couple():
-                self.engine.remember(other, f"On a acheté les matériaux de la {room.name.lower()} "
-                                            f"({room.materials_cost:.0f} $). Le chantier commence !", 7)
+            self.pay_materials(room)
         return True
+
+    def materials_price(self, room: PlannedRoom) -> float:
+        return round(room.materials_cost * (1 - self.engine.garage.materials_discount()), -1)  # camionnette
+
+    def pay_materials(self, room: PlannedRoom) -> None:
+        """Achat des matériaux (comptant ou grâce à un prêt rénovation) : le chantier commence."""
+        if room.materials_paid:
+            return
+        eco = self.engine.economy
+        eco.transaction(self.engine.clock.total_minutes, f"Matériaux : {room.name.lower()}",
+                        -self.materials_price(room))
+        room.materials_paid = True
+        room.status = "chantier"
+        self.engine.publish("chantier_debut", room=room.name,
+                            text=f"Chantier lancé : {room.name} ({room.materials_cost:.0f} $ de matériaux)")
+        for other in self.couple():
+            self.engine.remember(other, f"On a acheté les matériaux de la {room.name.lower()} "
+                                        f"({room.materials_cost:.0f} $). Le chantier commence !", 7)
 
     def work(self, agent: Agent, room_id: str | None, hours: float) -> None:
         """Fin d'une séance : du bois posé et des heures de travail en plus ; pièce finie, on la bâtit."""

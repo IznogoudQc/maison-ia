@@ -14,7 +14,7 @@ LOGGED_KINDS = ("dialogue", "decision", "depart", "retour", "resume", "dialogue_
                 "paie", "factures", "epicerie", "frigo_vide", "deces", "hopital", "fin", "evenement",
                 "plan", "reflexion", "bilan", "promesse", "promesse_tenue", "promesse_brisee", "coupe",
                 "plan_maison", "emplacement_pret", "piece_batie", "chantier_debut", "entrepreneur",
-                "projet_bebe", "grossesse", "naissance", "anniversaire", "agrandissement", "achat_objet")
+                "projet_bebe", "grossesse", "naissance", "anniversaire", "agrandissement", "achat_objet", "pret", "pret_retard")
 
 
 class JsonlJournal:

@@ -44,6 +44,7 @@ from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
 from sim.architect import Architect
 from sim.family import FamilyLife
+from sim.credit import Credit
 from sim.garage import Garage
 from sim.inventory import Inventory
 from sim.mind import Mind
@@ -134,6 +135,7 @@ class Engine:
         self.family = FamilyLife(self)
         self.inventory = Inventory(self)
         self.garage = Garage(self)
+        self.credit = Credit(self)
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
 
@@ -283,6 +285,13 @@ class Engine:
             if model is None:
                 return None
             target_name = model.label
+        elif name == "emprunter":
+            target_name = (target or "").split("|")[-1].replace("_", " ")
+        elif name == "rembourser":
+            loan = next((l for l in self.economy.household.loans if str(l.uid) == target), None)
+            if loan is None:
+                return None
+            target_name = loan.label
         duration = definition.duration
         if name == "couper" and self.economy.owns("scie"):
             duration = round(duration * SAW_FACTOR)
@@ -385,6 +394,7 @@ class Engine:
         if not agent.persona.is_adult:
             return options
         options += self._purchase_options(agent) + self.inventory.options_for(agent) + self.garage.options_for(agent)
+        options += self.credit.options_for(agent)
         return options + self._money_options(agent)
 
     def _yard_options(self, agent: Agent) -> list[Option]:
@@ -728,7 +738,7 @@ class Engine:
                 if project:
                     lines.append(project)
         lines += self.family.context_lines()
-        for line in (self.inventory.context_line(), self.garage.context_line()):
+        for line in (self.inventory.context_line(), self.garage.context_line(), self.credit.context_line()):
             if line:
                 lines.append(line)
         departed = [a for a in self.agents if a.dead]
@@ -759,6 +769,7 @@ class Engine:
 
     def _charge_bills(self) -> None:
         total = self.economy.charge_bills(self.clock)
+        self.credit.charge()  # les paiements de prêts passent le même jour
         money = self.economy.household.money
         self.publish("factures", amount=-total, money=money, detail=self.economy.weekly_bill_items())
         for agent in self.agents:
@@ -975,6 +986,10 @@ class Engine:
             self.architect.hire(agent, action.target)
         elif action.name == "acheter_vehicule":
             self.garage.buy(agent, action.target)
+        elif action.name == "emprunter":
+            self.credit.borrow(agent, action.target)
+        elif action.name == "rembourser":
+            self.credit.repay(agent, action.target)
         elif action.name == "acheter_objet":
             self.inventory.buy(agent, action.target)
         elif action.name == "revendre":

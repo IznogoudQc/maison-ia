@@ -157,6 +157,18 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
   au plus un achat par semaine et trois véhicules. L'ancienne « auto » d'une sauvegarde devient une
   auto compacte.
 
+- **Crédit** : quand un achat utile est trop cher comptant, le moteur propose de le financer et
+  l'IA décide si la famille s'endette. Finançable : les matériaux d'une pièce (prêt rénovation,
+  10 % comptant, 52 semaines, ~8 %), une première auto, un VUS quand la famille ne rentre plus dans
+  l'auto, la camionnette pendant un chantier (15 % comptant, 104 semaines, ~6 %), et les objets qui
+  font économiser comme les panneaux solaires (20 %, 26 semaines, ~19 %). Le prêteur refuse si les
+  paiements dépassent 35 % du revenu de la semaine ou si le dossier de crédit (300 à 900) est trop
+  faible ; le taux monte quand le dossier baisse. Les paiements passent le vendredi avec les
+  factures (le dossier monte) ; un paiement manqué coûte 25 $ de frais, fait chuter le dossier et
+  stresse les adultes ; au troisième retard sur un véhicule, la banque le reprend. Quand il y a de
+  l'argent en trop, le couple peut rembourser un prêt d'un coup. Les prompts connaissent les prêts et
+  le dossier ; le panneau les résume.
+
 Les prompts du LLM reçoivent l'état du ménage (argent, garde-manger, achats, chômage, santé,
 deuils, dernière nouvelle) : les dialogues en parlent naturellement.
 

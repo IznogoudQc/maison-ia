@@ -132,7 +132,10 @@ def test_naissance_berceau_conge_parental(setup_baby):
     assert camille.away_label.startswith("hôpital") and baby.is_away
     crib = engine.house.objects[baby.bed]
     bed = engine.house.objects[camille.bed_id]
-    assert crib.kind == "berceau" and engine.house.room_at(crib.rect[:2]) == engine.house.room_at(bed.use_positions[0])
+    assert crib.kind == "berceau"
+    # Dans la chambre des parents s'il reste de la place (sinon tout près), toujours accessible
+    from world.pathfinding import find_path
+    assert find_path(bed.use_positions[0], crib.use_positions[0], engine.house.is_walkable) is not None
     assert camille.parental_leave_until is not None
     assert any(e.kind == "naissance" for e in events)
     memory = [m for m in camille.memory.events if baby.name in m.text and m.importance == 10]

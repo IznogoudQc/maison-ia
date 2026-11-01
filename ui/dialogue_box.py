@@ -17,7 +17,7 @@ MAX_ACTIVE_CONVERSATIONS = 3
 NEWS_KINDS = ("evenement", "deces", "hopital", "factures", "frigo_vide", "achat",
               "promesse", "promesse_tenue", "promesse_brisee", "plan_maison", "emplacement_pret", "piece_batie",
               "chantier_debut", "entrepreneur", "projet_bebe", "grossesse", "naissance", "anniversaire",
-              "agrandissement", "achat_objet")
+              "agrandissement", "achat_objet", "pret", "pret_retard")
 MIND_KINDS = ("plan", "reflexion")
 THOUGHT = (180, 170, 230)
 TOAST_SECONDS = 6.0
@@ -101,6 +101,10 @@ class DialogueBox:
         elif event.kind in ("achat", "plan_maison", "piece_batie", "chantier_debut", "entrepreneur",
                             "grossesse", "naissance", "anniversaire", "agrandissement", "achat_objet"):
             text, color = data["text"], GOOD
+        elif event.kind == "pret":
+            text, color = data["text"], GOOD if data["ok"] else BAD
+        elif event.kind == "pret_retard":
+            text, color = data["text"], BAD
         elif event.kind == "projet_bebe":
             text, color = data["text"], GOOD if data["yes"] else NEUTRAL
         elif event.kind == "emplacement_pret":

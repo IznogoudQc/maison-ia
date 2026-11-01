@@ -111,6 +111,8 @@ REASONS: dict[str, list[str]] = {
     "construire": ["Encore un mur et on y est.", "J'ai hâte de dormir au chaud."],
     "acheter_objet": ["On le mérite bien.", "Ça va nous simplifier la vie."],
     "revendre": ["Faut ce qu'il faut.", "On n'en avait pas tant besoin."],
+    "emprunter": ["On va le payer petit à petit.", "Sans prêt, on n'y arrivera jamais."],
+    "rembourser": ["Une dette de moins!", "Je dormirai mieux sans ce prêt-là."],
     "console": ["Une petite partie!", "Je vais battre mon record."],
     "jardiner": ["Les tomates poussent bien.", "Rien de mieux que nos légumes."],
     "engager": ["On n'y arrivera jamais tout seuls.", "Ça va coûter cher, mais on va gagner des mois."],
