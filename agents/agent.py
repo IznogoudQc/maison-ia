@@ -42,6 +42,8 @@ class Agent(BaseModel):
     away_until: int | None = None    # minute absolue de retour si absent
     away_label: str | None = None
     fired: dict[str, int] = Field(default_factory=dict)  # tâche d'horaire -> dernier jour exécuté
+    last_decision_minute: int = -10**9   # dernière décision demandée au LLM
+    thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property
     def id(self) -> str:
@@ -73,7 +75,7 @@ class Agent(BaseModel):
         if self.is_away:
             return away_phrase(self.away_label or "travail")
         if self.action is None:
-            return "réfléchit"
+            return "réfléchit…" if self.thinking else "hésite"
         if not self.action.started and self.action.use_pos is not None:
             return f"se dirige pour : {self.action.label}"
         return self.action.label

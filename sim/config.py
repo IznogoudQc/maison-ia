@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -24,9 +25,27 @@ class DisplayConfig(BaseModel):
     hud_width: int = 360
 
 
+class LLMConfig(BaseModel):
+    provider: Literal["mock", "claude", "ollama"] = "mock"
+    claude_model: str = "claude-haiku-5-5"
+    claude_effort: Literal["low", "medium", "high"] = "low"
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.1:8b"
+    timeout_s: float = 30.0
+    max_tokens: int = 1500
+    max_calls_per_minute: int = 12      # minute réelle
+    max_workers: int = 3
+    decisions_enabled: bool = True
+    decision_cooldown_minutes: int = 60   # minutes simulées entre deux décisions LLM d'un agent
+    decision_max_wait_minutes: int = 20   # au-delà, choix déterministe (utile aux vitesses élevées)
+    mock_latency_s: tuple[float, float] = (0.3, 1.2)
+    mock_invalid_rate: float = 0.05       # part de réponses non JSON pour exercer le repli
+
+
 class AppConfig(BaseModel):
     sim: SimConfig = Field(default_factory=SimConfig)
     display: DisplayConfig = Field(default_factory=DisplayConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"

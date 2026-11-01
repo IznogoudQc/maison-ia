@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import random
+from concurrent.futures import Future
+from dataclasses import dataclass
 
 from agents.actions import (
     ACTIONS,
@@ -16,6 +18,8 @@ from agents.actions import (
 from agents.agent import ActiveAction, Agent
 from agents.needs import Needs
 from agents.scheduler import Scheduler
+from llm.prompts import ActionDecision, build_decision_request, validate_decision
+from llm.service import LLMService, StructuredResult
 from sim.clock import SimClock
 from sim.config import AppConfig
 from sim.events import Event, EventBus
@@ -25,16 +29,26 @@ from world.pathfinding import NEIGHBORS, manhattan
 Pos = tuple[int, int]
 
 
+@dataclass
+class PendingDecision:
+    future: Future[StructuredResult[ActionDecision]]
+    options: list[Option]
+    fallback: ActionDecision
+    requested_minute: int
+
+
 class Engine:
     def __init__(self, config: AppConfig, house: House, agents: list[Agent], clock: SimClock,
-                 rng: random.Random, bus: EventBus | None = None) -> None:
+                 rng: random.Random, bus: EventBus | None = None, llm: LLMService | None = None) -> None:
         self.config = config
         self.house = house
         self.agents = agents
         self.clock = clock
         self.rng = rng
         self.bus = bus or EventBus()
+        self.llm = llm
         self.scheduler = Scheduler()
+        self.pending_decisions: dict[str, PendingDecision] = {}
 
     # ------------------------------------------------------------------ utilitaires
 
@@ -162,11 +176,85 @@ class Engine:
         options = self.options_for(agent)
         if not options:
             return
-        # Option retenue d'abord, puis les autres en repli si elle n'est plus réalisable
-        for option in [self.pick_deterministic(agent, options), *options]:
-            action = self.make_action(agent, option.action, option.target)
+        pick = self.pick_deterministic(agent, options)
+        if self._should_ask_llm(agent, options) and self._request_decision(agent, options, pick):
+            return
+        self._start_option(agent, pick.action, pick.target, "", options)
+
+    def _start_option(self, agent: Agent, name: str, target: str | None, reason: str,
+                      options: list[Option]) -> None:
+        """Démarre l'option voulue, ou à défaut la première autre option réalisable."""
+        candidates = [(name, target, reason)] + [(o.action, o.target, "") for o in options]
+        for cand_name, cand_target, cand_reason in candidates:
+            action = self.make_action(agent, cand_name, cand_target, reason=cand_reason)
             if action and self.start_action(agent, action):
                 return
+
+    # ------------------------------------------------------------------ décisions LLM
+
+    def memories_for(self, agent: Agent, count: int = 5) -> tuple[list[str], str | None]:
+        """Souvenirs récents + dernier résumé (mémoire branchée à l'étape 5)."""
+        return [], None
+
+    def _should_ask_llm(self, agent: Agent, options: list[Option]) -> bool:
+        cfg = self.config.llm
+        return (self.llm is not None and cfg.decisions_enabled and len(options) >= 2
+                and agent.needs.lowest()[1] >= URGENT_THRESHOLD
+                and self.clock.total_minutes - agent.last_decision_minute >= cfg.decision_cooldown_minutes)
+
+    def _request_decision(self, agent: Agent, options: list[Option], pick: Option) -> bool:
+        assert self.llm is not None
+        top = options[:6]
+        memories, summary = self.memories_for(agent)
+        request = build_decision_request(agent, self.room_of(agent), self.clock.label(), top,
+                                         memories, summary, self.config.llm.max_tokens)
+        names = {a.id: a.name for a in self.agents}
+        fallback = ActionDecision(action=pick.action, target=pick.target, reason="")
+        future = self.llm.try_submit(request, ActionDecision, fallback,
+                                     lambda decision: validate_decision(decision, top, names))
+        if future is None:  # limite d'appels par minute atteinte
+            return False
+        self.pending_decisions[agent.id] = PendingDecision(future, options, fallback, self.clock.total_minutes)
+        agent.thinking = True
+        agent.last_decision_minute = self.clock.total_minutes
+        return True
+
+    def _cancel_decision(self, agent: Agent) -> None:
+        self.pending_decisions.pop(agent.id, None)
+        agent.thinking = False
+
+    def poll(self) -> None:
+        """Appelé à chaque image (fil principal) : applique les réponses LLM arrivées."""
+        for agent_id, pending in list(self.pending_decisions.items()):
+            if not pending.future.done():
+                continue
+            del self.pending_decisions[agent_id]
+            agent = self.agent_by_id(agent_id)
+            if agent is None:
+                continue
+            agent.thinking = False
+            try:
+                result = pending.future.result()
+            except Exception as exc:  # erreur inattendue dans le thread : on se rabat sur le repli
+                result = StructuredResult(value=pending.fallback, ok=False, attempts=0, error=str(exc))
+            decision = result.value or pending.fallback
+            self.publish("decision", agent=agent.id, name=agent.name, action=decision.action,
+                         target=decision.target, reason=decision.reason, ok=result.ok,
+                         attempts=result.attempts, error=result.error)
+            if agent.action is None and not agent.is_away:
+                self._start_option(agent, decision.action, decision.target, decision.reason, pending.options)
+
+    def _check_decision_timeout(self, agent: Agent) -> None:
+        pending = self.pending_decisions.get(agent.id)
+        if pending is None:
+            agent.thinking = False
+            return
+        if self.clock.total_minutes - pending.requested_minute > self.config.llm.decision_max_wait_minutes:
+            self._cancel_decision(agent)
+            self.publish("decision", agent=agent.id, name=agent.name, action=pending.fallback.action,
+                         target=pending.fallback.target, reason="", ok=False, attempts=0,
+                         error="attente trop longue")
+            self._start_option(agent, pending.fallback.action, pending.fallback.target, "", pending.options)
 
     # ------------------------------------------------------------------ boucle
 
@@ -194,9 +282,12 @@ class Engine:
             if action is not None:
                 if scheduled.target:
                     action.target_name = away_phrase(scheduled.target)
-                self.start_action(agent, action)
+                if self.start_action(agent, action):
+                    self._cancel_decision(agent)
 
-        if agent.action is None:
+        if agent.thinking:
+            self._check_decision_timeout(agent)
+        if agent.action is None and not agent.thinking:
             self._choose(agent)
         self._progress(agent, now)
 

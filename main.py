@@ -5,9 +5,13 @@ from __future__ import annotations
 import random
 
 import pygame
+from dotenv import load_dotenv
 
 from agents.agent import Agent
 from agents.persona import load_family
+from llm.mock_provider import MockProvider
+from llm.provider import LLMError, create_provider
+from llm.service import LLMService
 from sim.clock import SimClock
 from sim.config import load_config
 from sim.engine import Engine
@@ -22,15 +26,25 @@ MAX_TICKS_PER_FRAME = 60
 
 
 def main() -> None:
+    load_dotenv()
     config = load_config("config.yaml")
     rng = random.Random(config.sim.seed)
+
+    try:
+        provider = create_provider(config.llm)
+        llm_label = provider.label()
+    except LLMError as exc:
+        print(f"[LLM] {exc} -> repli sur le mode mock")
+        provider = MockProvider(config.llm.mock_latency_s, config.llm.mock_invalid_rate)
+        llm_label = "mock (repli : config LLM invalide)"
+    llm = LLMService(provider, config.llm.max_calls_per_minute, config.llm.max_workers)
 
     house = House()
     personas = load_family(config.family_file)
     agents = [Agent(persona=p, pos=house.random_tile(rng)) for p in personas]
     clock = SimClock(config.sim.start_day, config.sim.start_time, config.sim.tick_minutes)
     bus = EventBus()
-    engine = Engine(config, house, agents, clock, rng, bus)
+    engine = Engine(config, house, agents, clock, rng, bus, llm)
     engine.initialize()
 
     pygame.init()
@@ -73,14 +87,16 @@ def main() -> None:
                 tick_accumulator -= 1.0
                 ticks += 1
             tick_accumulator = min(tick_accumulator, 1.0)  # évite la spirale de rattrapage
+        engine.poll()  # réponses LLM arrivées (non bloquant)
 
         renderer.update_display(agents, dt)
         screen.fill(theme.BACKGROUND)
         renderer.draw(screen, agents, selected_id, clock.minute_of_day)
         selected = engine.agent_by_id(selected_id) if selected_id else None
-        hud.draw(screen, clock, speed, paused, agents, selected)
+        hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label)
         pygame.display.flip()
 
+    llm.shutdown()
     pygame.quit()
 
 

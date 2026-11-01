@@ -14,6 +14,22 @@ display:
   fps: 60
   hud_width: 360
 
+llm:
+  provider: mock              # mock | claude | ollama
+  claude_model: claude-haiku-5-5
+  claude_effort: low          # low | medium | high
+  ollama_url: http://localhost:11434
+  ollama_model: llama3.1:8b
+  timeout_s: 30
+  max_tokens: 1500
+  max_calls_per_minute: 12    # limite d'appels par minute réelle
+  max_workers: 3
+  decisions_enabled: true
+  decision_cooldown_minutes: 60
+  decision_max_wait_minutes: 20
+  mock_latency_s: [0.3, 1.2]
+  mock_invalid_rate: 0.05
+
 family_file: data/family.yaml
 save_file: save.json
 log_dir: logs

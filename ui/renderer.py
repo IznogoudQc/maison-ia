@@ -95,6 +95,18 @@ class Renderer:
                 zzz = theme.font(12, bold=True).render("z z", True, (240, 240, 255))
                 surface.blit(zzz, (cx + radius - 2, cy - radius - 10))
         self._draw_night(surface, minute_of_day)
+        for agent in agents:
+            if agent.thinking and not agent.is_away:
+                self._draw_thinking(surface, agent, radius)
+
+    def _draw_thinking(self, surface: pygame.Surface, agent: Agent, radius: int) -> None:
+        cx, cy = self.agent_screen_pos(agent)
+        rect = pygame.Rect(0, 0, 30, 18)
+        rect.midbottom = (cx, cy - radius - 4)
+        pygame.draw.rect(surface, (250, 250, 252), rect, border_radius=8)
+        pygame.draw.rect(surface, agent.persona.color, rect, 2, border_radius=8)
+        dots = theme.font(14, bold=True).render("…", True, theme.TEXT_DARK)
+        surface.blit(dots, dots.get_rect(center=(rect.centerx, rect.centery - 2)))
 
     def _draw_night(self, surface: pygame.Surface, minute_of_day: int) -> None:
         # Assombrissement progressif entre 19 h et 22 h, éclaircissement entre 5 h et 7 h
