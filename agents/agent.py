@@ -11,6 +11,7 @@ from agents.memory import Memory
 from agents.needs import Needs
 from agents.persona import Persona
 from agents.plan import DayPlan, Goal
+from agents.social import Relation
 from world.pathfinding import find_path
 
 Pos = tuple[int, int]
@@ -59,6 +60,7 @@ class Agent(BaseModel):
     plan_stale: str | None = None        # raison de refaire le plan (événement imprévu)
     goal: Goal | None = None             # objectif tiré de la réflexion du soir
     reflected_day: int = -1              # dernier jour réfléchi (au coucher)
+    relations: dict[str, Relation] = Field(default_factory=dict)  # id d'un autre agent -> ressenti
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property
@@ -68,6 +70,12 @@ class Agent(BaseModel):
     @property
     def name(self) -> str:
         return self.persona.name
+
+    def relation(self, other_id: str) -> Relation:
+        """Ressenti envers un autre membre (créé à la valeur de base au premier besoin)."""
+        if other_id not in self.relations:
+            self.relations[other_id] = Relation()
+        return self.relations[other_id]
 
     @property
     def is_away(self) -> bool:

@@ -92,6 +92,7 @@ def main() -> None:
     hud = Hud(pygame.Rect(map_w, 0, config.display.hud_width, map_h))
     dialogue_box = DialogueBox(renderer, agents, config.dialogue.line_display_s, config.dialogue.history_size)
     bus.subscribe("dialogue", dialogue_box.on_dialogue)
+    bus.subscribe("replique", dialogue_box.on_line)
     for kind in NEWS_KINDS:
         bus.subscribe(kind, dialogue_box.on_news)
     for kind in MIND_KINDS:
@@ -145,8 +146,10 @@ def main() -> None:
         renderer.draw(screen, agents, selected_id, clock.minute_of_day)
         dialogue_box.draw(screen)
         selected = engine.agent_by_id(selected_id) if selected_id else None
+        promises = [f"{p.text} ({engine.social.when_label(p.minute)})"
+                    for p in engine.social.promises if p.status == "pending"]
         hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label,
-                 engine.economy, engine.alive_count())
+                 engine.economy, engine.alive_count(), promises)
         if engine.game_over:
             draw_game_over(screen, pygame.Rect(0, 0, map_w, map_h), clock)
         pygame.display.flip()

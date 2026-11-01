@@ -169,7 +169,8 @@ class Mind:
         memories, summary = engine.memories_for(agent, [context, replan_reason or ""])
         request = build_plan_request(agent, clock.total_minutes, f"{clock.day_name} (jour {clock.day + 1})",
                                      self.fixed_schedule(agent, clock.day), slots, catalog, memories,
-                                     summary, engine.config.llm.max_tokens, context, replan_reason)
+                                     summary, engine.config.llm.max_tokens, context, replan_reason,
+                                     engine.agents)
         names = {a.id: a.name for a in engine.agents}
         future = engine.llm.try_submit(request, PlanResponse, None,
                                        lambda r: validate_plan(r, catalog, slots, names))
@@ -280,7 +281,8 @@ class Mind:
         catalog = self.catalog(agent)
         texts = [e.formatted() for e in events]
         request = build_reflection_request(agent, engine.clock.total_minutes, texts, catalog,
-                                           engine.config.llm.max_tokens, engine.family_context([agent]))
+                                           engine.config.llm.max_tokens, engine.family_context([agent]),
+                                           engine.agents)
         names = {a.id: a.name for a in engine.agents}
         future = engine.llm.try_submit(request, Reflection, None,
                                        lambda r: validate_reflection(r, len(events), catalog, names))

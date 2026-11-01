@@ -125,12 +125,26 @@ def mind_block(agent: Agent, now: int, with_plan: bool = True, beliefs: int = 3)
     return "\n".join(lines) if lines else "Rien de particulier en tête."
 
 
+def relations_block(agent: Agent, others: list[Agent], with_profile: bool = False) -> str:
+    """Ce que l'agent ressent envers chacun en ce moment (et, au besoin, la relation de fond)."""
+    lines = []
+    for other in others:
+        if other.id == agent.id or other.dead:
+            continue
+        line = f"- {other.name} : {agent.relation(other.id).describe()}"
+        if with_profile and other.id in agent.persona.relations:
+            line += f". De fond : {agent.persona.relations[other.id]}"
+        lines.append(line)
+    return "\n".join(lines) or "- (personne)"
+
+
 # ---------------------------------------------------------------- requêtes
 
 
 def build_decision_request(agent: Agent, room: str, time_label: str, options: list[Option],
                            memories: list[str], summary: str | None, max_tokens: int,
-                           context: str = "", extra_meta: dict | None = None, now: int = 0) -> LLMRequest:
+                           context: str = "", extra_meta: dict | None = None, now: int = 0,
+                           family: list[Agent] | None = None) -> LLMRequest:
     system = (
         "Tu incarnes un membre d'une famille québécoise dans une simulation de vie quotidienne. "
         "Tu choisis sa prochaine activité parmi une liste d'options, en restant fidèle à sa personnalité, "
@@ -146,7 +160,8 @@ def build_decision_request(agent: Agent, room: str, time_label: str, options: li
         f"Humeur : {agent.mood}.\nBesoins : {agent.needs.describe()}.\n\n"
         + (f"FAMILLE\n{context}\n\n" if context else "")
         + f"DANS MA TÊTE\n{mind_block(agent, now)}\n\n"
-        f"MÉMOIRE\n{memory_block(memories, summary)}\n\n"
+        + (f"MES RELATIONS EN CE MOMENT\n{relations_block(agent, family)}\n\n" if family else "")
+        + f"MÉMOIRE\n{memory_block(memories, summary)}\n\n"
         f"OPTIONS POSSIBLES\n{option_lines}\n\n"
         "Choisis UNE option. Format exact :\n"
         '{"action": "<action>", "target": "<target ou null>", '
@@ -174,17 +189,13 @@ def build_dialogue_request(participants: list[Agent], room: str, time_label: str
         "Pas de narration, seulement des répliques. " + JSON_RULE
     )
     blocks = []
-    ids = {a.id for a in participants}
     for agent in participants:
-        relations = "\n".join(f"  - envers {other.name} : {agent.persona.relations[other.id]}"
-                              for other in participants
-                              if other.id != agent.id and other.id in agent.persona.relations and other.id in ids)
         action = agent.action.label if agent.action else "rien de spécial"
         blocks.append(
             f"### {agent.name}\n{persona_block(agent)}\n"
             f"Fait présentement : {action}. Humeur : {agent.mood}.\n"
             f"Besoins : {agent.needs.describe()}.\n"
-            f"Relations :\n{relations or '  - (aucune précisée)'}\n"
+            f"Relations :\n{relations_block(agent, participants, with_profile=True)}\n"
             f"En tête :\n{mind_block(agent, now, with_plan=False, beliefs=2)}\n"
             f"{memory_block(memories.get(agent.id, []), summaries.get(agent.id))}"
         )

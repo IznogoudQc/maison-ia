@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 from agents.plan import PlanItem
-from llm.prompts import JSON_RULE, memory_block, mind_block, persona_block
+from llm.prompts import JSON_RULE, memory_block, mind_block, persona_block, relations_block
 from llm.provider import LLMRequest
 from sim.clock import format_hhmm, parse_hhmm
 
@@ -131,13 +131,13 @@ def _slots_text(slots: list[tuple[int, int]]) -> str:
 def build_plan_request(agent: Agent, now: int, day_label: str, fixed: list[str],
                        slots: list[tuple[int, int]], catalog: list[Option], memories: list[str],
                        summary: str | None, max_tokens: int, context: str = "",
-                       replan_reason: str | None = None) -> LLMRequest:
+                       replan_reason: str | None = None, family: list[Agent] | None = None) -> LLMRequest:
     system = (
         "Tu incarnes un membre d'une famille québécoise dans une simulation de vie quotidienne. "
         "Tu planifies sa journée de façon réaliste, selon sa personnalité, ses préoccupations "
         "et ce qui se passe dans la famille. " + JSON_RULE
     )
-    relations = "\n".join(f"- {text}" for text in agent.persona.relations.values())
+    relations = relations_block(agent, family or [], with_profile=True)
     task = (
         f"IMPRÉVU : {replan_reason}\nRefais ton plan pour le reste de la journée en tenant compte de ça."
         if replan_reason else "C'est le matin : planifie ta journée."
@@ -169,7 +169,7 @@ def build_plan_request(agent: Agent, now: int, day_label: str, fixed: list[str],
 
 
 def build_reflection_request(agent: Agent, now: int, events: list[str], catalog: list[Option],
-                             max_tokens: int, context: str = "") -> LLMRequest:
+                             max_tokens: int, context: str = "", family: list[Agent] | None = None) -> LLMRequest:
     system = (
         "Tu incarnes un membre d'une famille québécoise dans une simulation. C'est le soir : "
         "il repense à sa journée et en tire des constats personnels, honnêtes et concrets "
@@ -180,7 +180,8 @@ def build_reflection_request(agent: Agent, now: int, events: list[str], catalog:
         f"PERSONNAGE\n{persona_block(agent)}\n\n"
         + (f"FAMILLE\n{context}\n\n" if context else "")
         + f"DANS MA TÊTE\n{mind_block(agent, now, with_plan=True)}\n\n"
-        f"MA JOURNÉE\n{numbered}\n\n"
+        + (f"MES RELATIONS\n{relations_block(agent, family)}\n\n" if family else "")
+        + f"MA JOURNÉE\n{numbered}\n\n"
         f"OBJECTIFS POSSIBLES POUR DEMAIN\n{_catalog_lines(catalog)}\n\n"
         f"Tire 1 ou {MAX_INSIGHTS} constats à la première personne, en français québécois "
         "(25 mots max chacun), notés de 1 (banal) à 10 (bouleversant). Indique les numéros des "

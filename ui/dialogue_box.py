@@ -14,7 +14,8 @@ from ui.renderer import Renderer
 
 BUBBLE_MAX_WIDTH = 230
 MAX_ACTIVE_CONVERSATIONS = 3
-NEWS_KINDS = ("evenement", "deces", "hopital", "factures", "frigo_vide", "achat")
+NEWS_KINDS = ("evenement", "deces", "hopital", "factures", "frigo_vide", "achat",
+              "promesse", "promesse_tenue", "promesse_brisee")
 MIND_KINDS = ("plan", "reflexion")
 THOUGHT = (180, 170, 230)
 TOAST_SECONDS = 6.0
@@ -52,6 +53,8 @@ class Conversation:
     lines: list[tuple[str, str]]          # (id d'agent, texte)
     index: int = 0
     elapsed: float = 0.0
+    conv_id: int | None = None            # conversation tour par tour (répliques ajoutées au fil de l'eau)
+    elapsed_done: bool = False            # dernière réplique déjà montrée une fois
 
 
 @dataclass
@@ -95,6 +98,13 @@ class DialogueBox:
             text, color = "Le frigo est vide !", BAD
         elif event.kind == "achat":
             text, color = data["text"], GOOD
+        elif event.kind == "promesse":
+            text, color = f"Promesse : {data['text']} ({data['when']})", NEUTRAL
+        elif event.kind == "promesse_tenue":
+            text, color = f"Promesse tenue : {data['text']}", GOOD
+        elif event.kind == "promesse_brisee":
+            who = ", ".join(data["missing"]) or "personne"
+            text, color = f"Promesse brisée ({who}) : {data['text']}", BAD
         else:
             return
         self.toasts.append([text, color, TOAST_SECONDS])
@@ -122,7 +132,26 @@ class DialogueBox:
         while len(self.history) > self.history_size:
             self.history.popleft()
 
+    def on_line(self, event: Event) -> None:
+        """Mode tour par tour : chaque réplique s'ajoute à la file de sa conversation dès qu'elle arrive."""
+        data = event.data
+        conv = next((c for c in self.active if c.conv_id == data["conv"]), None)
+        if conv is None:
+            if len(self.active) >= MAX_ACTIVE_CONVERSATIONS:
+                self.active.pop(0)
+            conv = Conversation([], conv_id=data["conv"])
+            self.active.append(conv)
+        conv.lines.append((data["agent"], data["text"]))
+        agent = next((a for a in self.agents if a.id == data["agent"]), None)
+        color = tuple(min(255, c + 70) for c in agent.persona.color) if agent else theme.TEXT
+        self.history.append(HistoryEntry(data.get("time", ""), data.get("room", ""), data["speaker"],
+                                         data["text"], color))  # type: ignore[arg-type]
+        while len(self.history) > self.history_size:
+            self.history.popleft()
+
     def on_dialogue(self, event: Event) -> None:
+        if event.data.get("live"):
+            return  # répliques déjà affichées une à une par on_line
         by_name = {a.name: a for a in self.agents}
         lines = [(by_name[l["speaker"]].id, l["text"]) for l in event.data["lines"] if l["speaker"] in by_name]
         if not lines:
@@ -147,9 +176,13 @@ class DialogueBox:
             conv.elapsed += dt
             if conv.elapsed >= self.line_display_s:
                 conv.elapsed = 0.0
-                conv.index += 1
-                if conv.index >= len(conv.lines):
+                if conv.index + 1 < len(conv.lines):
+                    conv.index += 1
+                    conv.elapsed_done = False
+                elif conv.conv_id is None or conv.elapsed_done:
                     self.active.remove(conv)
+                else:
+                    conv.elapsed_done = True  # dernière réplique affichée : on attend un peu la suivante
 
     def toggle_history(self) -> None:
         self.show_history = not self.show_history

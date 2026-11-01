@@ -74,6 +74,29 @@ deuils, dernière nouvelle) : les dialogues en parlent naturellement.
 Le panneau d'un personnage affiche son intention, son plan (vert = fait, rouge = manqué), son
 objectif et son dernier constat ; les plans et réflexions apparaissent aussi dans l'historique (H).
 
+## Conversations et relations
+
+- **Tour par tour** (`dialogue.mode: tour_par_tour`, par défaut) : chaque réplique est un appel LLM
+  séparé, écrit avec la mémoire, les constats et les relations de la personne qui parle seulement.
+  Un personnage ne sait donc pas ce que l'autre a vécu : il peut mal comprendre, éviter un sujet ou
+  cacher quelque chose. Chaque réplique comporte aussi une pensée non dite (gardée dans sa mémoire)
+  et la variation de ce qu'il ressent envers la personne à qui il parle. Les bulles s'affichent au
+  fur et à mesure. `mode: scene` revient à un seul appel pour toute la conversation (moins cher).
+- **Bilan** : après chaque conversation, un appel relève son importance (qui fixe le poids du
+  souvenir), un résumé et les promesses faites.
+- **Relations** : pour chaque paire et dans chaque sens, une affection et une tension (0 à 100),
+  avec la dernière impression marquante. Elles teintent tous les prompts, rendent l'envie d'aller
+  jaser plus ou moins forte et espacent les conversations d'une paire en chicane. Avec le temps,
+  la tension retombe et l'affection revient vers la normale.
+- **Promesses** : « on joue aux Lego demain après souper » devient un rendez-vous, accepté
+  seulement s'il est réaliste (activité connue, personnes libres à cette heure, piscine achetée...).
+  À l'heure dite, les personnes concernées y vont d'elles-mêmes (l'horaire et les urgences passent
+  avant) ; si l'activité est réservée à l'autre, on va la faire à côté en jasant. Promesse tenue :
+  affection en hausse. Promesse brisée : celui qui attendait s'en souvient et la tension monte.
+
+Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, la limite
+`llm.max_calls_per_minute` ralentit les conversations au lieu de dépenser plus.
+
 ## Contrôles
 
 | Touche | Effet |
@@ -91,7 +114,7 @@ objectif et son dernier constat ; les plans et réflexions apparaissent aussi da
 | `display` | `pixel_scale` (`auto` = le plus grand agrandissement qui tient dans l'écran, ou 1, 1.5, 2, 3), `fps`, `hud_width` |
 | `sim` | `tick_minutes` (minutes simulées par tick), `base_ticks_per_second`, `speed_multipliers`, `start_day` (0 = lundi), `start_time`, `seed` |
 | `llm` | `provider` (`mock`, `claude`, `ollama`), `claude_model`, `claude_effort`, `max_calls_per_minute` (limite par minute réelle), `decisions_enabled`, `decision_cooldown_minutes`, `decision_max_wait_minutes`, `mock_invalid_rate` |
-| `dialogue` | `pair_cooldown_minutes` (cooldown social par paire), `max_participants`, `line_display_s` |
+| `dialogue` | `mode` (`tour_par_tour` ou `scene`), `max_turns`, `max_minutes`, `pair_cooldown_minutes` (cooldown social par paire), `tense_cooldown_factor`, `tension_decay_per_day`, `promise_window_minutes`, `promise_max_days`, `max_participants`, `line_display_s` |
 | `memory` | `short_term_size`, `recall_count` (souvenirs envoyés au LLM), `summary_every`, `max_summaries`, `long_term_size`, `keep_from_importance`, `recency_half_life_hours`, `max_beliefs` |
 | `mind` | `plans_enabled`, `reflections_enabled`, `plan_item_window_minutes`, `max_replans_per_day`, `goal_boost` |
 | `economy` | `enabled`, `start_money`, `start_pantry`, `portion_price`, `weekly_bills`, `bills_weekday`, `grocery_days`, `low_pantry_days`, `overtime_below` |
@@ -144,16 +167,18 @@ uv run pytest
 
 Couverts : pathfinding A*, décroissance des besoins, parsing JSON du LLM (cas valides et invalides),
 retry puis repli, limite de débit, journée simulée complète en mode mock, cooldown par paire,
-sauvegarde et chargement.
+sauvegarde et chargement, économie, santé, événements, extérieur, mémoire pondérée, plan et
+réflexion, répliques tour par tour (point de vue de chacun), relations et promesses.
 
 ## Architecture
 
 ```
 main.py              boucle pygame (tick fixe, poll LLM non bloquant, rendu)
 world/               maison, cours avant et arrière, objets (dont ceux à acheter) ; A*
-agents/              persona, besoins, actions, horaire, mémoire pondérée, plan du jour, état de l'agent
-llm/                 interface + factory, Claude, Ollama, mock, prompts, service (threads, retry, repli)
-sim/                 horloge, moteur, vie intérieure (mind.py), économie, événements aléatoires, bus, journal, config
+agents/              persona, besoins, actions, horaire, mémoire pondérée, plan du jour, relations, état de l'agent
+llm/                 interface + factory, Claude, Ollama, mock, prompts (décision, plan, réplique, bilan), service
+sim/                 horloge, moteur, vie intérieure (mind.py), conversations et promesses (social.py), économie,
+                     événements aléatoires, bus, journal, config
 ui/                  rendu pixel art (sprites générés dans sprites.py), bulles et historique, HUD
 data/family.yaml     les personas
 ```

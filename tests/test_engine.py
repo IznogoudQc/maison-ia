@@ -37,7 +37,8 @@ def run_until(engine: Engine, total_minutes: int) -> None:
     while engine.clock.total_minutes < total_minutes:
         engine.tick()
         deadline = time.monotonic() + 1.0
-        while (engine.pending_decisions or engine.pending_dialogues or engine.pending_summaries) \
+        while (engine.pending_decisions or engine.pending_dialogues or engine.pending_summaries
+               or engine.mind.busy() or engine.social.busy()) \
                 and time.monotonic() < deadline:
             engine.poll()
             time.sleep(0.0005)

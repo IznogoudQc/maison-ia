@@ -39,6 +39,7 @@ from sim.config import AppConfig
 from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
 from sim.mind import Mind
+from sim.social import Social
 from sim.random_events import RandomEvents
 from world.house import PURCHASE_OBJECTS, House, InteractiveObject
 from world.pathfinding import NEIGHBORS, manhattan
@@ -108,6 +109,7 @@ class Engine:
         self.last_event: tuple[str, bool, int] | None = None  # (texte, bonne nouvelle, minute)
         self.game_over = False
         self.mind = Mind(self)
+        self.social = Social(self)
 
     # ------------------------------------------------------------------ utilitaires
 
@@ -235,6 +237,7 @@ class Engine:
                     if other is agent or not other.is_available:
                         continue
                     bonus = 1.3 if self.room_of(other) == room else 1.0
+                    bonus *= agent.relation(other.id).chat_factor()
                     options.append(Option(action="jaser", target=other.id,
                                           label=action_label("jaser", other.name),
                                           score=round(base * bonus, 2)))
@@ -414,7 +417,7 @@ class Engine:
         request = build_decision_request(agent, room, self.clock.label(), top,
                                          memories, summary, self.config.llm.max_tokens,
                                          self.family_context([agent]), self._prompt_meta(),
-                                         now=self.clock.total_minutes)
+                                         now=self.clock.total_minutes, family=self.agents)
         names = {a.id: a.name for a in self.agents}
         fallback = ActionDecision(action=pick.action, target=pick.target, reason="")
         future = self.llm.try_submit(request, ActionDecision, fallback,
@@ -435,6 +438,7 @@ class Engine:
         self._poll_dialogues()
         self._poll_summaries()
         self.mind.poll()
+        self.social.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -483,6 +487,7 @@ class Engine:
             self._daily_yard()
         for agent in self.agents:
             self._update_agent(agent)
+        self.social.update()
         self._detect_encounters()
 
     def _roll_events(self) -> None:
@@ -509,6 +514,8 @@ class Engine:
                 lines.append(f"{agent.name} est en mauvaise santé ({agent.health:.0f}/100).")
         if self.last_event and now - self.last_event[2] <= 2 * 24 * 60:
             lines.append(f"Nouvelle récente : {self.last_event[0]}")
+        for promise in self.social.pending_for({a.id for a in agents}):
+            lines.append(f"Promesse à tenir : {promise.text} ({self.social.when_label(promise.minute)}).")
         return "\n".join(lines)
 
     def _prompt_meta(self) -> dict:
@@ -532,11 +539,12 @@ class Engine:
     # ------------------------------------------------------------------ rencontres et dialogues
 
     def _talking_ids(self) -> set[str]:
-        return {agent_id for p in self.pending_dialogues for agent_id in p.participant_ids}
+        pending = {agent_id for p in self.pending_dialogues for agent_id in p.participant_ids}
+        return pending | self.social.talking_ids()
 
     def _pair_ready(self, a: str, b: str) -> bool:
         last = self.pair_last_talk.get(pair_key(a, b))
-        return last is None or self.clock.total_minutes - last >= self.config.dialogue.pair_cooldown_minutes
+        return last is None or self.clock.total_minutes - last >= self.social.pair_cooldown(a, b)
 
     def _detect_encounters(self) -> None:
         """Deux agents ou plus dans la même pièce, cooldown écoulé : on demande un dialogue."""
@@ -567,6 +575,11 @@ class Engine:
 
     def _request_dialogue(self, group: list[Agent], room: str) -> bool:
         assert self.llm is not None
+        if self.config.dialogue.mode == "tour_par_tour":
+            if not self.social.start(group, room):
+                return False
+            self._mark_talk(group)
+            return True
         memories, summaries = {}, {}
         for agent in group:
             about = [room, *(a.name for a in group if a is not agent)]
@@ -578,13 +591,17 @@ class Engine:
         future = self.llm.try_submit(request, Dialogue, None, lambda d: validate_dialogue(d, names))
         if future is None:
             return False
+        self._mark_talk(group)
+        self.pending_dialogues.append(PendingDialogue(future, [a.id for a in group], room,
+                                                      self.clock.total_minutes))
+        return True
+
+    def _mark_talk(self, group: list[Agent]) -> None:
+        """Le cooldown démarre à la demande : évite de relancer la même paire pendant l'attente."""
         now = self.clock.total_minutes
-        # Le cooldown démarre à la demande : évite de relancer la même paire pendant l'attente
         for i, a in enumerate(group):
             for b in group[i + 1:]:
                 self.pair_last_talk[pair_key(a.id, b.id)] = now
-        self.pending_dialogues.append(PendingDialogue(future, [a.id for a in group], room, now))
-        return True
 
     def _poll_dialogues(self) -> None:
         for pending in [p for p in self.pending_dialogues if p.future.done()]:
@@ -598,15 +615,15 @@ class Engine:
                 self.publish("dialogue_echec", room=pending.room, participants=names, error=result.error)
                 continue
             lines = [line.model_dump() for line in result.value.lines]
-            transcript = " / ".join(f"{l['speaker']} : « {l['text']} »" for l in lines)
             for agent_id in pending.participant_ids:
                 agent = self.agent_by_id(agent_id)
                 if agent is not None:
                     agent.needs.apply({"social": self.config.dialogue.social_gain})
-                    others = ", ".join(n for n in names if n != agent.name)
-                    self.remember(agent, f"Jasé avec {others} ({pending.room}) : {transcript}"[:400])
             self.publish("dialogue", room=pending.room, participants=names, lines=lines,
-                         time=self.clock.hhmm, attempts=result.attempts)
+                         time=self.clock.hhmm, attempts=result.attempts, mode="scene")
+            # Le bilan écrit les souvenirs, ajuste les relations et relève les promesses
+            self.social.request_debrief(pending.participant_ids, pending.room,
+                                        [(l["speaker"], l["text"]) for l in lines], with_feelings=True)
 
     def _update_agent(self, agent: Agent) -> None:
         if agent.dead:
@@ -886,6 +903,7 @@ class Engine:
             "agents": {a.id: a.model_dump(mode="json") for a in self.agents},
             "pair_last_talk": self.pair_last_talk,
             "household": self.economy.household.model_dump(mode="json"),
+            "social": self.social.to_dict(),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -914,6 +932,8 @@ class Engine:
         self.pending_dialogues.clear()
         self.pending_summaries.clear()
         self.mind.clear()
+        self.social.clear()
+        self.social.load_dict(data.get("social", {}))
         self.game_over = self.alive_count() == 0
         if self.llm is not None and "llm_stats" in data:
             for key, value in data["llm_stats"].items():

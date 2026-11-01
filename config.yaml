@@ -36,6 +36,13 @@ dialogue:
   social_gain: 25
   line_display_s: 3.5         # durée d'affichage d'une réplique (secondes réelles)
   history_size: 300
+  mode: tour_par_tour         # tour_par_tour : un appel par réplique (chacun son point de vue) ; scene : un appel
+  max_turns: 6                # répliques au plus par conversation (tour par tour)
+  max_minutes: 45             # conversation abandonnée au-delà (minutes simulées)
+  tense_cooldown_factor: 2    # deux personnes en chicane se reparlent moins souvent
+  tension_decay_per_day: 8    # la tension retombe avec le temps
+  promise_window_minutes: 60  # retard toléré avant qu'une promesse soit brisée
+  promise_max_days: 3
 
 memory:
   short_term_size: 30         # événements gardés par agent

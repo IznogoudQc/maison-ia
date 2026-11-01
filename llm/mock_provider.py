@@ -133,6 +133,10 @@ class MockProvider(LLMProvider):
                 text = self._plan(request)
             elif request.kind == "reflection":
                 text = self._reflection(request)
+            elif request.kind == "line":
+                text = self._line(request)
+            elif request.kind == "debrief":
+                text = self._debrief(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -240,6 +244,79 @@ class MockProvider(LLMProvider):
                     "why": self.rng.choice(REASONS.get(option["action"], ["Ça va me faire du bien."]))}
         return json.dumps({"insights": [{"text": insight, "importance": importance}],
                            "important": important, "goal": goal}, ensure_ascii=False)
+
+    def _line(self, request: LLMRequest) -> str:
+        """Une réplique : ouverture au premier tour, réponse ensuite, parfois une proposition."""
+        meta = request.meta
+        speaker = meta.get("speaker", {"id": "", "name": "?"})
+        listeners = meta.get("listeners", [])
+        lines = meta.get("lines", [])
+        turn = meta.get("turn", 0)
+        if not listeners:
+            return json.dumps({"text": ""})
+        last = lines[-1][0] if lines else None
+        to = next((o for o in listeners if o["name"] == last), listeners[0])
+        if turn == 0:
+            departed = meta.get("departed") or []
+            money, pantry = meta.get("money"), meta.get("pantry_days")
+            pool = OPENERS.get(speaker["id"], ["Salut {other}."])
+            if departed and self.rng.random() < 0.5:
+                pool = GRIEF_OPENERS.get(speaker["id"], ["{absent} me manque."])
+            elif ((money is not None and money < 200) or (pantry is not None and pantry < 1)) \
+                    and self.rng.random() < 0.6:
+                pool = MONEY_OPENERS.get(speaker["id"], ["L'argent manque."])
+            elif meta.get("room") in ROOM_OPENERS and self.rng.random() < 0.35:
+                pool = ROOM_OPENERS[meta["room"]]
+            absent = self.rng.choice(departed) if departed else ""
+            text = self.rng.choice(pool).format(other=to["name"], absent=absent)
+        elif self.rng.random() < 0.2:
+            text = self.rng.choice(PROPOSALS.get(speaker["id"], ["On fait quelque chose ensemble demain?"]))
+        else:
+            text = self.rng.choice(REPLIES.get(speaker["id"], ["Ah oui?"]))
+        tension = self.rng.choice([0, 0, 0, 1, -1])
+        if {speaker["id"], to.get("id")} == {"ado", "mere"} and self.rng.random() < 0.3:
+            tension = 2  # le téléphone et l'heure du coucher, encore
+        return json.dumps({
+            "text": text, "to": to["name"], "end": turn >= 1 and self.rng.random() < 0.4,
+            "thought": self.rng.choice(THOUGHTS.get(speaker["id"], ["Hmm."])),
+            "affection": self.rng.choice([0, 0, 0, 1, 1, -1]), "tension": tension,
+        }, ensure_ascii=False)
+
+    def _debrief(self, request: LLMRequest) -> str:
+        """Importance modeste ; parfois une promesse (Lego avec Félix, film le lendemain soir)."""
+        people = request.meta.get("participants", [])
+        names = [p["name"] for p in people]
+        promises = []
+        if len(people) >= 2 and self.rng.random() < 0.3:
+            pair = people[:2]
+            child = next((p for p in pair if p["id"] == "enfant"), None)
+            action = "jouer" if child else "tele"
+            promises.append({"who": [p["name"] for p in pair], "by": pair[0]["name"], "action": action,
+                             "time": "19:30", "day": "demain",
+                             "text": f"{pair[0]['name']} et {pair[1]['name']} : "
+                                     + ("Lego après souper" if child else "un film ensemble") + " demain"})
+        feelings = []
+        if request.meta.get("with_feelings"):
+            feelings = [{"from": a, "to": b, "affection": self.rng.choice([0, 1, 1, 2]), "tension": 0}
+                        for a in names for b in names if a != b]
+        return json.dumps({"importance": self.rng.randint(2, 5),
+                           "summary": f"{' et '.join(names)} ont jasé de tout et de rien.",
+                           "promises": promises, "feelings": feelings}, ensure_ascii=False)
+
+
+PROPOSALS: dict[str, list[str]] = {
+    "pere": ["On s'écoute un film demain soir? Je fais le popcorn.", "Tu veux m'aider avec le gazon demain?"],
+    "mere": ["On relaxe sur le patio demain, juste nous deux?", "Demain soir, on se fait une soirée film."],
+    "ado": ["Ok, ok, je vais tondre le gazon demain. Promis.", "On pourrait écouter une série ensemble demain."],
+    "enfant": ["Tu joues aux Lego avec moi demain après souper? Dis oui!", "On se baigne demain?"],
+}
+
+THOUGHTS: dict[str, list[str]] = {
+    "pere": ["J'espère qu'on va finir avant la game.", "Elle a l'air fatiguée, je devrais l'aider plus."],
+    "mere": ["J'ai encore mille affaires à faire.", "Faudrait qu'on passe plus de temps ensemble."],
+    "ado": ["Ils comprennent rien.", "Bon, c'est pas si pire de jaser des fois."],
+    "enfant": ["J'espère qu'il va dire oui!", "Je veux juste jouer."],
+}
 
 
 INTENTIONS: dict[str, list[str]] = {

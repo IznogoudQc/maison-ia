@@ -35,7 +35,8 @@ class Hud:
 
     def draw(self, surface: pygame.Surface, clock: SimClock, speed: float, paused: bool,
              agents: list[Agent], selected: Agent | None, llm: LLMService | None = None,
-             llm_label: str = "", economy: Economy | None = None, alive: int = 0) -> None:
+             llm_label: str = "", economy: Economy | None = None, alive: int = 0,
+             promises: list[str] | None = None) -> None:
         self.agents = agents
         pygame.draw.rect(surface, theme.PANEL, self.rect)
         pygame.draw.line(surface, theme.PANEL_BORDER, self.rect.topleft, self.rect.bottomleft, 2)
@@ -54,12 +55,15 @@ class Hud:
         controls_top = self.rect.bottom - 18 * len(CONTROLS) - 10
         if selected is None:
             y = self._draw_family(surface, x, y, agents)
+            if promises:
+                y = self._draw_promises(surface, x, y + 6, promises)
             if economy is not None and economy.enabled:
                 self._draw_ledger(surface, x, y + 8, economy, controls_top - 8)
         else:
             y = self._draw_agent(surface, x, y, selected)
             if not selected.dead:
                 y = self._draw_mind(surface, x, y, selected, clock)
+                y = self._draw_relations(surface, x, y, selected, agents)
             self._draw_memory(surface, x, y, selected, controls_top - 8)
 
         y = controls_top
@@ -171,7 +175,8 @@ class Hud:
                     y += 15
             due = plan.due(clock.minute_of_day)
             for item in plan.items[:MAX_PLAN_LINES]:
-                target = next((a.name for a in self.agents if a.id == item.target), item.target)                     if item.target else None
+                names = {a.id: a.name for a in self.agents}
+                target = names.get(item.target, item.target) if item.target else None
                 color = {"done": PLAN_DONE, "missed": PLAN_MISSED}.get(item.status, theme.TEXT_DIM)
                 if item is due:
                     color = theme.TEXT
@@ -188,6 +193,40 @@ class Hud:
                 surface.blit(font.render(line, True, PLAN_THOUGHT), (x, y))
                 y += 15
         return y + 8
+
+    def _draw_relations(self, surface: pygame.Surface, x: int, y: int, agent: Agent,
+                        agents: list[Agent]) -> int:
+        """Ressenti envers chacun : proximité et tension (rouge quand ça accroche)."""
+        others = [a for a in agents if a is not agent and not a.dead]
+        if not others:
+            return y
+        surface.blit(theme.font(14, bold=True).render("Relations", True, theme.TEXT), (x, y))
+        y += 20
+        font = theme.font(12)
+        for other in others:
+            relation = agent.relation(other.id)
+            if relation.tension >= 45:
+                color = PLAN_MISSED
+            elif relation.tension >= 25:
+                color = (230, 180, 70)
+            else:
+                color = theme.TEXT_DIM
+            pygame.draw.circle(surface, other.persona.color, (x + 4, y + 8), 4)
+            text = f"{other.name} : {relation.closeness}, {relation.mood}"
+            text += f"  ({relation.affection:.0f} / {relation.tension:.0f})"
+            surface.blit(font.render(_clip(text, 50), True, color), (x + 12, y))
+            y += 16
+        return y + 8
+
+    def _draw_promises(self, surface: pygame.Surface, x: int, y: int, promises: list[str]) -> int:
+        surface.blit(theme.font(14, bold=True).render("Promesses", True, theme.TEXT), (x, y))
+        y += 20
+        font = theme.font(12)
+        for text in promises[:4]:
+            for line in wrap_text(text, font, self.rect.width - 28)[:2]:
+                surface.blit(font.render(line, True, theme.ACCENT), (x, y))
+                y += 15
+        return y + 4
 
     def _draw_memory(self, surface: pygame.Surface, x: int, y: int, agent: Agent, bottom: int) -> None:
         """Résumé puis souvenirs du plus récent au plus ancien, tant qu'il reste de la place."""

@@ -41,7 +41,7 @@ def run_until(engine: Engine, minute: int) -> None:
         engine.tick()
         deadline = time.monotonic() + 1.0
         while (engine.pending_decisions or engine.pending_dialogues or engine.pending_summaries
-               or engine.mind.busy()) and time.monotonic() < deadline:
+               or engine.mind.busy() or engine.social.busy()) and time.monotonic() < deadline:
             engine.poll()
             time.sleep(0.0005)
 
@@ -120,12 +120,12 @@ def test_activite_prevue_choisie_sans_appel_llm(setup):
     pere = engine.agent_by_id("pere")
     pere.action = None
     pere.needs.hunger = pere.needs.energy = pere.needs.hygiene = pere.needs.social = pere.needs.fun = 80
-    item = PlanItem(minute=engine.clock.minute_of_day, action="lire", note="finir mon roman")
+    item = PlanItem(minute=engine.clock.minute_of_day, action="telephone", note="texter ma sœur")
     pere.plan = DayPlan(day=0, items=[item])
     calls = engine.llm.stats.calls
     engine._choose(pere)
-    assert pere.action is not None and pere.action.name == "lire"
-    assert pere.action.reason == "Prévu : finir mon roman"
+    assert pere.action is not None and pere.action.name == "telephone"
+    assert pere.action.reason == "Prévu : texter ma sœur"
     assert item.status == "done" and engine.llm.stats.calls == calls
 
 
@@ -180,9 +180,9 @@ def test_objectif_rend_l_option_plus_attirante(setup):
     from agents.plan import Goal
     felix = engine.agent_by_id("enfant")
     before = {(o.action, o.target): o.score for o in engine.options_for(felix)}
-    felix.goal = Goal(text="lire avec papa", action="lire", until=engine.clock.total_minutes + 60)
+    felix.goal = Goal(text="flâner dans la cour", action="flaner", until=engine.clock.total_minutes + 60)
     after = {(o.action, o.target): o.score for o in engine.options_for(felix)}
-    assert after[("lire", None)] > before[("lire", None)]
+    assert after[("flaner", None)] > before[("flaner", None)]
 
 
 def test_sauvegarde_garde_plan_constats_et_memoire_longue(setup, tmp_path):

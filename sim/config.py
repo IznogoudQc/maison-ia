@@ -48,6 +48,13 @@ class DialogueConfig(BaseModel):
     social_gain: float = 25.0
     line_display_s: float = 3.5        # secondes réelles par réplique affichée
     history_size: int = 300
+    mode: Literal["tour_par_tour", "scene"] = "tour_par_tour"  # un appel par réplique, ou un pour tout
+    max_turns: int = 6                 # répliques au plus en mode tour par tour
+    max_minutes: int = 45              # conversation abandonnée au-delà (minutes simulées)
+    tense_cooldown_factor: float = 2.0  # paire en chicane : cooldown multiplié
+    tension_decay_per_day: float = 8.0
+    promise_window_minutes: int = 60   # retard toléré pour tenir une promesse
+    promise_max_days: int = 3          # une promesse vise au plus N jours plus tard
 
 
 class MemoryConfig(BaseModel):
