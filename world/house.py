@@ -146,7 +146,8 @@ def house_layout() -> Layout:
     surfaces |= {p: "concrete" for p in SIDEWALK}
     return Layout("maison", WIDTH, HEIGHT, dict(ROOMS), set(OUTDOOR_ROOMS), list(DOORS), street,
                   surfaces, fences, list(OBJECTS), dict(PURCHASE_OBJECTS), spawn_room="Cuisine",
-                  windows=list(WINDOWS), memorial_tiles=list(MEMORIAL_TILES))
+                  windows=list(WINDOWS), memorial_tiles=list(MEMORIAL_TILES),
+                  catalog=("tondeuse", "bbq", "piscine", "auto"))
 
 
 class House:
@@ -214,6 +215,15 @@ class House:
         self.dirty |= tiles
         self.revision += 1
         return obj
+
+    def set_use_positions(self, obj: InteractiveObject, positions: list[Pos]) -> None:
+        """Nouvelles cases d'usage (un arbre voisin a été coupé : on l'atteint par un autre côté)."""
+        for pos in obj.use_positions:
+            if self._spots.get(pos) is obj:
+                del self._spots[pos]
+        obj.use_positions = positions
+        for pos in positions:
+            self._spots.setdefault(pos, obj)
 
     def object_at_spot(self, pos: Pos) -> InteractiveObject | None:
         """Objet dont pos est une case d'usage (pour la qualité et l'orientation)."""

@@ -545,6 +545,36 @@ def _barrel(surf: pygame.Surface, r: pygame.Rect) -> None:
     pygame.draw.ellipse(surf, (110, 160, 210), r.inflate(-8, -8))
 
 
+def draw_woodpile(surf: pygame.Surface, pile: InteractiveObject, logs: int) -> None:
+    """Corde de bois : une rangée de bûches par tranche de 10, jusqu'à 5 rangées."""
+    x, y, w, _h = pile.rect
+    base_x, base_y = x * TILE, y * TILE + TILE - 2
+    rows = min(5, (logs + 9) // 10)
+    for row in range(rows):
+        count = min(10, logs - row * 10)
+        for i in range(min(count, w * TILE // 3)):
+            cx = base_x + 2 + i * 3 + (row % 2)
+            cy = base_y - row * 3
+            pygame.draw.circle(surf, (150, 104, 62), (cx, cy), 2)
+            surf.set_at((cx, cy), (206, 170, 118))  # cerne du bois
+
+
+def draw_axe(surf: pygame.Surface, x: int, y: int, t: float, chainsaw: bool = False) -> None:
+    """Hache qui monte et descend (ou scie à chaîne qui vibre), et des copeaux."""
+    if chainsaw:
+        jitter = int(t * 30) % 2
+        pygame.draw.rect(surf, (230, 120, 30), (x - 1, y - 1 + jitter, 5, 3))
+        pygame.draw.line(surf, (190, 190, 196), (x + 4, y + jitter), (x + 9, y + jitter), 2)
+    else:
+        swing = math.sin(t * 8)
+        tip = (x + round(4 * math.cos(swing)), y - round(5 * math.sin(swing)) - 1)
+        pygame.draw.line(surf, (120, 84, 50), (x, y + 2), tip, 1)
+        pygame.draw.rect(surf, (180, 186, 196), (tip[0] - 1, tip[1] - 1, 3, 2))
+    rng = random.Random(int(t * 6))
+    for _ in range(2):
+        surf.set_at((x + rng.randint(2, 9), y + rng.randint(-4, 2)), (226, 196, 140))
+
+
 def _outhouse(surf: pygame.Surface, r: pygame.Rect) -> None:
     body = r.inflate(-2, 0)
     box(surf, body, (138, 98, 60))
@@ -566,8 +596,8 @@ OBJECT_DRAWERS = {
 def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
     x, y, w, h = obj.rect
     rect = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
-    if obj.kind == "auto":
-        return  # dessinée à chaque image : elle part et revient
+    if obj.kind == "auto" or obj.id == "corde_bois":
+        return  # dessinées à chaque image : l'auto part et revient, la corde de bois grossit
     if obj.kind == "arbre":
         if w == 1 and h == 1:
             _small_tree(surf, rect, obj.label)

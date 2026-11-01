@@ -84,6 +84,13 @@ CAR_COMMUTE_SAVING = 30    # minutes gagnées au retour du travail en auto
 CAR_GROCERY_MINUTES = 60
 
 FLANER_RADIUS = 10         # flâner : une case pas trop loin (sur un grand terrain)
+WOOD_TARGET = 25           # bûches visées en réserve ; en dessous, couper devient pressant
+WOOD_MAX = 60              # au-delà, on arrête de couper (la corde est pleine)
+WOOD_YIELD = {"Érable": 6, "Sapin": 5, "Bouleau": 4}
+SAW_FACTOR = 0.45          # avec la scie à chaîne, un arbre prend 45 % du temps
+NO_ROOF_FUN_PER_HOUR = 1.0  # vivre sans toit use le moral, petit à petit
+CUT_HOURS = (8 * 60, 19 * 60)
+EVENING = 17 * 60
 ENCOUNTER_RADIUS = 6       # dehors, on ne jase qu'avec quelqu'un d'assez proche
 
 SAVE_VERSION = 4
@@ -205,13 +212,39 @@ class Engine:
             target_name = f"{item.label} ({item.price:,.0f} $)".replace(",", " ")
         elif name == "tondre":
             use_pos = self.rng.choice(self.house.lawn_tiles())
+        elif name == "couper":
+            found = self._nearest_tree(agent)
+            if found is None:
+                return None
+            tree, use_pos = found
+            target, target_name = tree.id, tree.label.lower()
         elif definition.object_kind is not None:
             use_pos = self._object_spot(agent, definition.object_kind)
             if use_pos is None:
                 return None
+        duration = definition.duration
+        if name == "couper" and self.economy.owns("scie"):
+            duration = round(duration * SAW_FACTOR)
         return ActiveAction(name=name, target=target, target_name=target_name, use_pos=use_pos,
-                            remaining=definition.duration, until_minute=until, forced=forced,
+                            remaining=duration, until_minute=until, forced=forced,
                             reason=reason)
+
+    def _nearest_tree(self, agent: Agent) -> tuple[InteractiveObject, Pos] | None:
+        """Arbre le plus proche qu'on peut atteindre (par la lisière) et que personne d'autre ne coupe."""
+        occupied = self._occupied(agent)
+        taken = {a.action.target for a in self.agents
+                 if a is not agent and a.action is not None and a.action.name == "couper"}
+        best: tuple[int, InteractiveObject, Pos] | None = None
+        for tree in self.house.objects_of_kind("arbre"):
+            if tree.id in taken:
+                continue
+            for spot in tree.use_positions:
+                if spot in occupied:
+                    continue
+                distance = manhattan(spot, agent.pos)
+                if best is None or distance < best[0]:
+                    best = (distance, tree, spot)
+        return (best[1], best[2]) if best else None
 
     def start_action(self, agent: Agent, action: ActiveAction) -> bool:
         agent.path = []
@@ -249,6 +282,9 @@ class Engine:
                 continue
             if definition.object_kind and self._object_spot(agent, definition.object_kind) is None:
                 continue
+            if definition.name == "veiller" and (self.clock.minute_of_day < EVENING
+                                                 or self.economy.household.wood < 1):
+                continue  # une veillée, c'est le soir, et il faut une bûche
             if self.economy.enabled and not self._has_food_for(definition.name):
                 continue
             score = score_action(definition, agent.needs, favorites)
@@ -268,7 +304,7 @@ class Engine:
         eco = self.economy
         if not eco.enabled:
             return []
-        options = self._yard_options(agent)
+        options = self._yard_options(agent) + self._wood_options(agent)
         if not agent.persona.is_adult:
             return options
         options += self._purchase_options(agent)
@@ -285,6 +321,18 @@ class Engine:
             score = round(5 + (lawn - LAWN_MOW_FROM) / (100 - LAWN_MOW_FROM) * 25, 2)
             return [Option(action="tondre", label=f"tond la pelouse (gazon à {lawn:.0f} %)", score=score)]
         return []
+
+    def _wood_options(self, agent: Agent) -> list[Option]:
+        """Terrain : couper du bois (dès 16 ans, de jour), d'autant plus pressant que la réserve est basse."""
+        wood = self.economy.household.wood
+        minute = self.clock.minute_of_day
+        if not self.house.layout.wild or agent.persona.age < 16 or wood >= WOOD_MAX:
+            return []
+        if not CUT_HOURS[0] <= minute < CUT_HOURS[1] or not self.house.objects_of_kind("arbre"):
+            return []
+        score = round(4 + max(0, WOOD_TARGET - wood) / WOOD_TARGET * 20, 2)
+        tool = "à la scie à chaîne" if self.economy.owns("scie") else "à la hache"
+        return [Option(action="couper", label=f"coupe un arbre {tool} (réserve : {wood} bûches)", score=score)]
 
     def _purchase_options(self, agent: Agent) -> list[Option]:
         """Achats permis seulement s'il reste un coussin de deux semaines de dépenses."""
@@ -511,6 +559,11 @@ class Engine:
         lines = []
         if self.economy.enabled:
             lines.append(self.economy.summary(self.alive_count()) + ".")
+            if self.house.layout.wild:
+                trees = len(self.house.objects_of_kind("arbre"))
+                roof = "" if self.has_roof() else " On vit encore sous la tente, sans maison."
+                lines.append(f"Bois coupé en réserve : {self.economy.household.wood} bûches ; "
+                             f"il reste {trees} arbres sur le terrain.{roof}")
         departed = [a for a in self.agents if a.dead]
         if departed:
             names = ", ".join(f"{a.name} (jour {(a.died_minute or 0) // (24 * 60) + 1})" for a in departed)
@@ -660,6 +713,13 @@ class Engine:
             return
 
         agent.needs.decay(minutes, "sleeping" if agent.is_sleeping else "awake")
+        if agent.is_sleeping:
+            bed = self.house.object_at_spot(agent.pos)
+            if bed is not None and bed.quality < 1:
+                # Sous la tente, on dort moins bien qu'au chaud dans un lit
+                agent.needs.apply({"energy": -12.0 * (1 - bed.quality) * minutes / 60})
+        elif self.house.layout.wild and not self.has_roof():
+            agent.needs.apply({"fun": -NO_ROOF_FUN_PER_HOUR * minutes / 60})
         if self.economy.in_debt and agent.persona.is_adult and not agent.is_sleeping:
             # Les dettes gâchent le moral des parents
             agent.needs.apply({"fun": -self.economy.config.debt_fun_penalty_per_hour * minutes / 60})
@@ -711,7 +771,7 @@ class Engine:
             action.started = True
             if action.name in AWAY_ACTIONS:
                 self._leave(agent, action)
-            elif not self._eat(agent, action.name):
+            elif not self._eat(agent, action.name) or not self._burn_wood(agent, action):
                 agent.action = None
             return
 
@@ -735,6 +795,8 @@ class Engine:
         """Effets de fin d'action sur le ménage (achat conclu, pelouse tondue)."""
         if action.name == "acheter" and action.target:
             self._buy(agent, action.target)
+        elif action.name == "couper" and action.target:
+            self._fell_tree(agent, action.target)
         elif action.name == "tondre":
             self.economy.household.lawn = 0.0
             self.remember(agent, "J'ai tondu la pelouse. Ça sent l'été.", 2)
@@ -840,6 +902,45 @@ class Engine:
             if other is not agent and not other.dead:
                 self.remember(other, f"{agent.name} est à l'hôpital pour quelques jours.", 8)
         self.mind.mark_stale(f"{agent.name} est à l'hôpital.")
+
+    def _burn_wood(self, agent: Agent, action: ActiveAction) -> bool:
+        """Feu de camp : une veillée ou un souper sur le feu brûle une bûche. False si la veillée tombe à l'eau."""
+        spot = self.house.object_at_spot(agent.pos)
+        fire = action.name == "veiller" or (action.name == "cuisiner" and spot is not None and spot.id == "feu")
+        if not fire or not self.economy.enabled:
+            return True
+        household = self.economy.household
+        if household.wood >= 1:
+            household.wood -= 1
+            return True
+        if action.name == "veiller":
+            return False
+        agent.needs.apply({"fun": -5})
+        self.remember(agent, "Plus de bois sec : souper froid sur le réchaud.", 3)
+        return True
+
+    def _fell_tree(self, agent: Agent, tree_id: str) -> None:
+        """L'arbre tombe : des bûches pour la réserve, et la lisière recule."""
+        tree = self.house.remove_object(tree_id)
+        if tree is None:
+            return  # quelqu'un l'a abattu avant
+        logs = WOOD_YIELD.get(tree.label, 5)
+        self.economy.household.wood += logs
+        x, y = tree.rect[:2]
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            neighbor = self.house.objects.get(f"arbre_{nx}_{ny}")
+            if neighbor is not None:
+                spots = [p for p in ((nx, ny + 1), (nx - 1, ny), (nx + 1, ny), (nx, ny - 1))
+                         if self.house.is_walkable(p)]
+                self.house.set_use_positions(neighbor, spots)
+        self.publish("coupe", agent=agent.id, name=agent.name, species=tree.label, logs=logs,
+                     wood=self.economy.household.wood, trees=len(self.house.objects_of_kind("arbre")))
+        self.remember(agent, f"J'ai abattu un {tree.label.lower()} : {logs} bûches de plus "
+                             f"(réserve : {self.economy.household.wood}).", 2)
+
+    def has_roof(self) -> bool:
+        """Au moins une pièce intérieure (le terrain du départ n'en a aucune)."""
+        return any(name not in self.house.outdoor_rooms for name in self.house.rooms)
 
     def _eat(self, agent: Agent, action_name: str) -> bool:
         """Prend la nourriture du garde-manger au début d'un repas ; False si le frigo est vide."""

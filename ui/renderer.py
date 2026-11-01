@@ -20,7 +20,7 @@ SPRITE_LIFT = 4       # le personnage déborde un peu sur la tuile du dessus (ef
 NIGHT_ALPHA = 135     # opacité du voile bleu en pleine nuit
 LIT_ROOM_FACTOR = 0.3  # part du voile de nuit qui reste dans une pièce éclairée
 MOOD_THRESHOLD = 30.0  # besoin sous ce seuil : icône au-dessus de la tête
-SITTING_ACTIONS = {"souper", "dejeuner", "tele"}
+SITTING_ACTIONS = {"souper", "dejeuner", "tele", "veiller"}
 LYING_ACTIONS = {"dormir", "sieste"}
 SOFA_SEAT_OFFSET = 10  # px : les spectateurs de la télé s'assoient sur le canapé, juste derrière leur case
 HEALTH_ICON_BELOW = 40.0
@@ -39,6 +39,7 @@ class Renderer:
         # État de la cour fourni par set_yard ; le décor est reconstruit quand il change
         self.lawn = 20.0
         self.car_home = False
+        self.wood = 0
         self._built_key: tuple[int, int] | None = None
         self.background = self._build_background()
         self.low = pygame.Surface(self.low_size)
@@ -49,6 +50,7 @@ class Renderer:
         self.room_rects = {name: pygame.Rect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE)
                            for name, (x0, y0, x1, y1) in indoor.items()}
         self.room_glows = {name: _warm_glow(rect.size) for name, rect in self.room_rects.items()}
+        self.purchases: set[str] = set()  # achats du ménage qui changent le dessin (scie à chaîne)
         self._minimap: pygame.Surface | None = None
         self._minimap_revision = -1
         # Position affichée (lissée), orientation et état de marche de chaque agent
@@ -61,9 +63,10 @@ class Renderer:
 
     # ------------------------------------------------------------------ décor statique
 
-    def set_yard(self, lawn: float, car_home: bool) -> None:
+    def set_yard(self, lawn: float, car_home: bool, wood: int = 0) -> None:
         self.lawn = lawn
         self.car_home = car_home
+        self.wood = wood
 
     # ------------------------------------------------------------------ caméra
 
@@ -317,6 +320,9 @@ class Renderer:
         view = self.view_rect()
         low.set_clip(view)
         low.blit(self.background, view.topleft, view)
+        pile = self.house.objects.get("corde_bois")
+        if pile is not None:
+            sprites.draw_woodpile(low, pile, self.wood)
         car = self.house.objects.get("auto")
         if car is not None and self.car_home:
             sprites.draw_car(low, car)
@@ -483,6 +489,8 @@ class Renderer:
             sprites.draw_lego(low, left + 8, top + 14)
         elif self._active(agent, "tondre"):
             sprites.draw_mower(low, left + (12 if direction != "left" else -2), top + 12)
+        elif self._active(agent, "couper"):
+            sprites.draw_axe(low, hand_x, hand_y, self.time, chainsaw="scie" in self.purchases)
         elif self._active(agent, "dejeuner") and agent.persona.age >= 18 and "table" in self.house.objects:
             # Café du matin posé sur la table, entre l'adulte et le centre de la table
             x, y, w, h = self.house.objects["table"].rect

@@ -122,6 +122,7 @@ def _camp_objects(cx: int, cy: int, street_y: int, sidewalk_y: int) -> list[Inte
         InteractiveObject("baril", "douche", "Baril d'eau de pluie", ROOM, (cx - 6, cy + 1, 1, 1),
                           [(cx - 6, cy + 2)], quality=0.55),
         InteractiveObject("becosse", "deco", "Bécosse", ROOM, (cx - 9, cy - 2, 1, 2)),
+        InteractiveObject("corde_bois", "deco", "Corde de bois", ROOM, (cx + 3, cy - 3, 2, 1)),
         InteractiveObject("porte", "porte", "Arrêt d'autobus", ROOM, (cx, street_y, 1, 1), [(cx, sidewalk_y)]),
         InteractiveObject("boite_lettres", "deco", "Boîte aux lettres", ROOM, (cx + 2, sidewalk_y, 1, 1)),
     ]

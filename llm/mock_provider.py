@@ -106,6 +106,8 @@ REASONS: dict[str, list[str]] = {
     "sieste": ["Je suis brûlé.", "Une p'tite sieste s'impose."],
     "jaser": ["Ça fait longtemps qu'on s'est parlé.", "J'ai quelque chose à raconter."],
     "flaner": ["Je sais pas trop quoi faire.", "Je tourne en rond un peu."],
+    "couper": ["Faut du bois pour le feu.", "Chaque arbre, c'est de la place pour la maison."],
+    "veiller": ["Rien de mieux qu'un feu de camp.", "Une petite veillée sous les étoiles."],
 }
 
 

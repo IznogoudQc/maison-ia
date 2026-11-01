@@ -142,3 +142,116 @@ def test_sauvegarde_garde_les_arbres_coupes_et_refuse_un_autre_scenario(setup, t
     maison = Engine(maison_cfg, House(), family, SimClock(), random.Random(1), EventBus())
     with pytest.raises(ValueError, match="terrain"):
         maison.load_state(tmp_path / "save.json")
+
+
+# ---------------------------------------------------------------- C2 : tente, bois, veillées
+
+
+def free(engine, agent):
+    agent.action, agent.path = None, []
+    agent.away_until = agent.away_label = agent.away_kind = None
+    for need in ("hunger", "energy", "hygiene", "social", "fun"):
+        setattr(agent.needs, need, 80.0)
+
+
+def test_couper_propose_de_jour_quand_la_reserve_est_basse(setup):
+    engine, _ = setup
+    run_until(engine, 5 * DAY + parse_hhmm("10:00"))
+    maxime = engine.agent_by_id("maxime")
+    engine.economy.household.wood = 0
+    low = next(o for o in engine.options_for(maxime) if o.action == "couper")
+    engine.economy.household.wood = 20
+    high = next(o for o in engine.options_for(maxime) if o.action == "couper")
+    assert low.score > high.score
+    engine.economy.household.wood = 60
+    assert not any(o.action == "couper" for o in engine.options_for(maxime))
+
+
+def test_arbre_abattu_donne_des_buches_et_recule_la_lisiere(setup):
+    engine, events = setup
+    run_until(engine, 5 * DAY + parse_hhmm("10:00"))
+    maxime = engine.agent_by_id("maxime")
+    free(engine, maxime)
+    engine.economy.household.wood = 0
+    action = engine.make_action(maxime, "couper")
+    tree = engine.house.objects[action.target]
+    assert action.remaining == 60 or engine.economy.owns("scie")
+    maxime.pos = action.use_pos
+    action.started = True
+    maxime.action = action
+    for _ in range(action.remaining):
+        engine._progress(maxime, engine.clock.total_minutes)
+    assert action.target not in engine.house.objects
+    assert engine.economy.household.wood == {"Érable": 6, "Sapin": 5, "Bouleau": 4}[tree.label]
+    assert any(e.kind == "coupe" for e in events)
+    x, y = tree.rect[:2]
+    for nx, ny in ((x + 1, y), (x - 1, y), (x, y - 1)):
+        neighbor = engine.house.objects.get(f"arbre_{nx}_{ny}")
+        if neighbor is not None:
+            assert (x, y) in neighbor.use_positions  # on l'atteint maintenant par la case libérée
+
+
+def test_scie_a_chaine_coupe_plus_vite(setup):
+    engine, _ = setup
+    maxime = engine.agent_by_id("maxime")
+    free(engine, maxime)
+    by_hand = engine.make_action(maxime, "couper").remaining
+    engine.economy.household.purchases.append("scie")
+    assert engine.make_action(maxime, "couper").remaining < by_hand / 2
+
+
+def test_veillee_le_soir_brule_une_buche(setup):
+    engine, _ = setup
+    run_until(engine, 5 * DAY + parse_hhmm("14:00"))
+    camille = engine.agent_by_id("camille")
+    free(engine, camille)
+    engine.economy.household.wood = 3
+    assert not any(o.action == "veiller" for o in engine.options_for(camille))  # pas en plein jour
+    run_until(engine, 5 * DAY + parse_hhmm("20:00"))
+    free(engine, camille)
+    assert any(o.action == "veiller" for o in engine.options_for(camille))
+    engine.economy.household.wood = 0
+    assert not any(o.action == "veiller" for o in engine.options_for(camille))  # pas de bois, pas de feu
+    engine.economy.household.wood = 3
+    action = engine.make_action(camille, "veiller")
+    camille.pos, camille.action = action.use_pos, action
+    engine._progress(camille, engine.clock.total_minutes)
+    assert action.started and engine.economy.household.wood == 2
+
+
+def test_souper_froid_sans_bois(setup):
+    engine, _ = setup
+    camille = engine.agent_by_id("camille")
+    free(engine, camille)
+    engine.economy.household.wood = 0
+    action = engine.make_action(camille, "cuisiner")
+    camille.pos, camille.action = action.use_pos, action
+    engine._progress(camille, engine.clock.total_minutes)
+    assert camille.action is action  # on cuisine quand même...
+    assert "souper froid" in camille.memory.events[-1].text  # ... mais c'est froid
+
+
+def test_on_dort_moins_bien_sous_la_tente(setup):
+    engine, _ = setup
+    maxime = engine.agent_by_id("maxime")
+    maxime.needs.energy = 20
+    tent = engine.house.objects["tente"]
+    action = engine.make_action(maxime, "dormir", forced=True, until=engine.clock.total_minutes + 120)
+    maxime.pos, action.started, maxime.action = action.use_pos, True, action
+    for _ in range(60):
+        engine.clock.advance()
+        engine._update_agent(maxime)
+    assert tent.quality < 1
+    assert maxime.needs.energy < 20 + 12 - 1  # moins que les 12 points/h d'un vrai lit
+
+
+def test_la_maison_n_offre_ni_coupe_ni_scie():
+    config = load_config("config.yaml")
+    agents = [Agent(persona=p, pos=(0, 0)) for p in load_family(config.family_file)]
+    engine = Engine(config, House(), agents, SimClock(5, "10:00"), random.Random(1), EventBus())
+    engine.initialize()
+    engine.economy.household.money = 50_000
+    pere = engine.agent_by_id("pere")
+    options = engine.options_for(pere)
+    assert not any(o.action == "couper" for o in options)
+    assert not any(o.action == "acheter" and o.target == "scie" for o in options)

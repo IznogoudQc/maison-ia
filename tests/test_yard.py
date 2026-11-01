@@ -64,7 +64,7 @@ def test_achat_propose_seulement_avec_un_coussin():
     assert not any(o.action == "acheter" for o in eng.options_for(pere))
     eng.economy.household.money = 50_000.0
     offered = {o.target for o in eng.options_for(pere) if o.action == "acheter"}
-    assert offered == set(CATALOG)
+    assert offered == set(eng.house.layout.catalog)  # la scie à chaîne est réservée au terrain
     assert not any(o.action == "acheter" for o in eng.options_for(eng.agent_by_id("enfant")))
 
 

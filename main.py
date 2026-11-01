@@ -177,7 +177,8 @@ def main() -> None:
             tick_accumulator = min(tick_accumulator, 1.0)  # évite la spirale de rattrapage
         engine.poll()  # réponses LLM arrivées (non bloquant)
 
-        renderer.set_yard(engine.economy.household.lawn, engine.car_home())
+        renderer.set_yard(engine.economy.household.lawn, engine.car_home(), engine.economy.household.wood)
+        renderer.purchases = set(engine.economy.household.purchases)
         renderer.update_display(agents, dt)
         followed = engine.agent_by_id(selected_id) if follow and selected_id else None
         if followed is not None and not followed.is_away:
@@ -189,8 +190,12 @@ def main() -> None:
         selected = engine.agent_by_id(selected_id) if selected_id else None
         promises = [f"{p.text} ({engine.social.when_label(p.minute)})"
                     for p in engine.social.promises if p.status == "pending"]
+        extra = []
+        if house.layout.wild:
+            extra.append(f"Bois : {engine.economy.household.wood} bûches   "
+                         f"Arbres : {len(house.objects_of_kind('arbre'))}")
         hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label,
-                 engine.economy, engine.alive_count(), promises)
+                 engine.economy, engine.alive_count(), promises, extra)
         if engine.game_over:
             draw_game_over(screen, pygame.Rect(0, 0, map_w, map_h), clock)
         pygame.display.flip()

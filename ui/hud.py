@@ -36,7 +36,7 @@ class Hud:
     def draw(self, surface: pygame.Surface, clock: SimClock, speed: float, paused: bool,
              agents: list[Agent], selected: Agent | None, llm: LLMService | None = None,
              llm_label: str = "", economy: Economy | None = None, alive: int = 0,
-             promises: list[str] | None = None) -> None:
+             promises: list[str] | None = None, extra: list[str] | None = None) -> None:
         self.agents = agents
         pygame.draw.rect(surface, theme.PANEL, self.rect)
         pygame.draw.line(surface, theme.PANEL_BORDER, self.rect.topleft, self.rect.bottomleft, 2)
@@ -51,6 +51,9 @@ class Hud:
         y += 8
         if economy is not None and economy.enabled:
             y = self._draw_household(surface, x, y, economy, alive)
+        for line in extra or []:  # terrain : réserve de bois, arbres restants
+            surface.blit(theme.font(12).render(line, True, theme.TEXT_DIM), (x, y - 4))
+            y += 16
 
         controls_top = self.rect.bottom - 18 * len(CONTROLS) - 10
         if selected is None:

@@ -125,7 +125,9 @@ class Mind:
                 continue  # piscine pas encore achetée
             options.append(Option(action=definition.name, label=definition.label, score=0))
         if engine.economy.enabled:
-            if agent.persona.age >= 13 and engine.economy.owns("tondeuse"):
+            if engine.house.layout.wild and agent.persona.age >= 16:
+                options.append(Option(action="couper", label="coupe un arbre", score=0))
+            if not engine.house.layout.wild and agent.persona.age >= 13 and engine.economy.owns("tondeuse"):
                 options.append(Option(action="tondre", label="tond la pelouse", score=0))
             if agent.persona.is_adult:
                 options.append(Option(action="epicerie", label="va faire l'épicerie", score=0))

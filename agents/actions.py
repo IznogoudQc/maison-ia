@@ -43,6 +43,8 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
               daytime_only=True),
     ActionDef("balancoire", "se balance", "balancoire", 25, {"fun": 40}, allowed=("enfant",),
               daytime_only=True),
+    # Terrain : veillée autour du feu de camp (le soir, une bûche)
+    ActionDef("veiller", "veille autour du feu", "feu", 40, {"fun": 25, "social": 12}),
     # Actions imposées par l'horaire
     ActionDef("dejeuner", "déjeune", "table", 20, {"hunger": 45, "social": 5}, selectable=False),
     ActionDef("souper", "soupe en famille", "table", 35, {"hunger": 65, "social": 15}, selectable=False),
@@ -55,6 +57,8 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("heures_sup", "part faire des heures supplémentaires", "porte", 0, {}, selectable=False),
     ActionDef("acheter", "commande {target}", None, 10, {"fun": 10}, selectable=False),
     ActionDef("tondre", "tond la pelouse", None, 60, {"fun": -5, "energy": -4}, selectable=False),
+    ActionDef("couper", "coupe un {target}", "arbre", 60, {"energy": -12, "fun": -4, "hygiene": -8},
+              selectable=False, daytime_only=True),
 ]}
 
 DAYTIME_HOURS = (7 * 60, 21 * 60)  # activités extérieures
@@ -93,9 +97,15 @@ class Option(BaseModel):
     urgent: bool = False           # choisie d'office, sans demander au LLM (garde-manger vide...)
 
 
+# Cible par défaut quand elle n'est pas encore connue (plan du jour : « coupe un arbre »)
+DEFAULT_TARGETS = {"couper": "arbre"}
+
+
 def action_label(name: str, target_name: str | None = None) -> str:
     label = ACTIONS[name].label
-    return label.format(target=target_name or "?") if "{target}" in label else label
+    if "{target}" not in label:
+        return label
+    return label.format(target=target_name or DEFAULT_TARGETS.get(name, "?"))
 
 
 def score_action(action: ActionDef, needs: Needs, favorites: list[str]) -> float:

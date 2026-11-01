@@ -40,6 +40,16 @@ console et passe en mode mock.
   tente repose moins bien qu'un lit et le baril lave moins bien qu'une douche (qualité des objets).
   La même graine redonne la même forêt.
 
+**Vivre sur le terrain**
+- **Couper du bois** (adultes et ados de 16 ans et plus, de 8 h à 19 h) : l'arbre le plus proche qu'on
+  peut atteindre ; la forêt se coupe par la lisière. Un érable donne 6 bûches, un sapin 5, un
+  bouleau 4. L'option devient pressante quand la réserve passe sous 25 bûches et disparaît à 60
+  (corde pleine, visible près de la tente). La scie à chaîne (400 $) coupe deux fois plus vite.
+- **Feu de camp** : un souper sur le feu brûle une bûche (sans bois : souper froid) ; le soir, on
+  peut veiller autour du feu (une bûche, du plaisir et du social), et le feu éclaire la nuit.
+- **Sans toit** : la tente repose moins bien, le baril lave moins bien, et vivre sans maison use le
+  moral petit à petit. Les prompts savent qu'on vit encore sous la tente et combien de bois il reste.
+
 Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
 `uv run python main.py --nouveau`. Une sauvegarde d'un scénario n'est pas rechargée dans l'autre.
 

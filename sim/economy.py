@@ -34,6 +34,8 @@ CATALOG: dict[str, Purchase] = {p.id: p for p in [
              "baignades : gros plaisir en famille"),
     Purchase("auto", "une auto usagée", 5000, 60, "Essence et assurance auto",
              "retour du travail plus tôt, épicerie plus rapide et moins chère"),
+    Purchase("scie", "une scie à chaîne", 400, 5, "Essence de la scie à chaîne",
+             "coupe les arbres deux fois plus vite"),
 ]}
 
 
@@ -53,6 +55,7 @@ class Household(BaseModel):
     lawn: float = 20.0             # hauteur du gazon (0 = fraîchement tondu, 100 = jungle)
     last_lawn_day: int = -1
     last_fine_day: int = -100
+    wood: int = 0                  # bûches coupées sur le terrain (feu, puis construction)
     ledger: list[LedgerEntry] = Field(default_factory=list)
 
 

@@ -31,7 +31,8 @@ if TYPE_CHECKING:
     from sim.engine import Engine
 
 # Activités qu'on peut se promettre de faire ensemble (ou corvées qu'on promet de faire)
-PROMISABLE = ("tele", "lire", "jouer", "jaser", "baignade", "jardin", "balancoire", "tondre", "epicerie")
+PROMISABLE = ("tele", "lire", "jouer", "jaser", "baignade", "jardin", "balancoire", "tondre", "epicerie",
+              "veiller", "couper")
 TENSE_PAIR = 70.0          # au-delà, la paire se reparle moins souvent
 NOTE_FROM = 2.0            # variation de ressenti qui laisse une impression (note)
 KEPT_AFFECTION = 4.0
@@ -359,8 +360,10 @@ class Social:
     @staticmethod
     def _allowed(agent: Agent, action: str) -> bool:
         definition = ACTIONS[action]
-        if action in ("tondre",):
+        if action == "tondre":
             return agent.persona.age >= 13
+        if action == "couper":
+            return agent.persona.age >= 16
         if action == "epicerie":
             return agent.persona.is_adult
         return not ((definition.allowed and agent.id not in definition.allowed) or agent.id in definition.excluded)
