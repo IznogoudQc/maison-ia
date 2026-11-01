@@ -62,6 +62,19 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("construire", "travaille sur le chantier : {target}", None, 60,
               {"energy": -10, "fun": -2, "hygiene": -6}, selectable=False, daytime_only=True),
     ActionDef("engager", "appelle un entrepreneur pour : {target}", None, 10, {}, selectable=False),
+    # Objets du catalogue (data/catalogue.yaml) : proposés seulement une fois achetés
+    ActionDef("console", "joue à la console", "console", 40, {"fun": 45, "social": 5}),
+    ActionDef("piano", "joue du piano", "piano", 30, {"fun": 30, "energy": 2}),
+    ActionDef("trampoline", "saute sur le trampoline", "trampoline", 25, {"fun": 50, "energy": -6},
+              allowed=("enfant", "ado"), daytime_only=True),
+    ActionDef("hamac", "relaxe dans le hamac", "hamac", 40, {"energy": 12, "fun": 20}, daytime_only=True),
+    ActionDef("spa", "se prélasse dans le spa", "spa", 40, {"fun": 35, "hygiene": 10, "energy": 5}),
+    ActionDef("jardiner", "jardine au potager", "potager", 40, {"fun": 15, "hygiene": -5}, daytime_only=True,
+              excluded=("bebe",)),
+    ActionDef("poules", "s'occupe des poules", "poulailler", 20, {"fun": 10}, daytime_only=True,
+              excluded=("bebe",)),
+    ActionDef("acheter_objet", "commande {target}", None, 10, {"fun": 8}, selectable=False),
+    ActionDef("revendre", "revend {target}", None, 10, {"fun": -5}, selectable=False),
     # Bébé : boire, changer de couche, bercer (les parents s'en occupent)
     ActionDef("soigner", "s'occupe de {target}", None, 20, {"social": 10, "fun": 4, "energy": -3},
               selectable=False),
@@ -110,7 +123,7 @@ class Option(BaseModel):
 
 
 # Cible par défaut quand elle n'est pas encore connue (plan du jour : « coupe un arbre »)
-DEFAULT_TARGETS = {"couper": "arbre", "construire": "la maison", "engager": "la maison", "soigner": "bébé"}
+DEFAULT_TARGETS = {"acheter_objet": "un objet", "revendre": "un objet", "couper": "arbre", "construire": "la maison", "engager": "la maison", "soigner": "bébé"}
 
 
 def action_label(name: str, target_name: str | None = None) -> str:

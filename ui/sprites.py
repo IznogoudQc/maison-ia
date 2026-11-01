@@ -685,9 +685,66 @@ def draw_baby(surf: pygame.Surface, persona: Persona, center: tuple[int, int], s
         surf.set_at((cx + 1, cy - 3), (40, 30, 44))
 
 
-KIND_DRAWERS = {"berceau": _crib, "frigo": _fridge, "cuisiniere": _stove, "table": _table, "douche": _shower, "tele": _sofa,
+def _console(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, pygame.Rect(r.x + 3, r.y + 6, 10, 5), (40, 40, 48))
+    pygame.draw.circle(surf, (80, 200, 120), (r.x + 6, r.y + 8), 1)
+    pygame.draw.rect(surf, (230, 230, 236), (r.x + 9, r.y + 12, 5, 3))  # manette
+
+
+def _piano(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -4), (40, 28, 26))
+    keys = pygame.Rect(r.x + 2, r.bottom - 6, r.width - 4, 3)
+    pygame.draw.rect(surf, (245, 245, 240), keys)
+    for x in range(keys.x + 2, keys.right, 3):
+        surf.set_at((x, keys.y), (20, 20, 20))
+
+
+def _trampoline(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.ellipse(surf, (40, 110, 200), r.inflate(-2, -2))
+    pygame.draw.ellipse(surf, (20, 20, 26), r.inflate(-7, -7))
+
+
+def _hammock(surf: pygame.Surface, r: pygame.Rect) -> None:
+    for x in (r.x + 1, r.right - 3):
+        pygame.draw.rect(surf, (110, 80, 50), (x, r.y + 2, 2, r.height - 4))
+    pygame.draw.arc(surf, (210, 80, 60), pygame.Rect(r.x + 2, r.y - 2, r.width - 4, r.height), 3.4, 6.0, 3)
+
+
+def _spa(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -2), (150, 110, 80))
+    pygame.draw.rect(surf, (90, 180, 220), r.inflate(-6, -6))
+
+
+def _garden(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.rect(surf, (110, 80, 52), r.inflate(-2, -2))
+    for y in range(r.y + 4, r.bottom - 2, 5):
+        for x in range(r.x + 4, r.right - 2, 5):
+            pygame.draw.circle(surf, (70, 160, 70), (x, y), 2)
+            surf.set_at((x + 1, y - 1), (220, 60, 50))  # une tomate
+
+
+def _coop(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, pygame.Rect(r.x + 2, r.y + 2, r.width - 4, r.height // 2), (170, 60, 48))
+    pygame.draw.rect(surf, (210, 200, 180), (r.x + 2, r.centery, r.width - 4, r.height // 2 - 2), 1)
+    for x in (r.x + 7, r.x + 16, r.x + 23):
+        pygame.draw.circle(surf, (250, 248, 240), (x, r.bottom - 6), 2)
+
+
+def _solar(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -4), (40, 60, 110))
+    for x in range(r.x + 5, r.right - 2, 5):
+        pygame.draw.line(surf, (120, 150, 210), (x, r.y + 3), (x, r.bottom - 4))
+
+
+def _freezer(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -4), (232, 236, 240))
+    pygame.draw.line(surf, (160, 170, 180), (r.x + 4, r.centery), (r.right - 5, r.centery))
+
+
+KIND_DRAWERS = {"berceau": _crib, "console": _console, "piano": _piano, "trampoline": _trampoline,
+                "hamac": _hammock, "spa": _spa, "potager": _garden, "poulailler": _coop, "frigo": _fridge, "cuisiniere": _stove, "table": _table, "douche": _shower, "tele": _sofa,
                 "livres": _bookshelf, "ordi": _computer, "jouets": _toys}
-LABEL_DRAWERS = {"Comptoir": _counter, "Toilette": _toilet, "Télé": _tv, "Commode": _dresser, "Établi": _workbench}
+LABEL_DRAWERS = {"Panneaux": _solar, "Congélateur": _freezer, "Comptoir": _counter, "Toilette": _toilet, "Télé": _tv, "Commode": _dresser, "Établi": _workbench}
 
 
 def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:

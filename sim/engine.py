@@ -44,6 +44,7 @@ from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
 from sim.architect import Architect
 from sim.family import FamilyLife
+from sim.inventory import Inventory
 from sim.mind import Mind
 from sim.social import Social
 from sim.random_events import RandomEvents
@@ -130,6 +131,7 @@ class Engine:
         self.social = Social(self)
         self.architect = Architect(self)
         self.family = FamilyLife(self)
+        self.inventory = Inventory(self)
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
 
@@ -226,6 +228,15 @@ class Engine:
             target_name = f"{item.label} ({item.price:,.0f} $)".replace(",", " ")
         elif name == "tondre":
             use_pos = self.rng.choice(self.house.lawn_tiles())
+        elif name in ("acheter_objet", "revendre"):
+            if name == "acheter_objet":
+                item = self.inventory.catalogue.get((target or "").split("|")[0])
+                target_name = item.label if item else None
+            else:
+                owned = next((o for o in self.economy.household.items if str(o.uid) == target), None)
+                target_name = owned.label if owned else None
+            if target_name is None:
+                return None
         elif name == "soigner":
             baby = self.agent_by_id(target or "")
             if baby is None or baby.dead or baby.is_away:
@@ -364,7 +375,7 @@ class Engine:
         options = self._yard_options(agent) + self._wood_options(agent) + self._building_options(agent)
         if not agent.persona.is_adult:
             return options
-        options += self._purchase_options(agent)
+        options += self._purchase_options(agent) + self.inventory.options_for(agent)
         return options + self._money_options(agent)
 
     def _yard_options(self, agent: Agent) -> list[Option]:
@@ -660,6 +671,8 @@ class Engine:
         self.social.update()
         self.architect.update()
         self.family.update()
+        if self.economy.enabled:
+            self.inventory.update()
         self._detect_encounters()
 
     def _roll_events(self) -> None:
@@ -706,6 +719,9 @@ class Engine:
                 if project:
                     lines.append(project)
         lines += self.family.context_lines()
+        owned = self.inventory.context_line()
+        if owned:
+            lines.append(owned)
         departed = [a for a in self.agents if a.dead]
         if departed:
             names = ", ".join(f"{a.name} (jour {(a.died_minute or 0) // (24 * 60) + 1})" for a in departed)
@@ -948,6 +964,10 @@ class Engine:
             self.architect.work(agent, action.target, ACTIONS["construire"].duration / 60)
         elif action.name == "engager":
             self.architect.hire(agent, action.target)
+        elif action.name == "acheter_objet":
+            self.inventory.buy(agent, action.target)
+        elif action.name == "revendre":
+            self.inventory.sell(agent, action.target)
         elif action.name == "soigner":
             baby = self.agent_by_id(action.target or "")
             if baby is not None and not baby.dead:
@@ -1225,6 +1245,7 @@ class Engine:
                 # Remplacement en place : le moteur, le rendu et les bulles partagent cette liste
                 self.agents[index] = Agent.model_validate({**saved[agent.id], "persona": agent.persona})
         self.family.after_load()
+        self.inventory.restore()
         self.pending_decisions.clear()
         self.pending_dialogues.clear()
         self.pending_summaries.clear()

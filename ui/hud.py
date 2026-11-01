@@ -37,7 +37,7 @@ class Hud:
              agents: list[Agent], selected: Agent | None, llm: LLMService | None = None,
              llm_label: str = "", economy: Economy | None = None, alive: int = 0,
              promises: list[str] | None = None, extra: list[str] | None = None,
-             project: list[str] | None = None) -> None:
+             project: list[str] | None = None, possessions: list[str] | None = None) -> None:
         self.agents = agents
         pygame.draw.rect(surface, theme.PANEL, self.rect)
         pygame.draw.line(surface, theme.PANEL_BORDER, self.rect.topleft, self.rect.bottomleft, 2)
@@ -63,6 +63,8 @@ class Hud:
                 y = self._draw_promises(surface, x, y + 6, promises)
             if project:
                 y = self._draw_promises(surface, x, y + 6, project, "Maison", theme.TEXT_DIM)
+            if possessions:
+                y = self._draw_promises(surface, x, y + 6, possessions, "Objets", theme.TEXT_DIM)
             if economy is not None and economy.enabled:
                 self._draw_ledger(surface, x, y + 8, economy, controls_top - 8)
         else:

@@ -39,6 +39,27 @@ CATALOG: dict[str, Purchase] = {p.id: p for p in [
 ]}
 
 
+class OwnedItem(BaseModel):
+    """Objet du catalogue acheté et placé (data/catalogue.yaml)."""
+    uid: int
+    item_id: str
+    label: str
+    kind: str
+    room: str
+    rect: tuple[int, int, int, int]
+    uses: list[tuple[int, int]] = Field(default_factory=list)
+    quality: float = 1.0
+    weekly: float = 0.0
+    food: float = 0.0              # portions produites par jour (potager, poulailler)
+    hydro: float = 0.0             # $ économisés par semaine sur Hydro
+    discount: float = 0.0          # rabais sur l'épicerie
+    price: float = 0.0
+
+    @property
+    def object_id(self) -> str:
+        return f"objet_{self.uid}"
+
+
 class LedgerEntry(BaseModel):
     minute: int
     label: str
@@ -58,6 +79,10 @@ class Household(BaseModel):
     wood: int = 0                  # bûches coupées sur le terrain (feu, puis construction)
     building_permit: bool = False  # permis de construire payé (inspecteur municipal)
     gifted: list[str] = Field(default_factory=list)  # enfants déjà fêtés par la parenté (cadeau de naissance)
+    items: list[OwnedItem] = Field(default_factory=list)  # objets du catalogue achetés et placés
+    next_item_uid: int = 1
+    last_harvest_day: int = -1
+    last_item_day: int = -1          # un seul achat d'objet par jour (sauf un lit qui manque)
     ledger: list[LedgerEntry] = Field(default_factory=list)
 
 
@@ -88,7 +113,17 @@ class Economy:
             item = CATALOG.get(item_id)
             if item and item.weekly_cost:
                 items[item.weekly_label] = item.weekly_cost
+        for owned in self.household.items:
+            if owned.weekly:
+                label = f"Entretien : {owned.label}"
+                items[label] = items.get(label, 0) + owned.weekly
+            if owned.hydro:
+                label = "Économie d'Hydro (panneaux solaires)"
+                items[label] = items.get(label, 0) - owned.hydro
         return items
+
+    def grocery_discount(self) -> float:
+        return max((o.discount for o in self.household.items), default=0.0)
 
     def weekly_bills(self) -> float:
         return round(sum(self.weekly_bill_items().values()), 2)
@@ -156,7 +191,8 @@ class Economy:
 
     def buy_groceries(self, minute: int, alive: int, shopper: str, by_car: bool = False) -> tuple[int, float]:
         """Remplit le garde-manger pour grocery_days jours, dans la limite de l'argent disponible."""
-        price = round(self.portion_price() * (CAR_GROCERY_DISCOUNT if by_car else 1.0), 2)
+        price = round(self.portion_price() * (CAR_GROCERY_DISCOUNT if by_car else 1.0)
+                      * (1 - self.grocery_discount()), 2)
         wanted = alive * PORTIONS_PER_PERSON_DAY * self.config.grocery_days - self.household.pantry
         affordable = math.floor(max(0.0, self.household.money) / price)
         bought = max(0, min(math.ceil(wanted), affordable))

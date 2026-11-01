@@ -443,6 +443,63 @@ def _reachable(start: Pos, goal: Pos, room: PlannedRoom, blocked: set[Pos]) -> b
     return find_path(start, goal, lambda p: x0 <= p[0] <= x1 and y0 <= p[1] <= y1 and p not in blocked) is not None
 
 
+def place_in_room(house: House, name: str, rect: Rect, size: tuple[int, int], capacity: int,
+                  deco: bool) -> tuple[tuple[int, int, int, int], list[Pos]] | None:
+    """Place un objet acheté dans une pièce déjà meublée : (rect x, y, l, h ; cases d'usage) ou None.
+
+    Les meubles existants, les portes et l'accès à chaque case libre et à chaque meuble sont respectés.
+    """
+    room = PlannedRoom(id="achat", type="salon", name=name, rect=rect)
+    blocked = {t for t in room.interior_tiles() if t in house.blocked}
+    door_inside = {_inside_of(d, room) for d in house.doors} - {None}
+    others = [o for o in house.objects.values() if o.room == name]
+    entry = next(iter(door_inside), None) or next((t for t in room.interior_tiles() if t not in blocked), None)
+    if entry is None:
+        return None
+    item = Furniture("achat", "deco" if deco else "achat", "", size, capacity)
+    w, h = size
+    for x, y in _slots(room, item) + room.interior_tiles():
+        tiles = {(x + dx, y + dy) for dx in range(w) for dy in range(h)}
+        if any(not (rect[0] <= tx <= rect[2] and rect[1] <= ty <= rect[3]) for tx, ty in tiles):
+            continue
+        if tiles & blocked or tiles & door_inside or entry in tiles:
+            continue
+        trial = blocked | tiles
+        spots = [] if deco else _use_spots(tiles, room, trial, door_inside, capacity)
+        if not deco and not spots:
+            continue
+        uses = [s for o in others for s in o.use_positions] + spots
+        if not all(_reachable(entry, s, room, trial) for s in uses) or not _room_open(entry, room, trial):
+            continue
+        return (x, y, w, h), spots
+    return None
+
+
+def place_outside(house: House, size: tuple[int, int], capacity: int, deco: bool, center: Pos,
+                  radius: int = 16) -> tuple[tuple[int, int, int, int], list[Pos]] | None:
+    """Place un objet dehors, près de center, sur des cases libres, sans boucher un passage."""
+    w, h = size
+    reserved = {p for o in house.objects.values() for p in o.use_positions} | set(house.doors)
+    cx, cy = center
+    for x, y in sorted(((cx + dx, cy + dy) for dx in range(-radius, radius + 1) for dy in range(-radius, radius + 1)),
+                       key=lambda p: abs(p[0] - cx) + abs(p[1] - cy)):
+        tiles = [(x + dx, y + dy) for dx in range(w) for dy in range(h)]
+        ring = {(tx + ex, ty + ey) for tx, ty in tiles for ex in (-1, 0, 1) for ey in (-1, 0, 1)} - set(tiles)
+        if any(not house.is_walkable(t) or t in reserved or house.surface_at(t) for t in tiles):
+            continue
+        if any(house.is_wall(p) or p in house.doors for p in ring):
+            continue  # pas collé à un mur de la maison ni devant une porte
+        spots = [] if deco else [p for p in sorted(ring, key=lambda p: (p[1], p[0]))
+                                 if house.is_walkable(p) and p not in reserved][:capacity]
+        if not deco and not spots:
+            continue
+        if find_path(center, spots[0] if spots else next(iter(ring)),
+                     lambda p: house.is_walkable(p) and p not in tiles, max_nodes=4000) is None:
+            continue
+        return (x, y, w, h), spots
+    return None
+
+
 def compute_windows(house: House, plan: HousePlan) -> list[tuple[int, int, bool]]:
     """Fenêtres sur les murs extérieurs des pièces bâties (ni coin, ni porte, ni mur commun)."""
     built = plan.built()

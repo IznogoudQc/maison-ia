@@ -196,7 +196,8 @@ def main() -> None:
             extra.append(f"Bois : {engine.economy.household.wood} bûches   "
                          f"Arbres : {len(house.objects_of_kind('arbre'))}")
         hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label,
-                 engine.economy, engine.alive_count(), promises, extra, engine.architect.hud_lines())
+                 engine.economy, engine.alive_count(), promises, extra, engine.architect.hud_lines(),
+                 engine.inventory.hud_lines())
         if engine.game_over:
             draw_game_over(screen, pygame.Rect(0, 0, map_w, map_h), clock)
         pygame.display.flip()

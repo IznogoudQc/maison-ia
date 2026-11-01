@@ -135,6 +135,17 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
   du travail 30 minutes plus tôt et rend l'épicerie plus rapide et moins chère ; le BBQ remplace le
   souper la fin de semaine ; la piscine permet de se baigner.
 
+- **Bibliothèque d'objets** (`data/catalogue.yaml`, à enrichir) : lits en gammes (matelas, lit
+  simple, double, king), divans, bibliothèque, coffre à jouets, ordinateur, console, piano,
+  congélateur (épicerie 8 % moins chère), potager (2 portions par jour), poulailler (1,5 portion par
+  jour), trampoline, hamac, balançoire, spa, panneaux solaires (Hydro −30 $ par semaine). Chaque objet
+  a un prix, des frais hebdomadaires éventuels, une taille, une activité (avec une qualité qui la rend
+  plus ou moins efficace) et les pièces où il peut aller. Le moteur propose chaque jour quelques
+  achats pertinents (un lit en priorité pour qui dort sur un matelas, une gamme supérieure, un objet
+  utile) ; l'IA choisit, avec la pièce, et le moteur trouve la place exacte en gardant tout
+  accessible. Un objet de gamme supérieure remplace l'ancien (revendu 40 %) ; dans le rouge, on peut
+  revendre. Un achat d'objet par jour au plus (sauf un lit qui manque).
+
 Les prompts du LLM reçoivent l'état du ménage (argent, garde-manger, achats, chômage, santé,
 deuils, dernière nouvelle) : les dialogues en parlent naturellement.
 

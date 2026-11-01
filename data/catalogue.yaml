@@ -1,0 +1,56 @@
+# Bibliothèque d'objets que la famille peut acheter et placer (l'IA choisit quoi et dans quelle pièce,
+# le moteur trouve la place exacte).
+#
+# Champs :
+#   famille / niveau : gamme ; un objet peut être remplacé par un niveau supérieur de la même famille
+#   prix ($), hebdo ($ par semaine, ajoutés aux factures ; négatif = économie)
+#   taille [largeur, hauteur] en cases
+#   type : activité permise (lit = dormir, tele, livres, jouets, ordi, console, piano, trampoline, hamac,
+#          spa, potager, poulailler, balancoire ; deco = rien à faire, seulement l'effet)
+#   qualite : multiplie les gains de l'activité (1 = normal) ; places : personnes en même temps
+#   lieu : pièces possibles (chambre, cuisine, salle_de_bain, salon, bureau, atelier) ou exterieur
+#   effet : nourriture (portions par jour), hydro ($ économisés par semaine), epicerie (rabais, 0.08 = 8 %)
+
+objets:
+  - {id: matelas, label: un matelas, famille: lit, niveau: 1, prix: 120, taille: [1, 2], type: lit, qualite: 0.8,
+     places: 1, lieu: [chambre], utilite: "dormir par terre, mieux que la tente"}
+  - {id: lit_simple, label: un lit simple, famille: lit, niveau: 2, prix: 350, taille: [1, 2], type: lit,
+     qualite: 0.95, places: 1, lieu: [chambre], utilite: "un vrai lit pour une personne"}
+  - {id: lit_double, label: un lit double, famille: lit, niveau: 3, prix: 700, taille: [2, 2], type: lit,
+     qualite: 1.0, places: 2, lieu: [chambre], utilite: "un lit pour deux"}
+  - {id: lit_king, label: un lit king à mémoire de forme, famille: lit, niveau: 4, prix: 1600, taille: [2, 2],
+     type: lit, qualite: 1.2, places: 2, lieu: [chambre], utilite: "les meilleures nuits de leur vie"}
+
+  - {id: canape_usage, label: un divan usagé, famille: canape, niveau: 1, prix: 200, taille: [3, 1], type: tele,
+     qualite: 0.85, places: 2, lieu: [salon], utilite: "écouter la télé"}
+  - {id: canape_cuir, label: un sofa sectionnel en cuir, famille: canape, niveau: 2, prix: 1400, taille: [3, 1],
+     type: tele, qualite: 1.2, places: 3, lieu: [salon], utilite: "des soirées télé confortables"}
+
+  - {id: bibliotheque, label: une bibliothèque, prix: 250, taille: [1, 1], type: livres, places: 1,
+     lieu: [salon, bureau, chambre], utilite: "lire"}
+  - {id: coffre_jouets, label: un coffre à jouets, prix: 80, taille: [1, 1], type: jouets, places: 1,
+     lieu: [chambre, salon], utilite: "les enfants jouent aux Lego"}
+  - {id: ordinateur, label: un ordinateur, prix: 1200, taille: [1, 1], type: ordi, places: 1,
+     lieu: [bureau, chambre, salon], utilite: "jouer et naviguer"}
+  - {id: console, label: une console de jeux, prix: 500, taille: [1, 1], type: console, places: 2,
+     lieu: [salon], utilite: "jouer à deux, gros plaisir"}
+  - {id: piano, label: un piano droit, prix: 3000, taille: [2, 1], type: piano, places: 1, lieu: [salon],
+     utilite: "jouer de la musique, un plaisir calme"}
+  - {id: congelateur, label: un congélateur coffre, prix: 600, hebdo: 4, taille: [1, 1], type: deco,
+     lieu: [cuisine, atelier], effet: {epicerie: 0.08}, utilite: "épicerie en gros, 8 % moins chère"}
+
+  - {id: potager, label: un potager, prix: 150, taille: [2, 2], type: potager, places: 2, lieu: [exterieur],
+     effet: {nourriture: 2}, utilite: "des légumes : 2 portions par jour"}
+  - {id: poulailler, label: un poulailler avec quatre poules, prix: 400, hebdo: 8, taille: [2, 2],
+     type: poulailler, places: 1, lieu: [exterieur], effet: {nourriture: 1.5},
+     utilite: "des œufs frais : 1,5 portion par jour"}
+  - {id: trampoline, label: un trampoline, prix: 450, taille: [2, 2], type: trampoline, places: 2,
+     lieu: [exterieur], utilite: "les enfants sautent et rient"}
+  - {id: hamac, label: un hamac, prix: 120, taille: [2, 1], type: hamac, places: 1, lieu: [exterieur],
+     utilite: "relaxer et récupérer"}
+  - {id: balancoire, label: une balançoire, prix: 300, taille: [2, 1], type: balancoire, places: 1,
+     lieu: [exterieur], utilite: "se balancer (enfants)"}
+  - {id: spa, label: un spa, prix: 6000, hebdo: 25, taille: [2, 2], type: spa, places: 3, lieu: [exterieur],
+     utilite: "relaxer dans l'eau chaude"}
+  - {id: panneaux_solaires, label: des panneaux solaires, prix: 5000, taille: [2, 1], type: deco,
+     lieu: [exterieur], effet: {hydro: 30}, utilite: "la facture d'Hydro baisse de 30 $ par semaine"}

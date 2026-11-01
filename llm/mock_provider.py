@@ -109,6 +109,10 @@ REASONS: dict[str, list[str]] = {
     "couper": ["Faut du bois pour le feu.", "Chaque arbre, c'est de la place pour la maison."],
     "veiller": ["Rien de mieux qu'un feu de camp.", "Une petite veillée sous les étoiles."],
     "construire": ["Encore un mur et on y est.", "J'ai hâte de dormir au chaud."],
+    "acheter_objet": ["On le mérite bien.", "Ça va nous simplifier la vie."],
+    "revendre": ["Faut ce qu'il faut.", "On n'en avait pas tant besoin."],
+    "console": ["Une petite partie!", "Je vais battre mon record."],
+    "jardiner": ["Les tomates poussent bien.", "Rien de mieux que nos légumes."],
     "engager": ["On n'y arrivera jamais tout seuls.", "Ça va coûter cher, mais on va gagner des mois."],
 }
 
