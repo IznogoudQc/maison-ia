@@ -66,6 +66,11 @@ health:
   hospital_days: 3
   grief_days: 3
 
+events:
+  enabled: true               # mise à pied, facture imprévue, hausse de prix, prime...
+  check_time: "08:30"         # tirage quotidien
+  frequency: 1.0              # 0 = jamais, 2 = deux fois plus souvent
+
 family_file: data/family.yaml
 save_file: save.json
 log_dir: logs

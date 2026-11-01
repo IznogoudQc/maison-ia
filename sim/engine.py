@@ -36,6 +36,7 @@ from sim.clock import SimClock, parse_hhmm
 from sim.config import AppConfig
 from sim.economy import Economy, Household
 from sim.events import Event, EventBus
+from sim.random_events import RandomEvents
 from world.house import House, InteractiveObject
 from world.pathfinding import NEIGHBORS, manhattan
 
@@ -91,6 +92,8 @@ class Engine:
         # agent -> (future du résumé, nombre d'événements couverts)
         self.pending_summaries: dict[str, tuple[Future[StructuredResult[MemorySummary]], int]] = {}
         self.economy = Economy(config.economy)
+        self.random_events = RandomEvents(config.events)
+        self.last_event: tuple[str, bool, int] | None = None  # (texte, bonne nouvelle, minute)
         self.game_over = False
 
     # ------------------------------------------------------------------ utilitaires
@@ -241,8 +244,9 @@ class Engine:
             options.append(Option(action="epicerie", label=label, score=round(20 + (cfg.low_pantry_days - days) * 20, 2),
                                   urgent=days < 0.5))
         weekday = self.clock.weekday < 5
+        laid_off = agent.unemployed_until is not None
         if eco.household.money < cfg.overtime_below and agent.persona.salary_per_day > 0 and weekday \
-                and minute + cfg.overtime_minutes <= open_to:
+                and not laid_off and minute + cfg.overtime_minutes <= open_to:
             pay = self._overtime_pay(agent)
             label = f"part faire des heures supplémentaires (+{pay:.0f} $, {cfg.overtime_minutes // 60} h)"
             gap = (cfg.overtime_below - eco.household.money) / cfg.overtime_below
@@ -332,7 +336,8 @@ class Engine:
         top = options[:6]
         memories, summary = self.memories_for(agent)
         request = build_decision_request(agent, self.room_of(agent), self.clock.label(), top,
-                                         memories, summary, self.config.llm.max_tokens)
+                                         memories, summary, self.config.llm.max_tokens,
+                                         self.family_context([agent]), self._prompt_meta())
         names = {a.id: a.name for a in self.agents}
         fallback = ActionDecision(action=pick.action, target=pick.target, reason="")
         future = self.llm.try_submit(request, ActionDecision, fallback,
@@ -393,9 +398,51 @@ class Engine:
         self.clock.advance()
         if self.economy.bills_due(self.clock):
             self._charge_bills()
+        if self.economy.enabled and self.random_events.due(self.clock, self.economy.household):
+            self._roll_events()
         for agent in self.agents:
             self._update_agent(agent)
         self._detect_encounters()
+
+    def _roll_events(self) -> None:
+        for event, text in self.random_events.roll(self, self.rng):
+            self.last_event = (text, event.good, self.clock.total_minutes)
+            self.publish("evenement", id=event.id, text=text, good=event.good,
+                         money=self.economy.household.money)
+            prefix = "Bonne nouvelle : " if event.good else "Mauvaise nouvelle : "
+            for agent in self.agents:
+                if not agent.dead:
+                    self.remember(agent, prefix + text)
+
+    def family_context(self, agents: list[Agent]) -> str:
+        """Situation de la famille pour les prompts : argent, santé, chômage, deuils, dernière nouvelle."""
+        now = self.clock.total_minutes
+        lines = []
+        if self.economy.enabled:
+            lines.append(self.economy.summary(self.alive_count()) + ".")
+        departed = [a for a in self.agents if a.dead]
+        if departed:
+            names = ", ".join(f"{a.name} (jour {(a.died_minute or 0) // (24 * 60) + 1})" for a in departed)
+            lines.append(f"Membres de la famille décédés : {names}.")
+        for agent in agents:
+            if agent.grieving_until is not None:
+                lines.append(f"{agent.name} est en deuil.")
+            if agent.unemployed_until is not None and now < agent.unemployed_until:
+                days = -(-(agent.unemployed_until - now) // (24 * 60))
+                lines.append(f"{agent.name} est en mise à pied, sans salaire, encore {days} jour(s).")
+            if agent.health < 60:
+                lines.append(f"{agent.name} est en mauvaise santé ({agent.health:.0f}/100).")
+        if self.last_event and now - self.last_event[2] <= 2 * 24 * 60:
+            lines.append(f"Nouvelle récente : {self.last_event[0]}")
+        return "\n".join(lines)
+
+    def _prompt_meta(self) -> dict:
+        """Données structurées de la situation, utilisées par le provider mock."""
+        return {
+            "money": self.economy.household.money if self.economy.enabled else None,
+            "pantry_days": self.economy.pantry_days(self.alive_count()) if self.economy.enabled else None,
+            "departed": [a.name for a in self.agents if a.dead],
+        }
 
     def _charge_bills(self) -> None:
         total = self.economy.charge_bills(self.clock)
@@ -449,7 +496,8 @@ class Engine:
         for agent in group:
             memories[agent.id], summaries[agent.id] = self.memories_for(agent)
         request = build_dialogue_request(group, room, self.clock.label(), memories, summaries,
-                                         self.config.llm.max_tokens)
+                                         self.config.llm.max_tokens, self.family_context(group),
+                                         self._prompt_meta())
         names = {a.id: a.name for a in group}
         future = self.llm.try_submit(request, Dialogue, None, lambda d: validate_dialogue(d, names))
         if future is None:
@@ -491,6 +539,9 @@ class Engine:
         now = self.clock.total_minutes
         if agent.grieving_until is not None and now >= agent.grieving_until:
             agent.grieving_until = None
+        if agent.unemployed_until is not None and now >= agent.unemployed_until:
+            agent.unemployed_until = None
+            self.remember(agent, "La mise à pied est finie : retour au travail.")
         if self._update_health(agent, minutes):
             return  # vient de mourir ou d'être hospitalisé
 

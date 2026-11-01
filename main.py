@@ -20,7 +20,7 @@ from sim.engine import Engine
 from sim.events import EventBus
 from sim.journal import JsonlJournal
 from ui import theme
-from ui.dialogue_box import DialogueBox
+from ui.dialogue_box import NEWS_KINDS, DialogueBox
 from ui.hud import Hud, draw_game_over
 from ui.renderer import Renderer
 from world.house import House
@@ -75,6 +75,8 @@ def main() -> None:
     hud = Hud(pygame.Rect(map_w, 0, config.display.hud_width, map_h))
     dialogue_box = DialogueBox(renderer, agents, config.dialogue.line_display_s, config.dialogue.history_size)
     bus.subscribe("dialogue", dialogue_box.on_dialogue)
+    for kind in NEWS_KINDS:
+        bus.subscribe(kind, dialogue_box.on_news)
     journal = JsonlJournal(config.log_dir, clock)
     journal.attach(bus)
     frame_clock = pygame.time.Clock()

@@ -112,7 +112,8 @@ def memory_block(memories: list[str], summary: str | None = None) -> str:
 
 
 def build_decision_request(agent: Agent, room: str, time_label: str, options: list[Option],
-                           memories: list[str], summary: str | None, max_tokens: int) -> LLMRequest:
+                           memories: list[str], summary: str | None, max_tokens: int,
+                           context: str = "", extra_meta: dict | None = None) -> LLMRequest:
     system = (
         "Tu incarnes un membre d'une famille québécoise dans une simulation de vie quotidienne. "
         "Tu choisis sa prochaine activité parmi une liste d'options, en restant fidèle à sa personnalité, "
@@ -126,7 +127,8 @@ def build_decision_request(agent: Agent, room: str, time_label: str, options: li
         f"PERSONNAGE\n{persona_block(agent)}\n\n"
         f"SITUATION\nMoment : {time_label}. Pièce : {room}.\n"
         f"Humeur : {agent.mood}.\nBesoins : {agent.needs.describe()}.\n\n"
-        f"MÉMOIRE\n{memory_block(memories, summary)}\n\n"
+        + (f"FAMILLE\n{context}\n\n" if context else "")
+        + f"MÉMOIRE\n{memory_block(memories, summary)}\n\n"
         f"OPTIONS POSSIBLES\n{option_lines}\n\n"
         "Choisis UNE option. Format exact :\n"
         '{"action": "<action>", "target": "<target ou null>", '
@@ -136,18 +138,21 @@ def build_decision_request(agent: Agent, room: str, time_label: str, options: li
         "agent_id": agent.id,
         "name": agent.name,
         "options": [o.model_dump() for o in options],
+        **(extra_meta or {}),
     }
     return LLMRequest(kind="decision", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
 
 
 def build_dialogue_request(participants: list[Agent], room: str, time_label: str,
                            memories: dict[str, list[str]], summaries: dict[str, str | None],
-                           max_tokens: int) -> LLMRequest:
+                           max_tokens: int, context: str = "", extra_meta: dict | None = None) -> LLMRequest:
     system = (
         "Tu écris des dialogues pour une simulation de la vie d'une famille de Québec. "
         "Les répliques sont en français québécois naturel et familier (expressions d'ici, pas de France), "
         "courtes, crédibles, cohérentes avec chaque personnalité, l'heure, la pièce, l'humeur "
-        "et les souvenirs récents. Pas de narration, seulement des répliques. " + JSON_RULE
+        "et les souvenirs récents. La situation de la famille (argent, épicerie, chômage, santé, deuil) "
+        "teinte naturellement les échanges quand c'est pertinent, avec tact pour les deuils. "
+        "Pas de narration, seulement des répliques. " + JSON_RULE
     )
     blocks = []
     ids = {a.id for a in participants}
@@ -166,6 +171,7 @@ def build_dialogue_request(participants: list[Agent], room: str, time_label: str
     names = ", ".join(a.name for a in participants)
     prompt = (
         f"Moment : {time_label}. Pièce : {room}. Personnes présentes : {names}.\n\n"
+        + (f"SITUATION DE LA FAMILLE\n{context}\n\n" if context else "")
         + "\n\n".join(blocks)
         + "\n\nÉcris une courte conversation spontanée (2 à 6 répliques) entre ces personnes. "
         "Chaque réplique fait au plus 25 mots. Le champ speaker contient exactement un des prénoms. "
@@ -174,6 +180,7 @@ def build_dialogue_request(participants: list[Agent], room: str, time_label: str
     meta = {
         "room": room,
         "participants": [{"id": a.id, "name": a.name, "role": a.persona.role} for a in participants],
+        **(extra_meta or {}),
     }
     return LLMRequest(kind="dialogue", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
 

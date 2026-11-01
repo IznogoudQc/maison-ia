@@ -14,6 +14,12 @@ from ui.renderer import Renderer
 
 BUBBLE_MAX_WIDTH = 230
 MAX_ACTIVE_CONVERSATIONS = 3
+NEWS_KINDS = ("evenement", "deces", "hopital", "factures", "frigo_vide", "achat")
+TOAST_SECONDS = 6.0
+MAX_TOASTS = 3
+GOOD = (40, 130, 70)
+BAD = (160, 50, 50)
+NEUTRAL = (70, 70, 110)
 
 
 def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
@@ -65,6 +71,37 @@ class DialogueBox:
     active: list[Conversation] = field(default_factory=list)
     history: deque[HistoryEntry] = field(default_factory=deque)
     scroll: int = 0  # lignes remontées dans l'historique
+    toasts: list[list] = field(default_factory=list)  # [texte, couleur, secondes restantes]
+    _last_empty_fridge_day: int = -1
+
+    def on_news(self, event: Event) -> None:
+        """Bannière en haut de la carte + ligne dans l'historique pour les nouvelles de la famille."""
+        data = event.data
+        if event.kind == "evenement":
+            text, color = data["text"], GOOD if data["good"] else BAD
+        elif event.kind == "deces":
+            text, color = f"Décès : {data['name']} ({data['cause']})", BAD
+        elif event.kind == "hopital":
+            text, color = f"Hôpital : {data['name']} y passera quelques jours", BAD
+        elif event.kind == "factures":
+            text, color = f"Factures de la semaine : {data['amount']:,.0f} $".replace(",", " "), NEUTRAL
+        elif event.kind == "frigo_vide":
+            day = event.minute // (24 * 60)
+            if day == self._last_empty_fridge_day:
+                return  # une seule alerte par jour
+            self._last_empty_fridge_day = day
+            text, color = "Le frigo est vide !", BAD
+        elif event.kind == "achat":
+            text, color = data["text"], GOOD
+        else:
+            return
+        self.toasts.append([text, color, TOAST_SECONDS])
+        del self.toasts[:-MAX_TOASTS]
+        minute = event.minute % (24 * 60)
+        self.history.append(HistoryEntry(f"{minute // 60:02d}:{minute % 60:02d}", "Famille", "Nouvelle",
+                                         text, color))
+        while len(self.history) > self.history_size:
+            self.history.popleft()
 
     def on_dialogue(self, event: Event) -> None:
         by_name = {a.name: a for a in self.agents}
@@ -84,6 +121,9 @@ class DialogueBox:
             self.history.popleft()
 
     def update(self, dt: float) -> None:
+        for toast in self.toasts:
+            toast[2] -= dt
+        self.toasts = [t for t in self.toasts if t[2] > 0]
         for conv in list(self.active):
             conv.elapsed += dt
             if conv.elapsed >= self.line_display_s:
@@ -107,8 +147,24 @@ class DialogueBox:
             agent = next((a for a in self.agents if a.id == speaker_id), None)
             if agent is not None and agent.is_available:
                 self._draw_bubble(surface, agent, text)
+        self._draw_toasts(surface)
         if self.show_history:
             self._draw_history(surface)
+
+    def _draw_toasts(self, surface: pygame.Surface) -> None:
+        font = theme.font(15, bold=True)
+        y = 12
+        for text, color, remaining in self.toasts:
+            image = font.render(text, True, (250, 250, 250))
+            box = image.get_rect().inflate(28, 12)
+            box.midtop = (self.renderer.size[0] // 2, y)
+            panel = pygame.Surface(box.size, pygame.SRCALPHA)
+            alpha = int(225 * min(1.0, remaining / 0.6))  # fondu de sortie
+            panel.fill((*color, alpha))
+            surface.blit(panel, box.topleft)
+            pygame.draw.rect(surface, (250, 250, 250), box, 1, border_radius=4)
+            surface.blit(image, image.get_rect(center=box.center))
+            y = box.bottom + 6
 
     def _draw_bubble(self, surface: pygame.Surface, agent: Agent, text: str) -> None:
         font = theme.font(13)

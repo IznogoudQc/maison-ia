@@ -88,6 +88,12 @@ class HealthConfig(BaseModel):
     grief_days: int = 3
 
 
+class EventsConfig(BaseModel):
+    enabled: bool = True
+    check_time: str = "08:30"           # tirage quotidien des événements
+    frequency: float = 1.0              # multiplicateur des probabilités (0 = jamais, 2 = deux fois plus)
+
+
 class AppConfig(BaseModel):
     sim: SimConfig = Field(default_factory=SimConfig)
     display: DisplayConfig = Field(default_factory=DisplayConfig)
@@ -96,6 +102,7 @@ class AppConfig(BaseModel):
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     economy: EconomyConfig = Field(default_factory=EconomyConfig)
     health: HealthConfig = Field(default_factory=HealthConfig)
+    events: EventsConfig = Field(default_factory=EventsConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"

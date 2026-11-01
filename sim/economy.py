@@ -24,6 +24,8 @@ class Household(BaseModel):
     money: float = 0.0
     pantry: float = 0.0            # portions de nourriture
     last_bills_day: int = -1
+    last_events_day: int = -1      # dernier jour où les événements aléatoires ont été tirés
+    price_factor: float = 1.0      # inflation de l'épicerie (événements)
     ledger: list[LedgerEntry] = Field(default_factory=list)
 
 
@@ -85,7 +87,7 @@ class Economy:
         return self.household.pantry / max(1.0, alive * PORTIONS_PER_PERSON_DAY)
 
     def portion_price(self) -> float:
-        return self.config.portion_price
+        return round(self.config.portion_price * self.household.price_factor, 2)
 
     def buy_groceries(self, minute: int, alive: int, shopper: str) -> tuple[int, float]:
         """Remplit le garde-manger pour grocery_days jours, dans la limite de l'argent disponible."""

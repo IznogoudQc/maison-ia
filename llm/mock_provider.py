@@ -80,7 +80,22 @@ ROOM_OPENERS: dict[str, list[str]] = {
     "Salle de bain": ["Ça fait vingt minutes que t'es là!", "Quelqu'un a pris ma brosse à cheveux?"],
 }
 
+MONEY_OPENERS: dict[str, list[str]] = {
+    "pere": ["Bon, va falloir se serrer la ceinture.", "J'ai regardé le compte... Kraft Dinner toute la semaine."],
+    "mere": ["On est dans le rouge, faut couper quelque part.", "J'ai refait le budget trois fois, ça balance pas."],
+    "ado": ["Genre, on est pauvres maintenant?", "Je pourrais me trouver une job au dépanneur."],
+    "enfant": ["Pourquoi on achète plus les céréales avec des guimauves?", "Est-ce qu'on va devoir vendre la télé?"],
+}
+GRIEF_OPENERS: dict[str, list[str]] = {
+    "pere": ["C'est tranquille, la maison, sans {absent}."],
+    "mere": ["{absent} me manque tellement."],
+    "ado": ["J'arrête pas de penser à {absent}."],
+    "enfant": ["Est-ce que {absent} peut nous voir d'en haut?"],
+}
+
 REASONS: dict[str, list[str]] = {
+    "epicerie": ["Le frigo est presque vide.", "Faut bien nourrir la gang."],
+    "heures_sup": ["On a besoin de cash.", "Quelques heures de plus, ça va aider le budget."],
     "collation": ["J'ai un p'tit creux.", "Mon ventre gargouille."],
     "douche": ["Je me sens pas frais.", "Une douche, ça va me réveiller."],
     "tele": ["J'ai le goût de relaxer devant la télé.", "Il y a peut-être une game."],
@@ -139,11 +154,21 @@ class MockProvider(LLMProvider):
         self.rng.shuffle(order)
         first, second = order[0], order[1]
 
+        departed = request.meta.get("departed") or []
+        money = request.meta.get("money")
+        pantry_days = request.meta.get("pantry_days")
+        broke = (money is not None and money < 200) or (pantry_days is not None and pantry_days < 1)
+
         def opener(speaker: dict, other: dict) -> str:
             pool = OPENERS.get(speaker["id"], ["Salut {other}."])
-            if room in ROOM_OPENERS and self.rng.random() < 0.35:
+            if departed and self.rng.random() < 0.5:
+                pool = GRIEF_OPENERS.get(speaker["id"], ["{absent} me manque."])
+            elif broke and self.rng.random() < 0.6:
+                pool = MONEY_OPENERS.get(speaker["id"], ["L'argent manque."])
+            elif room in ROOM_OPENERS and self.rng.random() < 0.35:
                 pool = ROOM_OPENERS[room]
-            return self.rng.choice(pool).format(other=other["name"])
+            absent = self.rng.choice(departed) if departed else ""
+            return self.rng.choice(pool).format(other=other["name"], absent=absent)
 
         def reply(speaker: dict) -> str:
             return self.rng.choice(REPLIES.get(speaker["id"], ["Ah oui?"]))

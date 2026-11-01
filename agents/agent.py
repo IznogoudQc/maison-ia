@@ -48,6 +48,7 @@ class Agent(BaseModel):
     dead: bool = False
     died_minute: int | None = None
     grieving_until: int | None = None  # minute absolue de fin du deuil
+    unemployed_until: int | None = None  # mise à pied jusqu'à cette minute absolue
     fired: dict[str, int] = Field(default_factory=dict)  # tâche d'horaire -> dernier jour exécuté
     last_decision_minute: int = -10**9   # dernière décision demandée au LLM
     memory: Memory = Field(default_factory=Memory)
