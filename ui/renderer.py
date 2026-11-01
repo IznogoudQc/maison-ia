@@ -469,6 +469,12 @@ class Renderer:
 
     def _draw_agent(self, low: pygame.Surface, agent: Agent) -> tuple[Agent, int, int]:
         pose = self._pose(agent)
+        if agent.persona.stage == "bebe":
+            crib = self.house.objects.get(agent.bed_id)
+            cx, cy = ((crib.rect[0] * TILE + TILE // 2, crib.rect[1] * TILE + TILE // 2) if crib is not None
+                      else (round(agent.pos[0] * TILE + TILE / 2), round(agent.pos[1] * TILE + TILE / 2)))
+            sprites.draw_baby(low, agent.persona, (cx, cy), agent.is_sleeping)
+            return agent, cx, cy - 6
         if pose == "lying" and agent.bed_id == "tente":
             hx, hy = self._head_low_pos(agent)
             return agent, round(hx), round(hy) - 6  # dans la tente : on ne voit que les « z z »

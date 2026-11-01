@@ -105,6 +105,17 @@ world:
       Assurances: 15
     instant_build: false      # essai : une pièce du plan se bâtit dès que son emplacement est défriché
 
+life:                         # scénario terrain : vieillir, avoir des enfants, les voir grandir
+  enabled: true
+  days_per_year: 7            # un an passe en 7 jours simulés
+  pregnancy_days: 5           # 9 mois
+  min_happiness: 60           # bonheur moyen des deux (besoins et santé) pour parler d'un bébé
+  min_affection: 70           # affection mutuelle minimale
+  talk_every_days: 7          # au plus une discussion « bébé » par semaine
+  max_children: 4
+  parental_leave_years: 1     # congé parental (RQAP) : 70 % du salaire
+  daycare_fee: 9              # garderie, par jour (de 1 à 4 ans)
+
 family_file: data/family.yaml
 save_file: save.json
 log_dir: logs

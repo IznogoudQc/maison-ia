@@ -113,6 +113,21 @@ class EventsConfig(BaseModel):
     frequency: float = 1.0              # multiplicateur des probabilités (0 = jamais, 2 = deux fois plus)
 
 
+class LifeConfig(BaseModel):
+    """Vie de famille (scénario terrain) : vieillir, avoir des enfants, les voir grandir."""
+    enabled: bool = True
+    days_per_year: float = 7.0          # un an passe en N jours simulés
+    pregnancy_days: float = 5.0         # 9 mois ≈ 0,75 an
+    conception_days: tuple[float, float] = (1.0, 4.0)  # délai entre « on essaie » et la grossesse
+    min_happiness: float = 60.0         # bonheur moyen (besoins et santé) des deux pour en parler
+    min_affection: float = 70.0         # affection mutuelle minimale
+    talk_every_days: int = 7            # au plus une discussion « bébé » par semaine
+    max_children: int = 4
+    parental_leave_years: float = 1.0   # congé parental (RQAP) pendant la première année
+    leave_pay_rate: float = 0.7         # prestations : 70 % du salaire
+    daycare_fee: float = 9.0            # garderie subventionnée, par jour
+
+
 class TerrainConfig(BaseModel):
     """Scénario « terrain » : un couple, une tente et un lot boisé à bâtir."""
     width: int = 120
@@ -144,6 +159,7 @@ class AppConfig(BaseModel):
     events: EventsConfig = Field(default_factory=EventsConfig)
     mind: MindConfig = Field(default_factory=MindConfig)
     world: WorldConfig = Field(default_factory=WorldConfig)
+    life: LifeConfig = Field(default_factory=LifeConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"

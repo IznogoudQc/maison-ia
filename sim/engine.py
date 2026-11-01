@@ -21,7 +21,7 @@ from agents.actions import (
 )
 from agents.agent import ActiveAction, Agent
 from agents.memory import keywords
-from agents.needs import Needs
+from agents.needs import NEED_LOW_WORDS, Needs
 from agents.scheduler import Scheduler
 from llm.prompts import (
     ActionDecision,
@@ -39,6 +39,7 @@ from sim.config import AppConfig
 from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
 from sim.architect import Architect
+from sim.family import FamilyLife
 from sim.mind import Mind
 from sim.social import Social
 from sim.random_events import RandomEvents
@@ -123,6 +124,7 @@ class Engine:
         self.mind = Mind(self)
         self.social = Social(self)
         self.architect = Architect(self)
+        self.family = FamilyLife(self)
 
     # ------------------------------------------------------------------ utilitaires
 
@@ -182,6 +184,7 @@ class Engine:
                     action.started = True
                     agent.action = action
             agent.last_room = self.house.room_at(agent.pos)
+        self.family.initialize()
 
     # ------------------------------------------------------------------ actions
 
@@ -216,6 +219,22 @@ class Engine:
             target_name = f"{item.label} ({item.price:,.0f} $)".replace(",", " ")
         elif name == "tondre":
             use_pos = self.rng.choice(self.house.lawn_tiles())
+        elif name == "soigner":
+            baby = self.agent_by_id(target or "")
+            if baby is None or baby.dead or baby.is_away:
+                return None
+            target_name = baby.name
+            crib = self.house.objects.get(baby.bed or "")
+            occupied = self._occupied(agent)
+            spots = [p for p in (crib.use_positions if crib else []) if p not in occupied]
+            if not spots:  # place devant le berceau prise : n'importe quelle case libre tout près
+                bx, by = baby.pos
+                spots = sorted((p for p in ((bx + dx, by + dy) for dx in range(-2, 3) for dy in range(-2, 3))
+                                if self.house.is_walkable(p) and p not in occupied),
+                               key=lambda p: manhattan(p, baby.pos))
+            use_pos = spots[0] if spots else None
+            if use_pos is None:
+                return None
         elif name in ("construire", "engager"):
             room = self.architect.plan.room(target or "") if self.architect.plan else None
             if room is None:
@@ -296,7 +315,7 @@ class Engine:
         room = self.room_of(agent)
         options: list[Option] = []
         for definition in ACTIONS.values():
-            if not definition.selectable or not is_allowed(definition, agent.id, agent.needs):
+            if not definition.selectable or not is_allowed(definition, agent.persona.keys, agent.needs):
                 continue
             if definition.daytime_only and not DAYTIME_HOURS[0] <= self.clock.minute_of_day < DAYTIME_HOURS[1]:
                 continue
@@ -322,7 +341,7 @@ class Engine:
             if definition.name == "flaner":
                 score = max(score, 0.5)
             options.append(Option(action=definition.name, label=definition.label, score=score))
-        options += self._economic_options(agent)
+        options += self._economic_options(agent) + self._care_options(agent)
         self.mind.boost(agent, options)
         options.sort(key=lambda o: (o.urgent, o.score), reverse=True)
         return options
@@ -353,11 +372,27 @@ class Engine:
             return [Option(action="tondre", label=f"tond la pelouse (gazon à {lawn:.0f} %)", score=score)]
         return []
 
+    def _care_options(self, agent: Agent) -> list[Option]:
+        """S'occuper d'un bébé (dès 13 ans) : d'autant plus pressant que son besoin est bas."""
+        if agent.persona.age < 13:
+            return []
+        options = []
+        # Un parent affamé ou épuisé se soigne d'abord (sinon il tomberait avant le bébé)
+        self_first = agent.needs.lowest()[1] < URGENT_THRESHOLD
+        for baby, need, value in self.family.babies_needing_care():
+            if value >= 70:
+                continue
+            label = f"s'occupe de {baby.name} ({NEED_LOW_WORDS[need]})"
+            options.append(Option(action="soigner", target=baby.id, label=label,
+                                  score=round(5 + (100 - value) / 3, 2),
+                                  urgent=value < URGENT_THRESHOLD + 5 and not self_first))
+        return options
+
     def _wood_options(self, agent: Agent) -> list[Option]:
         """Terrain : couper du bois (dès 16 ans, de jour), d'autant plus pressant que la réserve est basse."""
         wood = self.economy.household.wood
         minute = self.clock.minute_of_day
-        if not self.house.layout.wild or agent.persona.age < 16:
+        if not self.house.layout.wild or agent.persona.age < 16 or not self.family.heavy_work_ok(agent):
             return []
         if not CUT_HOURS[0] <= minute < CUT_HOURS[1] or not self.house.objects_of_kind("arbre"):
             return []
@@ -380,7 +415,7 @@ class Engine:
         architect = self.architect
         room = architect.site_room() if architect.active else None
         minute = self.clock.minute_of_day
-        if room is None or room.contractor or agent.persona.age < 16:
+        if room is None or room.contractor or agent.persona.age < 16 or not self.family.heavy_work_ok(agent):
             return []
         options: list[Option] = []
         name = room.name.lower()
@@ -564,6 +599,7 @@ class Engine:
         self.mind.poll()
         self.social.poll()
         self.architect.poll()
+        self.family.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -615,6 +651,7 @@ class Engine:
             self._update_agent(agent)
         self.social.update()
         self.architect.update()
+        self.family.update()
         self._detect_encounters()
 
     def _roll_events(self) -> None:
@@ -635,6 +672,7 @@ class Engine:
                 project = self.architect.context_line()
                 if project:
                     lines.append(project)
+        lines += self.family.context_lines()
         departed = [a for a in self.agents if a.dead]
         if departed:
             names = ", ".join(f"{a.name} (jour {(a.died_minute or 0) // (24 * 60) + 1})" for a in departed)
@@ -782,6 +820,9 @@ class Engine:
             if now >= (agent.away_until or 0):
                 self._return_home(agent)
             return
+        if agent.persona.stage == "bebe" and self.family.active:
+            self.family.update_baby(agent)  # dort, part à la garderie (porté), attend les soins
+            return
 
         agent.needs.decay(minutes, "sleeping" if agent.is_sleeping else "awake")
         if agent.is_sleeping:
@@ -874,6 +915,11 @@ class Engine:
             self.architect.work(agent, action.target, ACTIONS["construire"].duration / 60)
         elif action.name == "engager":
             self.architect.hire(agent, action.target)
+        elif action.name == "soigner":
+            baby = self.agent_by_id(action.target or "")
+            if baby is not None and not baby.dead:
+                baby.needs.apply({"hunger": 45, "hygiene": 40, "social": 35, "fun": 30})
+                self.remember(agent, f"J'ai pris soin de {baby.name} : biberon, couche, câlins.", 2)
         elif action.name == "tondre":
             self.economy.household.lawn = 0.0
             self.remember(agent, "J'ai tondu la pelouse. Ça sent l'été.", 2)
@@ -1049,6 +1095,8 @@ class Engine:
             agent.away_label = action.target or "travail"
             agent.away_kind = "travail" if salary > 0 else "ecole"
             agent.away_pay = salary
+            if agent.away_label == "garderie" and self.economy.enabled:
+                self.economy.transaction(now, f"Garderie ({agent.name})", -self.config.life.daycare_fee)
             # Le lunch vient du garde-manger ; sans lunch, on rentre affamé
             if self.economy.enabled and not self.economy.consume(self.economy.config.meal_portions):
                 agent.needs.apply({"hunger": -25})
@@ -1103,6 +1151,7 @@ class Engine:
             "social": self.social.to_dict(),
             "world": {"scenario": self.house.layout.name, "removed": sorted(self.house.removed)},
             "construction": self.architect.to_dict(),
+            "family": self.family.to_dict(),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -1129,11 +1178,13 @@ class Engine:
         for item_id in self.economy.household.purchases:
             if item_id in self.house.purchase_objects:
                 self.house.add_object(self.house.purchase_objects[item_id])
+        self.family.load_dict(data.get("family"))  # recrée d'abord les enfants nés dans la partie
         saved = data.get("agents", {})
         for index, agent in enumerate(self.agents):
             if agent.id in saved:
                 # Remplacement en place : le moteur, le rendu et les bulles partagent cette liste
                 self.agents[index] = Agent.model_validate({**saved[agent.id], "persona": agent.persona})
+        self.family.after_load()
         self.pending_decisions.clear()
         self.pending_dialogues.clear()
         self.pending_summaries.clear()

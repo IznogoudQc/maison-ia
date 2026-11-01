@@ -11,7 +11,7 @@ from concurrent.futures import Future
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from agents.actions import ACTIONS, DAYTIME_HOURS, URGENT_THRESHOLD
+from agents.actions import ACTIONS, DAYTIME_HOURS, URGENT_THRESHOLD, allowed_for
 from agents.social import Promise
 from llm.mind_prompts import in_slots
 from llm.service import StructuredResult
@@ -370,7 +370,7 @@ class Social:
             return agent.persona.age >= 16
         if action == "epicerie":
             return agent.persona.is_adult
-        return not ((definition.allowed and agent.id not in definition.allowed) or agent.id in definition.excluded)
+        return allowed_for(definition, agent.persona.keys)
 
     def when_label(self, minute: int) -> str:
         clock = self.engine.clock

@@ -46,16 +46,17 @@ class Architect:
         self.engine = engine
         self.plan: HousePlan | None = None
         self.pending: Future[StructuredResult[HouseDesign]] | None = None
+        self.pending_extension: tuple[Future[StructuredResult[HouseDesign]], str] | None = None
 
     @property
     def active(self) -> bool:
         return self.engine.house.layout.wild
 
     def busy(self) -> bool:
-        return self.pending is not None
+        return self.pending is not None or self.pending_extension is not None
 
     def clear(self) -> None:
-        self.pending = None
+        self.pending = self.pending_extension = None
 
     # ------------------------------------------------------------------ plan
 
@@ -109,7 +110,52 @@ class Architect:
         if future is not None:
             self.pending = future
 
+    def request_extension(self, reason: str) -> None:
+        """Agrandir la maison (un bébé s'en vient, un enfant sans chambre) : l'IA ajoute 1 à 3 pièces."""
+        if not self.active or self.plan is None or self.pending_extension is not None:
+            return
+        engine = self.engine
+        couple = self.couple()
+        existing = [r.id for r in self.plan.rooms]
+        fallback = HouseDesign(rooms=[RoomRequest(id=f"chambre_{len(existing) + 1}", type="chambre",
+                                                  name="Chambre des enfants", width=3, height=3,
+                                                  anchor=existing[-1], side="nord")])
+        if engine.llm is None:
+            self._apply_extension(fallback, reason)
+            return
+        names = {a.id: a.name for a in couple}
+        request = build_design_request(couple, engine.family_context(couple), engine.config.llm.max_tokens,
+                                       existing=existing, reason=reason)
+        future = engine.llm.try_submit(request, HouseDesign, fallback,
+                                       lambda d: validate_design(d, names, set(existing)))
+        if future is not None:
+            self.pending_extension = (future, reason)
+
+    def _apply_extension(self, design: HouseDesign, reason: str) -> None:
+        engine = self.engine
+        before = len(self.plan.rooms)
+        place_rooms(engine.house, [r.model_dump() for r in design.rooms], self.site(), plan=self.plan)
+        added = self.plan.rooms[before:]
+        if design.discussion:
+            engine.publish("dialogue", room="Terrain", participants=[a.name for a in self.couple()],
+                           lines=[line.model_dump() for line in design.discussion], time=engine.clock.hhmm,
+                           attempts=1, mode="scene")
+        if not added:
+            return
+        names = ", ".join(f"{r.name.lower()} ({r.width}×{r.height})" for r in added)
+        engine.publish("agrandissement", rooms=[r.name for r in added], text=f"On agrandit : {names}")
+        for agent in self.couple():
+            engine.remember(agent, f"{reason} On a ajouté au plan : {names}.", 7)
+
     def poll(self) -> None:
+        if self.pending_extension is not None and self.pending_extension[0].done():
+            (future, reason), self.pending_extension = self.pending_extension, None
+            try:
+                result = future.result()
+            except Exception as exc:  # erreur inattendue dans le thread : rien à ajouter
+                result = StructuredResult(value=None, ok=False, attempts=0, error=str(exc))
+            if result.value is not None:
+                self._apply_extension(result.value, reason)
         if self.pending is None or not self.pending.done():
             return
         future, self.pending = self.pending, None
@@ -268,11 +314,30 @@ class Architect:
         engine = self.engine
         room.progress = max(room.progress, room.work_needed)
         furniture = build_room(engine.house, self.plan, room)
+        self._unstuck_everyone()
         self._assign_beds(furniture)
         engine.publish("piece_batie", room=room.name, size=f"{room.width}×{room.height}",
                        text=f"Nouvelle pièce bâtie : {room.name} ({room.width}×{room.height})")
         for agent in self.couple():
             engine.remember(agent, f"La {room.name.lower()} est bâtie ! On avance.", 7)
+
+    def _unstuck_everyone(self) -> None:
+        """Des murs viennent de monter : personne ne reste dans un mur ni sur un chemin qui les traverse."""
+        engine = self.engine
+        house = engine.house
+        for agent in engine.agents:
+            if agent.dead or agent.is_away or agent.persona.stage == "bebe":
+                continue
+            if not house.is_walkable(agent.pos):
+                free = [(agent.pos[0] + dx, agent.pos[1] + dy) for r in range(1, 6)
+                        for dx in range(-r, r + 1) for dy in range(-r, r + 1)]
+                spot = next((p for p in free if house.is_walkable(p)), None)
+                if spot is not None:
+                    agent.pos = spot
+            if agent.path and any(not house.is_walkable(p) for p in agent.path):
+                goal = agent.action.use_pos if agent.action is not None else None
+                if goal is None or not agent.set_destination(goal, house.is_walkable):
+                    agent.path, agent.action = [], None
 
     def _assign_beds(self, furniture: list[InteractiveObject]) -> None:
         """Un nouveau lit : ceux qui dorment encore sous la tente s'y installent."""

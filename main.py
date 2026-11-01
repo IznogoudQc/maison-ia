@@ -191,7 +191,7 @@ def main() -> None:
         selected = engine.agent_by_id(selected_id) if selected_id else None
         promises = [f"{p.text} ({engine.social.when_label(p.minute)})"
                     for p in engine.social.promises if p.status == "pending"]
-        extra = []
+        extra = list(engine.family.hud_lines())
         if house.layout.wild:
             extra.append(f"Bois : {engine.economy.household.wood} bûches   "
                          f"Arbres : {len(house.objects_of_kind('arbre'))}")

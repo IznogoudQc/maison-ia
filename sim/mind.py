@@ -11,7 +11,7 @@ from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agents.actions import ACTIONS, DAYTIME_HOURS, URGENT_THRESHOLD, Option, action_label
+from agents.actions import ACTIONS, DAYTIME_HOURS, URGENT_THRESHOLD, Option, action_label, allowed_for
 from agents.memory import MemoryEvent
 from agents.plan import DayPlan, Goal, PlanItem
 from agents.scheduler import BREAKFAST_DELAY
@@ -114,7 +114,7 @@ class Mind:
         for definition in ACTIONS.values():
             if not definition.selectable:
                 continue
-            if (definition.allowed and agent.id not in definition.allowed) or agent.id in definition.excluded:
+            if not allowed_for(definition, agent.persona.keys):
                 continue
             if definition.name == "jaser":
                 options += [Option(action="jaser", target=o.id, label=action_label("jaser", o.name), score=0)

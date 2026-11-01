@@ -46,6 +46,8 @@ class Scheduler:
         candidates: list[tuple[str, int, str, int | None, str | None]] = []
         away = schedule.away
         laid_off = agent.unemployed_until is not None and clock.total_minutes < agent.unemployed_until
+        laid_off = laid_off or (agent.parental_leave_until is not None
+                                and clock.total_minutes < agent.parental_leave_until)
         if away is not None and weekday in away.days and not laid_off:
             back = parse_hhmm(away.back)
             if minute < back:

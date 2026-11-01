@@ -33,6 +33,7 @@ family:
     role: blonde
     color: [200, 120, 60]
     look: {hair: [40, 30, 28], pants: [80, 60, 70], long_hair: true}
+    can_be_pregnant: true     # c'est Camille qui portera le bébé (mettre sur l'autre fiche pour changer)
     traits: [prévoyante, drôle, curieuse, un peu inquiète pour l'argent]
     interests: [le jardinage, les balados, les vieux meubles à retaper, la randonnée]
     routines:

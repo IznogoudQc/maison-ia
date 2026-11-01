@@ -83,6 +83,25 @@ console et passe en mode mock.
 - Pour essayer sans attendre : `world.terrain.instant_build: true` bâtit chaque pièce dès que son
   emplacement est dégagé (ni matériaux, ni travail).
 
+**La famille grandit** (scénario terrain, section `life`)
+- Le temps passe vite : un an tous les 7 jours simulés (`days_per_year`). Bébé de 0 à 2 ans, enfant
+  de 3 à 12, ado de 13 à 17, adulte à 18 ; le corps grandit à 13 ans, les anniversaires des enfants
+  sont fêtés (bannière, souvenirs).
+- Quand le couple est heureux (moyenne des besoins et de la santé), proche (affection mutuelle),
+  qu'il a un toit et un peu d'argent de côté, un soir il parle d'avoir un enfant : un appel LLM écrit
+  la discussion et la décision (« pas maintenant » est une vraie réponse ; au plus une fois par
+  semaine). S'il dit oui, l'architecte ajoute une chambre au plan.
+- Qui porte le bébé est écrit dans la fiche (`can_be_pregnant: true`, Camille dans
+  `data/couple.yaml`) ; sans fiche qui porte, le couple adopte. Grossesse de 5 jours (fatigue, plus
+  de gros travaux à la fin), accouchement à l'hôpital, puis l'IA imagine le bébé : prénom, traits,
+  intérêts, façon de parler qu'il aura, couleurs.
+- Le bébé dort dans un berceau près du lit des parents et ne marche pas : les parents (et les ados)
+  s'en occupent (biberon, couche, câlins), d'autant plus vite qu'il a faim ; un parent affamé mange
+  d'abord. Le parent qui a porté le bébé (ou un des deux pour une adoption) prend un congé parental
+  la première année (prestations RQAP : 70 % du salaire en semaine).
+- Garderie de 1 à 4 ans (9 $ par jour), école dès 5 ans, cégep à 18 ; à 3 ans, un vrai lit libre ou
+  un matelas en attendant sa chambre (l'architecte agrandit). Jusqu'à 4 enfants (`max_children`).
+
 Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
 `uv run python main.py --nouveau`. Une sauvegarde d'un scénario n'est pas rechargée dans l'autre.
 
@@ -180,6 +199,7 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | `economy` | `enabled`, `start_money`, `start_pantry`, `portion_price`, `weekly_bills`, `bills_weekday`, `grocery_days`, `low_pantry_days`, `overtime_below` |
 | `health` | `mortality`, `starvation_per_hour`, `exhaustion_per_hour`, `regen_per_hour`, `hospital_days`, `grief_days` |
 | `events` | `enabled`, `check_time`, `frequency` (0 = jamais, 2 = deux fois plus souvent) |
+| `life` | `enabled`, `days_per_year`, `pregnancy_days`, `min_happiness`, `min_affection`, `talk_every_days`, `max_children`, `parental_leave_years`, `daycare_fee` |
 | `world` | `scenario` (`maison` ou `terrain`) ; `terrain` : `width`, `height`, `seed`, `tree_density`, `family_file`, `start_money`, `start_pantry`, `weekly_bills`, `instant_build` |
 
 Le compteur d'appels et de tokens est affiché en haut du panneau, avec le solde, le garde-manger
@@ -238,7 +258,8 @@ main.py              boucle pygame (tick fixe, poll LLM non bloquant, rendu)
 world/               monde générique (house.py), terrain boisé (terrain.py), pièces et meubles (building.py), A*
 agents/              persona, besoins, actions, horaire, mémoire pondérée, plan du jour, relations, état de l'agent
 llm/                 interface + factory, Claude, Ollama, mock, prompts (décision, plan, réplique, bilan), service
-sim/                 horloge, moteur, vie intérieure (mind.py), conversations (social.py), architecte (architect.py), économie,
+sim/                 horloge, moteur, vie intérieure (mind.py), conversations (social.py), architecte (architect.py),
+                     famille (family.py), économie,
                      événements aléatoires, bus, journal, config
 ui/                  rendu pixel art (sprites générés dans sprites.py), bulles et historique, HUD
 data/family.yaml     les personas

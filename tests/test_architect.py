@@ -213,3 +213,13 @@ def test_pas_d_architecte_dans_la_maison_des_gagnon():
     engine.initialize()
     engine.architect.update()
     assert not engine.architect.active and engine.architect.plan is None and not engine.architect.busy()
+
+
+def test_noms_de_pieces_uniques_meme_apres_un_agrandissement():
+    house, site = terrain()
+    plan = place_rooms(house, SPECS[:2], site)
+    place_rooms(house, [{"id": "sdb", "type": "chambre", "name": "Salle de bain", "width": 3, "height": 3,
+                         "anchor": "cuisine", "side": "sud"}], site, plan=plan)
+    names = [r.name for r in plan.rooms]
+    ids = [r.id for r in plan.rooms]
+    assert len(set(names)) == len(names) and len(set(ids)) == len(ids)

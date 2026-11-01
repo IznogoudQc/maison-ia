@@ -62,6 +62,9 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("construire", "travaille sur le chantier : {target}", None, 60,
               {"energy": -10, "fun": -2, "hygiene": -6}, selectable=False, daytime_only=True),
     ActionDef("engager", "appelle un entrepreneur pour : {target}", None, 10, {}, selectable=False),
+    # Bébé : boire, changer de couche, bercer (les parents s'en occupent)
+    ActionDef("soigner", "s'occupe de {target}", None, 20, {"social": 10, "fun": 4, "energy": -3},
+              selectable=False),
 ]}
 
 DAYTIME_HOURS = (7 * 60, 21 * 60)  # activités extérieures
@@ -75,10 +78,16 @@ def away_phrase(label: str) -> str:
     return f"à l'{label}" if label[:1].lower() in "aeéèêiouyh" else f"au {label}"
 
 
-def is_allowed(action: ActionDef, persona_id: str, needs: Needs) -> bool:
-    if action.allowed is not None and persona_id not in action.allowed:
+def allowed_for(action: ActionDef, keys: str | set[str]) -> bool:
+    """keys : id de la fiche et étape de vie (« enfant », « ado »...)."""
+    keys = {keys} if isinstance(keys, str) else keys
+    if action.allowed is not None and not keys & set(action.allowed):
         return False
-    if persona_id in action.excluded:
+    return not keys & set(action.excluded)
+
+
+def is_allowed(action: ActionDef, keys: str | set[str], needs: Needs) -> bool:
+    if not allowed_for(action, keys):
         return False
     if action.only_below is not None:
         need, threshold = action.only_below
@@ -101,7 +110,7 @@ class Option(BaseModel):
 
 
 # Cible par défaut quand elle n'est pas encore connue (plan du jour : « coupe un arbre »)
-DEFAULT_TARGETS = {"couper": "arbre", "construire": "la maison", "engager": "la maison"}
+DEFAULT_TARGETS = {"couper": "arbre", "construire": "la maison", "engager": "la maison", "soigner": "bébé"}
 
 
 def action_label(name: str, target_name: str | None = None) -> str:

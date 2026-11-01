@@ -16,7 +16,8 @@ BUBBLE_MAX_WIDTH = 230
 MAX_ACTIVE_CONVERSATIONS = 3
 NEWS_KINDS = ("evenement", "deces", "hopital", "factures", "frigo_vide", "achat",
               "promesse", "promesse_tenue", "promesse_brisee", "plan_maison", "emplacement_pret", "piece_batie",
-              "chantier_debut", "entrepreneur")
+              "chantier_debut", "entrepreneur", "projet_bebe", "grossesse", "naissance", "anniversaire",
+              "agrandissement")
 MIND_KINDS = ("plan", "reflexion")
 THOUGHT = (180, 170, 230)
 TOAST_SECONDS = 6.0
@@ -97,8 +98,11 @@ class DialogueBox:
                 return  # une seule alerte par jour
             self._last_empty_fridge_day = day
             text, color = "Le frigo est vide !", BAD
-        elif event.kind in ("achat", "plan_maison", "piece_batie", "chantier_debut", "entrepreneur"):
+        elif event.kind in ("achat", "plan_maison", "piece_batie", "chantier_debut", "entrepreneur",
+                            "grossesse", "naissance", "anniversaire", "agrandissement"):
             text, color = data["text"], GOOD
+        elif event.kind == "projet_bebe":
+            text, color = data["text"], GOOD if data["yes"] else NEUTRAL
         elif event.kind == "emplacement_pret":
             text, color = f"Emplacement dégagé : {data['room']}", GOOD
         elif event.kind == "promesse":

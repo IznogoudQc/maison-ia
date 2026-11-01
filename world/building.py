@@ -220,20 +220,34 @@ def _shifts(anchor_len: int, length: int) -> list[int]:
     return [v for v in values if low <= v <= high]
 
 
-def _shared_door(a: Rect, b: Rect) -> Pos | None:
-    """Case de porte au milieu du mur commun à deux pièces voisines (mur d'une case d'épaisseur)."""
+def _shared_doors(a: Rect, b: Rect) -> list[Pos]:
+    """Cases du mur commun à deux pièces voisines où percer une porte, du milieu vers les bouts."""
     ax0, ay0, ax1, ay1 = a
     bx0, by0, bx1, by1 = b
     if bx0 == ax1 + 2 or ax0 == bx1 + 2:            # côte à côte (est/ouest)
         wall_x = ax1 + 1 if bx0 == ax1 + 2 else bx1 + 1
         low, high = max(ay0, by0), min(ay1, by1)
-        if high - low >= 0:
-            return wall_x, (low + high) // 2
+        return sorted(((wall_x, y) for y in range(low, high + 1)), key=lambda p: abs(p[1] - (low + high) / 2))
     if by0 == ay1 + 2 or ay0 == by1 + 2:            # l'une au-dessus de l'autre (nord/sud)
         wall_y = ay1 + 1 if by0 == ay1 + 2 else by1 + 1
         low, high = max(ax0, bx0), min(ax1, bx1)
-        if high - low >= 0:
-            return (low + high) // 2, wall_y
+        return sorted(((x, wall_y) for x in range(low, high + 1)), key=lambda p: abs(p[0] - (low + high) / 2))
+    return []
+
+
+def _shared_door(a: Rect, b: Rect) -> Pos | None:
+    doors = _shared_doors(a, b)
+    return doors[0] if doors else None
+
+
+def _open_door(house: House, a: Rect, b: Rect) -> Pos | None:
+    """Porte du mur commun dont les deux côtés sont libres (un meuble déjà posé ne doit pas la boucher)."""
+    furniture = {t for o in house.objects.values() if o.kind != "arbre" for t in o.tiles}  # les arbres se coupent
+    for x, y in _shared_doors(a, b):
+        sides = [(x - 1, y), (x + 1, y)] if any(x == r[0] - 1 or x == r[2] + 1 for r in (a, b)) \
+            else [(x, y - 1), (x, y + 1)]
+        if all(p not in furniture for p in sides):
+            return x, y
     return None
 
 
@@ -263,26 +277,37 @@ def place_rooms(house: House, specs: list[dict], site: Pos, vision: str = "",
                     rect = candidate
                     break
         else:
+            # La pièce demandée d'abord ; si rien n'y colle (ou pas de porte libre), une autre pièce du plan
             wanted = spec.get("side") if spec.get("side") in SIDES else "est"
-            for side in [wanted, *(s for s in SIDES if s != wanted)]:
-                for candidate in _candidates_against(anchor, side, w, h):
-                    problem = placement_problem(house, plan, candidate)
-                    if problem is None:
-                        rect, spec = candidate, {**spec, "side": side}
+            anchors = [anchor, *(r for r in plan.rooms if r is not anchor)]
+            for candidate_anchor in anchors:
+                for side in [wanted, *(s for s in SIDES if s != wanted)]:
+                    for candidate in _candidates_against(candidate_anchor, side, w, h):
+                        problem = placement_problem(house, plan, candidate)
+                        if problem is None and _open_door(house, candidate_anchor.rect, candidate) is None:
+                            problem = "pas de place pour une porte libre"
+                        if problem is None:
+                            rect, anchor, spec = candidate, candidate_anchor, {**spec, "side": side}
+                            break
+                        reason = problem
+                    if rect:
                         break
-                    reason = problem
                 if rect:
                     break
         if rect is None:
             plan.rejected.append(f"{spec['name']} : {reason}")
             continue
-        room = PlannedRoom(id=spec["id"], type=spec["type"], name=spec["name"], rect=rect,
+        name, n = spec["name"], 2
+        while any(r.name == name for r in plan.rooms):  # les pièces sont repérées par leur nom
+            name, n = f"{spec['name']} {n}", n + 1
+        room_id, n = spec["id"], 2
+        while plan.room(room_id) is not None:
+            room_id, n = f"{spec['id']}_{n}", n + 1
+        room = PlannedRoom(id=room_id, type=spec["type"], name=name, rect=rect,
                            anchor=anchor.id if anchor else None, side=spec.get("side") if anchor else None,
                            why=spec.get("why", ""))
         if anchor is not None:
-            door = _shared_door(anchor.rect, rect)
-            if door is not None:
-                plan.doors.append(door)
+            plan.doors.append(_open_door(house, anchor.rect, rect))
         plan.rooms.append(room)
     _front_door(plan)
     return plan

@@ -49,11 +49,28 @@ class Persona(BaseModel):
     favorite_actions: list[str] = Field(default_factory=list)
     salary_per_day: float = 0.0   # paie nette par journée de travail (0 = pas d'emploi)
     look: dict = Field(default_factory=dict)  # apparence : hair, pants (RGB), long_hair (bool)
+    can_be_pregnant: bool = False  # peut porter un bébé (scénario terrain) ; sinon le couple adopte
     schedule: Schedule
 
     @property
     def is_adult(self) -> bool:
         return self.age >= 18
+
+    @property
+    def stage(self) -> str:
+        """Étape de vie : bebe (0-2 ans), enfant (3-12), ado (13-17), adulte."""
+        if self.age < 3:
+            return "bebe"
+        if self.age < 13:
+            return "enfant"
+        if self.age < 18:
+            return "ado"
+        return "adulte"
+
+    @property
+    def keys(self) -> set[str]:
+        """Identifiant et étape : les actions réservées (« enfant ») valent pour tout enfant."""
+        return {self.id, self.stage}
 
     def short_description(self) -> str:
         return f"{self.name}, {self.age} ans ({self.role}) : {', '.join(self.traits)}"

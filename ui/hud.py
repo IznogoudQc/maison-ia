@@ -123,7 +123,7 @@ class Hud:
         for agent in agents:
             color = (90, 90, 100) if agent.dead else agent.persona.color
             pygame.draw.circle(surface, color, (x + 7, y + 9), 7)
-            text = f"{agent.name} — {agent.status_label}"
+            text = f"{agent.name} ({agent.persona.age}) — {agent.status_label}"
             if not agent.dead and agent.health < HEALTH_WARNING:
                 text += f" (santé {agent.health:.0f})"
             surface.blit(theme.font(13).render(_clip(text, 44), True, theme.TEXT_DIM), (x + 20, y))

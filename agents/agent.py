@@ -62,6 +62,8 @@ class Agent(BaseModel):
     reflected_day: int = -1              # dernier jour réfléchi (au coucher)
     relations: dict[str, Relation] = Field(default_factory=dict)  # id d'un autre agent -> ressenti
     bed: str | None = None               # lit attribué en cours de partie (sinon celui de la fiche)
+    age_years: float | None = None       # âge précis (scénario terrain : on vieillit d'un an par semaine)
+    parental_leave_until: int | None = None  # congé parental : pas de travail, prestations à la place
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property
@@ -92,8 +94,8 @@ class Agent(BaseModel):
 
     @property
     def is_available(self) -> bool:
-        """Vivant, présent, éveillé : peut participer à une conversation."""
-        return not self.dead and not self.is_away and not self.is_sleeping
+        """Vivant, présent, éveillé, en âge de jaser : peut participer à une conversation."""
+        return not self.dead and not self.is_away and not self.is_sleeping and self.persona.stage != "bebe"
 
     @property
     def mood(self) -> str:

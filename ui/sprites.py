@@ -661,7 +661,31 @@ def _workbench(surf: pygame.Surface, r: pygame.Rect) -> None:
 
 
 # Meubles de la maison bâtie sur le terrain : ids générés, on les reconnaît par type puis par nom
-KIND_DRAWERS = {"frigo": _fridge, "cuisiniere": _stove, "table": _table, "douche": _shower, "tele": _sofa,
+def _crib(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -2), (230, 214, 186))
+    pygame.draw.rect(surf, (250, 248, 240), r.inflate(-5, -5))
+    for x in range(r.x + 3, r.right - 2, 3):
+        pygame.draw.line(surf, (170, 140, 100), (x, r.y + 1), (x, r.y + 3))  # barreaux
+
+
+def draw_baby(surf: pygame.Surface, persona: Persona, center: tuple[int, int], sleeping: bool) -> None:
+    """Bébé emmailloté dans son berceau : couverture à la couleur de sa fiche, petite tête."""
+    cx, cy = center
+    blanket = pygame.Rect(cx - 4, cy - 1, 8, 6)
+    pygame.draw.ellipse(surf, tuple(persona.color), blanket)
+    pygame.draw.ellipse(surf, shade(tuple(persona.color), -50), blanket, 1)
+    pygame.draw.circle(surf, SKIN, (cx, cy - 3), 3)
+    hair = persona.look.get("hair", (90, 64, 44))
+    pygame.draw.line(surf, tuple(hair), (cx - 2, cy - 6), (cx + 2, cy - 6))
+    if sleeping:
+        pygame.draw.line(surf, (60, 40, 40), (cx - 2, cy - 3), (cx - 1, cy - 3))
+        pygame.draw.line(surf, (60, 40, 40), (cx + 1, cy - 3), (cx + 2, cy - 3))
+    else:
+        surf.set_at((cx - 1, cy - 3), (40, 30, 44))
+        surf.set_at((cx + 1, cy - 3), (40, 30, 44))
+
+
+KIND_DRAWERS = {"berceau": _crib, "frigo": _fridge, "cuisiniere": _stove, "table": _table, "douche": _shower, "tele": _sofa,
                 "livres": _bookshelf, "ordi": _computer, "jouets": _toys}
 LABEL_DRAWERS = {"Comptoir": _counter, "Toilette": _toilet, "Télé": _tv, "Commode": _dresser, "Établi": _workbench}
 
@@ -807,7 +831,7 @@ def add_outline(surf: pygame.Surface, color: Color = OUTLINE) -> pygame.Surface:
 
 
 # Caches par id de persona (les modèles pydantic ne sont pas hashables)
-_FRAMES: dict[str, dict[tuple[str, int], pygame.Surface]] = {}
+_FRAMES: dict[tuple[str, bool], dict[tuple[str, int], pygame.Surface]] = {}
 _HEADS: dict[str, pygame.Surface] = {}
 
 
@@ -816,7 +840,8 @@ def character_frames(persona: Persona) -> dict[tuple[str, int], pygame.Surface]:
 
     Image 0 = immobile, 1 et 2 = marche, SIT_FRAME = assis.
     """
-    if persona.id not in _FRAMES:
+    key = (persona.id, persona.age < 13)  # le corps grandit à 13 ans : nouvelles images
+    if key not in _FRAMES:
         palette, style = _palette(persona)
         child = persona.age < 13
         frames: dict[tuple[str, int], pygame.Surface] = {}
@@ -827,8 +852,8 @@ def character_frames(persona: Persona) -> dict[tuple[str, int], pygame.Surface]:
                 frames[(direction, frame)] = add_outline(sprite_from_rows(rows, palette))
         for frame in range(SIT_FRAME + 1):
             frames[("right", frame)] = pygame.transform.flip(frames[("left", frame)], True, False)
-        _FRAMES[persona.id] = frames
-    return _FRAMES[persona.id]
+        _FRAMES[key] = frames
+    return _FRAMES[key]
 
 
 def sleeping_head(persona: Persona) -> pygame.Surface:

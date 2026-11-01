@@ -143,6 +143,10 @@ class MockProvider(LLMProvider):
                 text = self._debrief(request)
             elif request.kind == "house_plan":
                 text = self._house_plan(request)
+            elif request.kind == "baby_talk":
+                text = self._baby_talk(request)
+            elif request.kind == "birth":
+                text = self._birth(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -341,6 +345,32 @@ class MockProvider(LLMProvider):
         vision = r.choice(["Une petite maison de bois, chaleureuse, qui grandira avec nous.",
                            "Un chalet simple au bord du bois, bâti de nos mains."])
         return json.dumps({"vision": vision, "discussion": discussion, "rooms": rooms}, ensure_ascii=False)
+
+
+    def _baby_talk(self, request: LLMRequest) -> str:
+        names = [p["name"] for p in request.meta.get("couple", [])] or ["Maxime", "Camille"]
+        yes = self.rng.random() < 0.6
+        discussion = [
+            {"speaker": names[0], "text": "Je nous vois avec un petit, autour du feu. T'en penses quoi?"},
+            {"speaker": names[-1], "text": "Moi aussi... mais on a-tu les moyens?" if not yes
+             else "J'y pense depuis des semaines. On essaie!"},
+        ]
+        reason = "On est heureux, la maison avance." if yes else "On veut finir la maison avant."
+        return json.dumps({"decision": "oui" if yes else "pas_maintenant", "reason": reason,
+                           "discussion": discussion}, ensure_ascii=False)
+
+    def _birth(self, request: LLMRequest) -> str:
+        taken = {t.lower() for t in request.meta.get("taken", [])}
+        names = [n for n in ("Florence", "Léo", "Rosalie", "Émile", "Alice", "Arthur", "Zoé", "Jacob")
+                 if n.lower() not in taken] or ["Charlie"]
+        traits = self.rng.sample(["curieux", "rieur", "têtu", "câlin", "énergique", "rêveur", "calme"], 3)
+        return json.dumps({"name": self.rng.choice(names), "traits": traits,
+                           "interests": self.rng.sample(["les dinosaures", "la musique", "grimper aux arbres",
+                                                         "les animaux", "dessiner"], 2),
+                           "speech_style": "Pose mille questions, invente des mots.",
+                           "color": [self.rng.randint(80, 230) for _ in range(3)],
+                           "hair": self.rng.choice([[90, 64, 44], [40, 30, 28], [210, 170, 90]])},
+                          ensure_ascii=False)
 
 
 PROPOSALS: dict[str, list[str]] = {
