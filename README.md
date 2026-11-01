@@ -224,6 +224,7 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | 1 à 4 | vitesse (multiplicateurs `sim.speed_multipliers`) |
 | Clic sur un agent | besoins, action, humeur et mémoire dans le panneau ; clic dans le vide : vue famille |
 | H | historique des dialogues (molette pour défiler) |
+| J | journal complet : conversations, actions (avec la raison de l'IA), pensées (plans, réflexions, promesses), événements ; Tab : onglet, P : personne, / : rechercher, E : exporter la chronique en HTML (`chronique.html` à côté de la sauvegarde) ; gardé avec la sauvegarde |
 | Flèches ou WASD, clic droit glissé | déplacer la vue (grande carte) |
 | Molette | zoom (dans l'historique : défiler) |
 | Clic sur la mini-carte | centrer la vue à cet endroit |

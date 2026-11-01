@@ -22,6 +22,7 @@ from sim.journal import JsonlJournal
 from ui import theme
 from ui.dialogue_box import MIND_KINDS, NEWS_KINDS, DialogueBox
 from ui.hud import Hud, draw_game_over
+from ui.journal import JournalScreen
 from ui.renderer import Renderer
 from ui.sprites import TILE
 from world.house import House
@@ -115,6 +116,7 @@ def main() -> None:
         bus.subscribe(kind, dialogue_box.on_mind)
     journal = JsonlJournal(config.log_dir, clock)
     journal.attach(bus)
+    journal_screen = JournalScreen(engine.history, Path(config.save_file).with_name("chronique.html"))
     frame_clock = pygame.time.Clock()
 
     speed_index = 0
@@ -130,6 +132,8 @@ def main() -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN and journal_screen.handle_key(event):
+                continue  # journal ouvert : il garde le clavier (Échap le ferme)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
@@ -137,6 +141,8 @@ def main() -> None:
                     paused = not paused
                 elif event.key == pygame.K_h:
                     dialogue_box.toggle_history()
+                elif event.key == pygame.K_j:
+                    journal_screen.toggle()
                 elif event.key in SPEED_KEYS:
                     speed_index = min(SPEED_KEYS[event.key], len(config.sim.speed_multipliers) - 1)
                 elif event.key == pygame.K_f:
@@ -154,7 +160,9 @@ def main() -> None:
             elif event.type == pygame.MOUSEMOTION and dragging:
                 renderer.pan(-event.rel[0], -event.rel[1])
             elif event.type == pygame.MOUSEWHEEL:
-                if dialogue_box.show_history:
+                if journal_screen.open:
+                    journal_screen.wheel(event.y)
+                elif dialogue_box.show_history:
                     dialogue_box.scroll_history(event.y * 3)
                 else:
                     mouse = pygame.mouse.get_pos()
@@ -189,6 +197,7 @@ def main() -> None:
         screen.fill(theme.BACKGROUND)
         renderer.draw(screen, agents, selected_id, clock.minute_of_day)
         dialogue_box.draw(screen)
+        journal_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
         selected = engine.agent_by_id(selected_id) if selected_id else None
         promises = [f"{p.text} ({engine.social.when_label(p.minute)})"
                     for p in engine.social.promises if p.status == "pending"]

@@ -46,6 +46,7 @@ from sim.architect import Architect
 from sim.family import FamilyLife
 from sim.credit import Credit
 from sim.garage import Garage
+from sim.history import History
 from sim.inventory import Inventory
 from sim.mind import Mind
 from sim.social import Social
@@ -136,6 +137,7 @@ class Engine:
         self.inventory = Inventory(self)
         self.garage = Garage(self)
         self.credit = Credit(self)
+        self.history = History(self.bus)  # conversations, actions, pensées, événements
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
 
@@ -1244,6 +1246,7 @@ class Engine:
             "world": {"scenario": self.house.layout.name, "removed": sorted(self.house.removed)},
             "construction": self.architect.to_dict(),
             "family": self.family.to_dict(),
+            "history": self.history.to_list(),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -1270,6 +1273,7 @@ class Engine:
         for item_id in self.economy.household.purchases:
             if item_id in self.house.purchase_objects:
                 self.house.add_object(self.house.purchase_objects[item_id])
+        self.history.load_list(data.get("history"))
         self.family.load_dict(data.get("family"))  # recrée d'abord les enfants nés dans la partie
         saved = data.get("agents", {})
         for index, agent in enumerate(self.agents):
