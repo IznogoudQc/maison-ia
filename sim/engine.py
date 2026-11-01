@@ -45,6 +45,7 @@ from sim.events import Event, EventBus
 from sim.food import FOODS
 from sim.architect import Architect
 from sim.family import FamilyLife
+from sim.portrait import Portraits
 from sim.credit import Credit
 from sim.garage import Garage
 from sim.history import History
@@ -139,6 +140,7 @@ class Engine:
         self.garage = Garage(self)
         self.credit = Credit(self)
         self.history = History(self.bus)  # conversations, actions, pensées, événements
+        self.portraits = Portraits(self)  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
 
@@ -642,6 +644,7 @@ class Engine:
         self.social.poll()
         self.architect.poll()
         self.family.poll()
+        self.portraits.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue

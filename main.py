@@ -26,6 +26,7 @@ from ui.hud import Hud, draw_game_over
 from ui import tooltip
 from ui.household import HouseholdScreen
 from ui.journal import JournalScreen
+from ui.portrait import PortraitScreen
 from ui.renderer import Renderer
 from ui.sprites import TILE
 from world.house import House
@@ -128,6 +129,7 @@ def main() -> None:
     journal.attach(bus)
     journal_screen = JournalScreen(engine.history, Path(config.save_file).with_name("chronique.html"))
     household_screen = HouseholdScreen(engine)
+    portrait_screen = PortraitScreen(engine)
     frame_clock = pygame.time.Clock()
 
     speed_index = 0
@@ -147,6 +149,8 @@ def main() -> None:
                 continue  # journal ouvert : il garde le clavier (Échap le ferme)
             elif event.type == pygame.KEYDOWN and household_screen.handle_key(event):
                 continue  # écran Maison ouvert : idem
+            elif event.type == pygame.KEYDOWN and portrait_screen.handle_key(event):
+                continue  # fiche personnage ouverte : idem
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
@@ -158,6 +162,8 @@ def main() -> None:
                     journal_screen.toggle()
                 elif event.key == pygame.K_i:
                     household_screen.toggle()
+                elif event.key == pygame.K_p:
+                    portrait_screen.show(selected_id)
                 elif event.key in SPEED_KEYS:
                     speed_index = min(SPEED_KEYS[event.key], len(config.sim.speed_multipliers) - 1)
                 elif event.key == pygame.K_f:
@@ -187,7 +193,7 @@ def main() -> None:
 
         keys = pygame.key.get_pressed()
         pan = [sum(d[i] for k, d in PAN_KEYS.items() if keys[k]) for i in (0, 1)]
-        if pan != [0, 0] and not (journal_screen.open or household_screen.open):
+        if pan != [0, 0] and not (journal_screen.open or household_screen.open or portrait_screen.open):
             follow = False
             renderer.pan(pan[0] * PAN_SPEED * dt, pan[1] * PAN_SPEED * dt)
 
@@ -216,8 +222,9 @@ def main() -> None:
         dialogue_box.draw(screen)
         journal_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
         household_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
+        portrait_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
         mouse = pygame.mouse.get_pos()
-        if not journal_screen.open and not household_screen.open and not dialogue_box.show_history and mouse[0] < map_w and not dragging:
+        if not (journal_screen.open or household_screen.open or portrait_screen.open) and not dialogue_box.show_history and mouse[0] < map_w and not dragging:
             tooltip.draw(screen, tooltip.describe(engine, renderer, mouse), mouse, pygame.Rect(0, 0, map_w, map_h))
         selected = engine.agent_by_id(selected_id) if selected_id else None
         promises = [f"{p.text} ({engine.social.when_label(p.minute)})"

@@ -31,6 +31,8 @@ class BabyTalk(BaseModel):
 class ChildProfile(BaseModel):
     name: str
     traits: list[str] = Field(default_factory=list)
+    qualites: list[str] = Field(default_factory=list)
+    defauts: list[str] = Field(default_factory=list)
     interests: list[str] = Field(default_factory=list)
     speech_style: str = ""
     color: list[int] = Field(default_factory=lambda: [120, 160, 200])
@@ -59,7 +61,9 @@ def validate_child(profile: ChildProfile, taken: set[str]) -> ChildProfile:
     traits = [t.strip()[:30] for t in profile.traits if t.strip()][:4]
     if len(traits) < 2:
         raise ValueError("il faut au moins deux traits de caractère")
-    return ChildProfile(name=name, traits=traits, interests=[i.strip()[:40] for i in profile.interests if i.strip()][:3],
+    return ChildProfile(name=name, traits=traits,
+                        qualites=[q.strip()[:40] for q in profile.qualites if q.strip()][:3],
+                        defauts=[d.strip()[:40] for d in profile.defauts if d.strip()][:3], interests=[i.strip()[:40] for i in profile.interests if i.strip()][:3],
                         speech_style=profile.speech_style.strip()[:120],
                         color=_rgb(profile.color, [120, 160, 200]), hair=_rgb(profile.hair, [90, 64, 44]))
 
@@ -94,9 +98,11 @@ def build_birth_request(parents: list[Agent], taken: set[str], max_tokens: int, 
     how = "Le couple vient d'adopter ce bébé." if adoption else "Le bébé vient de naître."
     prompt = (
         f"LES PARENTS\n{people}\n\n{how}\nPrénoms déjà pris dans la famille : {', '.join(sorted(taken))}.\n\n"
-        "Donne un prénom (québécois, un seul mot), 3 traits, 2 intérêts qu'il aura enfant, sa future façon de "
-        "parler, une couleur de vêtement et une couleur de cheveux (RGB).\n"
-        'Format exact : {"name": "<prénom>", "traits": ["..."], "interests": ["..."], "speech_style": "...", '
+        "Donne un prénom (québécois, un seul mot), 3 traits, 2 qualités et 2 défauts (hérités d'un parent ou "
+        "bien à lui), 2 intérêts qu'il aura enfant, sa future façon de parler, une couleur de vêtement et une "
+        "couleur de cheveux (RGB).\n"
+        'Format exact : {"name": "<prénom>", "traits": ["..."], "qualites": ["..."], "defauts": ["..."], '
+        '"interests": ["..."], "speech_style": "...", '
         '"color": [r, g, b], "hair": [r, g, b]}'
     )
     meta = {"parents": [{"id": a.id, "name": a.name} for a in parents], "taken": sorted(taken)}

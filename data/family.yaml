@@ -9,6 +9,8 @@ family:
     role: père
     color: [52, 110, 190]
     traits: [pince-sans-rire, calme, bricoleur, un peu lunatique le matin]
+    qualites: [patient, fiable, habile de ses mains]
+    defauts: [renfermé le matin, remet les corvées à plus tard]
     interests: [le hockey (le Canadien), réparer des affaires dans le garage, le BBQ, les vieux films d'action]
     routines:
       - Se lève tôt, boit son café en silence avant de parler à quiconque
@@ -37,6 +39,8 @@ family:
     role: mère
     color: [190, 60, 90]
     traits: [organisée, attentionnée, un peu stressée par l'horaire, efficace]
+    qualites: [attentionnée, organisée, généreuse]
+    defauts: [anxieuse, veut tout contrôler]
     interests: [le yoga, les balados de true crime, planifier les vacances au chalet, les plantes]
     routines:
       - Se lève la première pour préparer les lunchs
@@ -64,6 +68,8 @@ family:
     role: ado
     color: [130, 80, 170]
     traits: [sarcastique, toujours sur son téléphone, intelligente, susceptible]
+    qualites: [brillante, loyale envers ses amis, drôle]
+    defauts: [susceptible, accro à son téléphone, impatiente]
     interests: [TikTok, sa gang d'amies, la musique indie, dessiner des mangas]
     routines:
       - Se lève à la dernière minute pour l'école secondaire
@@ -88,6 +94,8 @@ family:
     role: enfant
     color: [235, 150, 30]
     traits: [curieux, énergique, pose mille questions, rieur]
+    qualites: [enjoué, affectueux, curieux]
+    defauts: [ne tient pas en place, interrompt tout le monde]
     interests: [les dinosaures, les Lego, l'espace, les blagues de pets]
     routines:
       - Va à l'école primaire du quartier

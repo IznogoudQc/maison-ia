@@ -155,6 +155,8 @@ class MockProvider(LLMProvider):
                 text = self._birth(request)
             elif request.kind == "event_story":
                 text = self._event_story(request)
+            elif request.kind == "portrait":
+                text = self._portrait(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -362,6 +364,32 @@ class MockProvider(LLMProvider):
                                 if good else ["Pas de chance : ", "Ouch : ", "Comme si c'était pas assez : "])
         return json.dumps({"text": intro + request.meta.get("base", "")}, ensure_ascii=False)
 
+    def _portrait(self, request: LLMRequest) -> str:
+        """Ressenti tiré des causes calculées par le moteur ; avis tirés de l'affection et de la tension."""
+        causes = request.meta.get("causes", [])
+        bad = [c["text"].split(" (")[0] for c in causes if c["sign"] < 0]
+        good = [c["text"].split(" (")[0] for c in causes if c["sign"] > 0]
+        if bad:
+            feeling = f"Honnêtement, ça pourrait aller mieux : {bad[0][0].lower() + bad[0][1:]}."
+            if good:
+                feeling += f" Au moins : {good[0][0].lower() + good[0][1:]}."
+        elif good:
+            feeling = f"Je me sens bien. {good[0]}."
+        else:
+            feeling = "Une journée ordinaire, ni bonne ni mauvaise."
+        opinions = []
+        for other in request.meta.get("others", []):
+            if other["tension"] >= 45:
+                text = f"{other['name']} me tape sur les nerfs ces temps-ci, mais ça va passer."
+            elif other["affection"] >= 80:
+                text = f"{other['name']}, c'est mon monde. Je ferais n'importe quoi pour cette personne-là."
+            elif other["affection"] >= 60:
+                text = f"J'aime bien {other['name']}, on s'entend pas mal."
+            else:
+                text = f"{other['name']} et moi, on se parle pas assez."
+            opinions.append({"name": other["name"], "text": text})
+        return json.dumps({"ressenti": feeling, "opinions": opinions}, ensure_ascii=False)
+
     def _baby_talk(self, request: LLMRequest) -> str:
         names = [p["name"] for p in request.meta.get("couple", [])] or ["Maxime", "Camille"]
         yes = self.rng.random() < 0.6
@@ -380,6 +408,8 @@ class MockProvider(LLMProvider):
                  if n.lower() not in taken] or ["Charlie"]
         traits = self.rng.sample(["curieux", "rieur", "têtu", "câlin", "énergique", "rêveur", "calme"], 3)
         return json.dumps({"name": self.rng.choice(names), "traits": traits,
+                           "qualites": self.rng.sample(["généreux", "brave", "drôle", "patient", "doux"], 2),
+                           "defauts": self.rng.sample(["boudeur", "gourmand", "impatient", "désordonné"], 2),
                            "interests": self.rng.sample(["les dinosaures", "la musique", "grimper aux arbres",
                                                          "les animaux", "dessiner"], 2),
                            "speech_style": "Pose mille questions, invente des mots.",

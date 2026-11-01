@@ -93,6 +93,10 @@ def persona_block(agent: Agent) -> str:
         f"Traits : {', '.join(p.traits)}.",
         f"Intérêts : {', '.join(p.interests)}.",
     ]
+    if p.qualites:
+        lines.append(f"Qualités : {', '.join(p.qualites)}.")
+    if p.defauts:
+        lines.append(f"Défauts (ils paraissent surtout quand ça va mal) : {', '.join(p.defauts)}.")
     if p.speech_style:
         lines.append(f"Façon de parler : {p.speech_style}")
     if p.routines:

@@ -257,6 +257,7 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | H | historique des dialogues (molette pour défiler) |
 | J | journal complet : conversations, actions (avec la raison de l'IA), pensées (plans, réflexions, promesses), événements ; Tab : onglet, P : personne, / : rechercher, E : exporter la chronique en HTML (`chronique.html` à côté de la sauvegarde) ; gardé avec la sauvegarde |
 | I | écran Maison : objets (prix, frais, effets), véhicules, garde-manger détaillé (péremption, plats préférés), prêts et dépenses de la semaine ; Tab : onglet |
+| P | fiche de la personne sélectionnée : qualités et défauts, humeur et ses causes (besoins, deuil, argent, chicanes, souvenirs marquants), ce qu'elle pense de chacun (affection, tension, dernière impression) ; l'IA y met des mots à la première personne ; Tab : personne suivante |
 | Flèches ou WASD, clic droit glissé | déplacer la vue (grande carte) |
 | Molette | zoom (dans l'historique : défiler) |
 | Clic sur la mini-carte | centrer la vue à cet endroit |
@@ -294,6 +295,9 @@ Ajouter une entrée sous `family:` dans `data/family.yaml` :
     role: grand-mère
     color: [60, 160, 120]    # couleur du pion (RGB)
     traits: [taquine, généreuse]
+    qualites: [généreuse, patiente]        # affichées sur la fiche (touche P), lues par l'IA
+    defauts: [têtue, se mêle de tout]
+    aime: [tourtiere, pouding_chomeur]       # plats préférés (data/aliments.yaml)
     interests: [le tricot, les téléromans]
     routines: [Fait sa marche tous les matins]
     relations:

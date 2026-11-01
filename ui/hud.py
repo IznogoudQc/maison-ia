@@ -23,7 +23,7 @@ CONTROLS = [
     "Espace : pause / reprise    1-4 : vitesse",
     "Clic : sélectionner un agent (clic vide : famille)",
     "Flèches / clic droit glissé : vue   molette : zoom",
-    "F : suivre   H : dialogues   J : journal   I : maison",
+    "F : suivre   P : fiche   H : dialogues   J : journal   I : maison",
     "Échap : sauvegarder et quitter",
 ]
 

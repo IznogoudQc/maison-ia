@@ -9,6 +9,8 @@ family:
     color: [70, 130, 90]
     look: {hair: [70, 50, 34], pants: [60, 70, 96], long_hair: false}
     traits: [débrouillard, optimiste, têtu, travaillant]
+    qualites: [travaillant, optimiste, courageux]
+    defauts: [têtu, prend trop de risques]
     interests: [la menuiserie, la pêche, le hockey, les plans de maison griffonnés sur des napkins]
     routines:
       - Travaille comme charpentier sur des chantiers la semaine
@@ -36,6 +38,8 @@ family:
     look: {hair: [40, 30, 28], pants: [80, 60, 70], long_hair: true}
     can_be_pregnant: true     # c'est Camille qui portera le bébé (mettre sur l'autre fiche pour changer)
     traits: [prévoyante, drôle, curieuse, un peu inquiète pour l'argent]
+    qualites: [prévoyante, drôle, à l'écoute]
+    defauts: [s'inquiète pour l'argent, perfectionniste]
     interests: [le jardinage, les balados, les vieux meubles à retaper, la randonnée]
     routines:
       - Travaille comme infirmière auxiliaire au CLSC

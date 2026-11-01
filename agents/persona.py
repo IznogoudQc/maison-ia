@@ -41,6 +41,8 @@ class Persona(BaseModel):
     role: str
     color: tuple[int, int, int]
     traits: list[str]
+    qualites: list[str] = Field(default_factory=list)
+    defauts: list[str] = Field(default_factory=list)
     interests: list[str] = Field(default_factory=list)
     routines: list[str] = Field(default_factory=list)
     relations: dict[str, str] = Field(default_factory=dict)

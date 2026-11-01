@@ -295,6 +295,15 @@ class FamilyLife:
         name = next((n for n in FALLBACK_NAMES if n.lower() not in taken), f"Bébé {len(self.births) + 1}")
         return ChildProfile(name=name, traits=["curieux", "rieur", "têtu"], interests=["les animaux", "dessiner"])
 
+    def _inherit(self, parents: list[Agent], field: str) -> list[str]:
+        """Sans réponse de l'IA : une qualité (ou un défaut) de chaque parent."""
+        out = []
+        for parent in parents:
+            choices = [t for t in getattr(parent.persona, field) if t not in out]
+            if choices:
+                out.append(self.engine.rng.choice(choices))
+        return out
+
     def _create_child(self, profile: ChildProfile) -> Agent:
         engine = self.engine
         now = engine.clock.total_minutes
@@ -306,6 +315,8 @@ class FamilyLife:
         persona = Persona(
             id=child_id, name=profile.name, age=0, role="enfant", color=tuple(profile.color),
             look={"hair": profile.hair, "long_hair": False}, traits=profile.traits,
+            qualites=profile.qualites or self._inherit(parents, "qualites"),
+            defauts=profile.defauts or self._inherit(parents, "defauts"),
             interests=profile.interests, speech_style=profile.speech_style,
             relations={p.id: f"Son parent, {p.name}." for p in parents},
             bed="tente", schedule=schedule_for(0),
