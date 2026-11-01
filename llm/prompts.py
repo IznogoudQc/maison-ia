@@ -108,12 +108,29 @@ def memory_block(memories: list[str], summary: str | None = None) -> str:
     return "\n".join(parts) if parts else "Aucun souvenir particulier pour l'instant."
 
 
+def mind_block(agent: Agent, now: int, with_plan: bool = True, beliefs: int = 3) -> str:
+    """Constats des réflexions, intention et plan du jour, objectif en cours."""
+    lines = [f"- Je pense : {b.text}" for b in agent.memory.beliefs[-beliefs:]]
+    plan = agent.plan
+    if plan is not None and plan.day == now // (24 * 60):
+        if plan.intention:
+            lines.append(f"- Mon intention aujourd'hui : {plan.intention}")
+        if with_plan and plan.items:
+            marks = {"done": "fait", "missed": "manqué", "todo": "à faire"}
+            steps = "; ".join(f"{i.hhmm} {i.action}{' ' + i.target if i.target else ''} ({marks[i.status]})"
+                              for i in plan.items)
+            lines.append(f"- Mon plan : {steps}")
+    if agent.goal is not None and now < agent.goal.until:
+        lines.append(f"- Je me suis promis : {agent.goal.text}")
+    return "\n".join(lines) if lines else "Rien de particulier en tête."
+
+
 # ---------------------------------------------------------------- requêtes
 
 
 def build_decision_request(agent: Agent, room: str, time_label: str, options: list[Option],
                            memories: list[str], summary: str | None, max_tokens: int,
-                           context: str = "", extra_meta: dict | None = None) -> LLMRequest:
+                           context: str = "", extra_meta: dict | None = None, now: int = 0) -> LLMRequest:
     system = (
         "Tu incarnes un membre d'une famille québécoise dans une simulation de vie quotidienne. "
         "Tu choisis sa prochaine activité parmi une liste d'options, en restant fidèle à sa personnalité, "
@@ -128,7 +145,8 @@ def build_decision_request(agent: Agent, room: str, time_label: str, options: li
         f"SITUATION\nMoment : {time_label}. Pièce : {room}.\n"
         f"Humeur : {agent.mood}.\nBesoins : {agent.needs.describe()}.\n\n"
         + (f"FAMILLE\n{context}\n\n" if context else "")
-        + f"MÉMOIRE\n{memory_block(memories, summary)}\n\n"
+        + f"DANS MA TÊTE\n{mind_block(agent, now)}\n\n"
+        f"MÉMOIRE\n{memory_block(memories, summary)}\n\n"
         f"OPTIONS POSSIBLES\n{option_lines}\n\n"
         "Choisis UNE option. Format exact :\n"
         '{"action": "<action>", "target": "<target ou null>", '
@@ -145,7 +163,8 @@ def build_decision_request(agent: Agent, room: str, time_label: str, options: li
 
 def build_dialogue_request(participants: list[Agent], room: str, time_label: str,
                            memories: dict[str, list[str]], summaries: dict[str, str | None],
-                           max_tokens: int, context: str = "", extra_meta: dict | None = None) -> LLMRequest:
+                           max_tokens: int, context: str = "", extra_meta: dict | None = None,
+                           now: int = 0) -> LLMRequest:
     system = (
         "Tu écris des dialogues pour une simulation de la vie d'une famille de Québec. "
         "Les répliques sont en français québécois naturel et familier (expressions d'ici, pas de France), "
@@ -166,6 +185,7 @@ def build_dialogue_request(participants: list[Agent], room: str, time_label: str
             f"Fait présentement : {action}. Humeur : {agent.mood}.\n"
             f"Besoins : {agent.needs.describe()}.\n"
             f"Relations :\n{relations or '  - (aucune précisée)'}\n"
+            f"En tête :\n{mind_block(agent, now, with_plan=False, beliefs=2)}\n"
             f"{memory_block(memories.get(agent.id, []), summaries.get(agent.id))}"
         )
     names = ", ".join(a.name for a in participants)

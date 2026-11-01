@@ -53,6 +53,27 @@ console et passe en mode mock.
 Les prompts du LLM reçoivent l'état du ménage (argent, garde-manger, achats, chômage, santé,
 deuils, dernière nouvelle) : les dialogues en parlent naturellement.
 
+## Vie intérieure des personnages
+
+- **Plan du matin** : au réveil, chaque personnage demande au LLM son plan de la journée
+  (3 à 6 activités placées dans ses plages libres, avec une intention). Le moteur le suit sans autre
+  appel : à l'heure prévue, l'activité est choisie directement, sauf urgence (faim, fatigue,
+  épicerie). Une activité impossible pendant 90 minutes est « manquée » et laisse un souvenir.
+- **Nouveau plan** : une nouvelle importante (mise à pied, prime, décès, hôpital) fait refaire le
+  plan du reste de la journée, au plus deux fois par jour.
+- **Réflexion du soir** : au coucher, le LLM relit la journée, en tire 1 ou 2 constats (« l'argent
+  m'inquiète »), désigne les souvenirs marquants et peut fixer un objectif pour le lendemain. Les
+  constats sont envoyés dans tous les prompts suivants ; l'objectif rend l'activité visée plus
+  attirante (`mind.goal_boost`) jusqu'à ce qu'elle soit faite.
+- **Mémoire pondérée** : chaque souvenir a une importance (1 à 10 ; un décès vaut 10, une
+  collation 1). Les souvenirs marquants passent en mémoire longue au lieu d'être oubliés, et les
+  souvenirs envoyés au LLM sont choisis selon fraîcheur + importance + lien avec la situation
+  (personnes présentes, pièce, intention). Une mise à pied peut donc revenir dans une conversation
+  des semaines plus tard.
+
+Le panneau d'un personnage affiche son intention, son plan (vert = fait, rouge = manqué), son
+objectif et son dernier constat ; les plans et réflexions apparaissent aussi dans l'historique (H).
+
 ## Contrôles
 
 | Touche | Effet |
@@ -71,7 +92,8 @@ deuils, dernière nouvelle) : les dialogues en parlent naturellement.
 | `sim` | `tick_minutes` (minutes simulées par tick), `base_ticks_per_second`, `speed_multipliers`, `start_day` (0 = lundi), `start_time`, `seed` |
 | `llm` | `provider` (`mock`, `claude`, `ollama`), `claude_model`, `claude_effort`, `max_calls_per_minute` (limite par minute réelle), `decisions_enabled`, `decision_cooldown_minutes`, `decision_max_wait_minutes`, `mock_invalid_rate` |
 | `dialogue` | `pair_cooldown_minutes` (cooldown social par paire), `max_participants`, `line_display_s` |
-| `memory` | `short_term_size`, `recall_count` (souvenirs envoyés au LLM), `summary_every`, `max_summaries` |
+| `memory` | `short_term_size`, `recall_count` (souvenirs envoyés au LLM), `summary_every`, `max_summaries`, `long_term_size`, `keep_from_importance`, `recency_half_life_hours`, `max_beliefs` |
+| `mind` | `plans_enabled`, `reflections_enabled`, `plan_item_window_minutes`, `max_replans_per_day`, `goal_boost` |
 | `economy` | `enabled`, `start_money`, `start_pantry`, `portion_price`, `weekly_bills`, `bills_weekday`, `grocery_days`, `low_pantry_days`, `overtime_below` |
 | `health` | `mortality`, `starvation_per_hour`, `exhaustion_per_hour`, `regen_per_hour`, `hospital_days`, `grief_days` |
 | `events` | `enabled`, `check_time`, `frequency` (0 = jamais, 2 = deux fois plus souvent) |
@@ -129,9 +151,9 @@ sauvegarde et chargement.
 ```
 main.py              boucle pygame (tick fixe, poll LLM non bloquant, rendu)
 world/               maison, cours avant et arrière, objets (dont ceux à acheter) ; A*
-agents/              persona, besoins, actions, horaire, mémoire, état de l'agent
+agents/              persona, besoins, actions, horaire, mémoire pondérée, plan du jour, état de l'agent
 llm/                 interface + factory, Claude, Ollama, mock, prompts, service (threads, retry, repli)
-sim/                 horloge, moteur, économie (economy.py), événements aléatoires, bus, journal JSONL, config
+sim/                 horloge, moteur, vie intérieure (mind.py), économie, événements aléatoires, bus, journal, config
 ui/                  rendu pixel art (sprites générés dans sprites.py), bulles et historique, HUD
 data/family.yaml     les personas
 ```

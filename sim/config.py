@@ -55,6 +55,18 @@ class MemoryConfig(BaseModel):
     recall_count: int = 5       # souvenirs envoyés au LLM
     summary_every: int = 12     # nouveaux événements avant un résumé LLM
     max_summaries: int = 5
+    long_term_size: int = 40          # souvenirs marquants gardés après la mémoire courte
+    keep_from_importance: int = 6     # importance minimale pour la mémoire longue (1-10)
+    recency_half_life_hours: float = 24.0  # fraîcheur d'un souvenir divisée par 2 toutes les N heures
+    max_beliefs: int = 6              # constats tirés des réflexions du soir
+
+
+class MindConfig(BaseModel):
+    plans_enabled: bool = True          # plan de la journée au réveil
+    reflections_enabled: bool = True    # réflexion au coucher (constats + objectif du lendemain)
+    plan_item_window_minutes: int = 90  # retard toléré avant qu'une activité prévue soit « manquée »
+    max_replans_per_day: int = 2        # nouveau plan après un imprévu (nouvelle, décès...)
+    goal_boost: float = 1.5             # poids de l'option visée par l'objectif du soir
 
 
 class EconomyConfig(BaseModel):
@@ -103,6 +115,7 @@ class AppConfig(BaseModel):
     economy: EconomyConfig = Field(default_factory=EconomyConfig)
     health: HealthConfig = Field(default_factory=HealthConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
+    mind: MindConfig = Field(default_factory=MindConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"

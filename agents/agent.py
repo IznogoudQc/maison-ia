@@ -10,6 +10,7 @@ from agents.actions import action_label, away_phrase
 from agents.memory import Memory
 from agents.needs import Needs
 from agents.persona import Persona
+from agents.plan import DayPlan, Goal
 from world.pathfinding import find_path
 
 Pos = tuple[int, int]
@@ -53,6 +54,11 @@ class Agent(BaseModel):
     fired: dict[str, int] = Field(default_factory=dict)  # tâche d'horaire -> dernier jour exécuté
     last_decision_minute: int = -10**9   # dernière décision demandée au LLM
     memory: Memory = Field(default_factory=Memory)
+    plan: DayPlan | None = None          # plan de la journée écrit par le LLM
+    plan_requested_day: int = -1         # dernier jour où un plan a été demandé
+    plan_stale: str | None = None        # raison de refaire le plan (événement imprévu)
+    goal: Goal | None = None             # objectif tiré de la réflexion du soir
+    reflected_day: int = -1              # dernier jour réfléchi (au coucher)
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property

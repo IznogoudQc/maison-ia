@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pygame
 
+from agents.actions import action_label
 from agents.agent import Agent
 from agents.needs import NEED_LABELS
 from llm.service import LLMService
@@ -13,6 +14,10 @@ from ui import theme
 from ui.dialogue_box import wrap_text
 
 HEALTH_WARNING = 60.0  # vue famille : santé affichée sous ce seuil
+MAX_PLAN_LINES = 6
+PLAN_DONE = (120, 200, 130)
+PLAN_MISSED = (200, 110, 100)
+PLAN_THOUGHT = (180, 170, 230)
 
 CONTROLS = [
     "Espace : pause / reprise",
@@ -26,10 +31,12 @@ CONTROLS = [
 class Hud:
     def __init__(self, rect: pygame.Rect) -> None:
         self.rect = rect
+        self.agents: list[Agent] = []  # pour afficher les prénoms des cibles du plan
 
     def draw(self, surface: pygame.Surface, clock: SimClock, speed: float, paused: bool,
              agents: list[Agent], selected: Agent | None, llm: LLMService | None = None,
              llm_label: str = "", economy: Economy | None = None, alive: int = 0) -> None:
+        self.agents = agents
         pygame.draw.rect(surface, theme.PANEL, self.rect)
         pygame.draw.line(surface, theme.PANEL_BORDER, self.rect.topleft, self.rect.bottomleft, 2)
         x, y = self.rect.x + 14, self.rect.y + 12
@@ -51,6 +58,8 @@ class Hud:
                 self._draw_ledger(surface, x, y + 8, economy, controls_top - 8)
         else:
             y = self._draw_agent(surface, x, y, selected)
+            if not selected.dead:
+                y = self._draw_mind(surface, x, y, selected, clock)
             self._draw_memory(surface, x, y, selected, controls_top - 8)
 
         y = controls_top
@@ -143,6 +152,42 @@ class Hud:
             y += 20
         return y + 6
 
+    def _draw_mind(self, surface: pygame.Surface, x: int, y: int, agent: Agent, clock: SimClock) -> int:
+        """Intention et plan du jour, objectif, dernier constat de réflexion."""
+        font = theme.font(12)
+        width = self.rect.width - 28
+        plan = agent.plan if agent.plan is not None and agent.plan.day == clock.day else None
+        if plan is None and agent.goal is None and not agent.memory.beliefs:
+            return y
+        surface.blit(theme.font(14, bold=True).render("Plan du jour", True, theme.TEXT), (x, y))
+        y += 20
+        if plan is None:
+            surface.blit(font.render("Pas encore de plan.", True, theme.TEXT_DIM), (x, y))
+            y += 16
+        else:
+            if plan.intention:
+                for line in wrap_text(f"« {plan.intention} »", font, width)[:2]:
+                    surface.blit(font.render(line, True, theme.ACCENT), (x, y))
+                    y += 15
+            due = plan.due(clock.minute_of_day)
+            for item in plan.items[:MAX_PLAN_LINES]:
+                target = next((a.name for a in self.agents if a.id == item.target), item.target)                     if item.target else None
+                color = {"done": PLAN_DONE, "missed": PLAN_MISSED}.get(item.status, theme.TEXT_DIM)
+                if item is due:
+                    color = theme.TEXT
+                pygame.draw.circle(surface, color, (x + 4, y + 8), 3)
+                text = _clip(f"{item.hhmm} {action_label(item.action, target)}", 46)
+                surface.blit(font.render(text, True, color), (x + 12, y))
+                y += 16
+        if agent.goal is not None and clock.total_minutes < agent.goal.until:
+            for line in wrap_text(f"Objectif : {agent.goal.text}", font, width)[:2]:
+                surface.blit(font.render(line, True, theme.TEXT_DIM), (x, y))
+                y += 15
+        if agent.memory.beliefs:
+            for line in wrap_text(f"Pense : {agent.memory.beliefs[-1].text}", font, width)[:2]:
+                surface.blit(font.render(line, True, PLAN_THOUGHT), (x, y))
+                y += 15
+        return y + 8
 
     def _draw_memory(self, surface: pygame.Surface, x: int, y: int, agent: Agent, bottom: int) -> None:
         """Résumé puis souvenirs du plus récent au plus ancien, tant qu'il reste de la place."""

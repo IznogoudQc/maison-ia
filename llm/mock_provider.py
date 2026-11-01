@@ -129,6 +129,10 @@ class MockProvider(LLMProvider):
                 text = self._decision(request)
             elif request.kind == "dialogue":
                 text = self._dialogue(request)
+            elif request.kind == "plan":
+                text = self._plan(request)
+            elif request.kind == "reflection":
+                text = self._reflection(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -193,3 +197,66 @@ class MockProvider(LLMProvider):
             parts = [e.split("] ", 1)[-1][:90].rstrip() for e in picked]
             summary = "En gros : " + " ; puis ".join(parts)
         return json.dumps({"summary": summary[:300]}, ensure_ascii=False)
+
+    def _plan(self, request: LLMRequest) -> str:
+        """3 à 5 activités tirées dans les plages libres, les favorites plus souvent."""
+        slots = [tuple(s) for s in request.meta.get("slots", [])]
+        catalog = request.meta.get("catalog", [])
+        favorites = set(request.meta.get("favorites", []))
+        if not slots or not catalog:
+            return json.dumps({"intention": "", "plan": []})
+        weights = [3.0 if o["action"] in favorites else 1.0 for o in catalog]
+        times: set[int] = set()
+        for _ in range(self.rng.randint(3, 5)):
+            start, end = self.rng.choice(slots)
+            times.add(start + self.rng.randrange(0, max(1, end - start - 10), 15))
+        plan = []
+        for minute in sorted(times):
+            option = self.rng.choices(catalog, weights=weights, k=1)[0]
+            plan.append({"time": f"{minute // 60:02d}:{minute % 60:02d}", "action": option["action"],
+                         "target": option.get("target"),
+                         "note": self.rng.choice(REASONS.get(option["action"], ["Ça me tente."]))})
+        intention = self.rng.choice(INTENTIONS.get(request.meta.get("agent_id", ""), ["Une journée tranquille."]))
+        if request.meta.get("replan"):
+            intention = "Avec ce qui arrive, je change mes plans."
+        return json.dumps({"intention": intention, "plan": plan}, ensure_ascii=False)
+
+    def _reflection(self, request: LLMRequest) -> str:
+        """Un constat selon les mots-clés de la journée, parfois un objectif pour demain."""
+        events = request.meta.get("events", [])
+        text = " ".join(events).lower()
+        for words, insight, importance in INSIGHTS:
+            if any(w in text for w in words):
+                break
+        else:
+            insight, importance = "Une journée ordinaire, mais on est ensemble, c'est ça qui compte.", 3
+        important = [n for n, e in enumerate(events, 1) if any(w in e.lower() for w in words)][:2] \
+            if importance > 3 else []
+        catalog = request.meta.get("catalog", [])
+        goal = None
+        if catalog and self.rng.random() < 0.6:
+            option = self.rng.choice(catalog)
+            goal = {"action": option["action"], "target": option.get("target"),
+                    "why": self.rng.choice(REASONS.get(option["action"], ["Ça va me faire du bien."]))}
+        return json.dumps({"insights": [{"text": insight, "importance": importance}],
+                           "important": important, "goal": goal}, ensure_ascii=False)
+
+
+INTENTIONS: dict[str, list[str]] = {
+    "pere": ["Passer à travers la journée sans stress.", "Trouver du temps pour relaxer devant la game."],
+    "mere": ["Tenir l'horaire et garder du temps pour moi.", "Que tout le monde soit nourri et à l'heure."],
+    "ado": ["Survivre à l'école pis voir ma gang.", "Avoir la paix un peu dans ma chambre."],
+    "enfant": ["Finir ma fusée Lego!", "Jouer le plus possible."],
+}
+
+# (mots-clés, constat, importance) : le premier qui correspond à la journée l'emporte
+INSIGHTS: list[tuple[tuple[str, ...], str, int]] = [
+    (("quittés", "décès"), "La maison est vide sans lui ou elle. Faut qu'on se serre les coudes.", 9),
+    (("hôpital",), "J'ai eu peur pour la santé de la famille.", 7),
+    (("mise à pied", "rouge", "pas assez d'argent"), "L'argent m'inquiète. Faut faire attention à chaque dépense.", 7),
+    (("frigo est vide", "sans lunch"), "Manquer de bouffe, ça m'a ébranlé. Faut mieux planifier l'épicerie.", 6),
+    (("a acheté",), "Ça fait du bien de se gâter un peu, on l'a mérité.", 5),
+    (("bonne nouvelle :",), "Des fois, la vie nous fait des cadeaux.", 4),
+    (("plan aujourd'hui",), "J'ai fait à peu près ce que je voulais aujourd'hui. Pas pire.", 3),
+    (("jasé",), "Ça m'a fait du bien de jaser avec la famille aujourd'hui.", 4),
+]

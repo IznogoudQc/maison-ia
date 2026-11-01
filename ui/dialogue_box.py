@@ -15,6 +15,8 @@ from ui.renderer import Renderer
 BUBBLE_MAX_WIDTH = 230
 MAX_ACTIVE_CONVERSATIONS = 3
 NEWS_KINDS = ("evenement", "deces", "hopital", "factures", "frigo_vide", "achat")
+MIND_KINDS = ("plan", "reflexion")
+THOUGHT = (180, 170, 230)
 TOAST_SECONDS = 6.0
 MAX_TOASTS = 3
 GOOD = (40, 130, 70)
@@ -100,6 +102,23 @@ class DialogueBox:
         minute = event.minute % (24 * 60)
         self.history.append(HistoryEntry(f"{minute // 60:02d}:{minute % 60:02d}", "Famille", "Nouvelle",
                                          text, color))
+        while len(self.history) > self.history_size:
+            self.history.popleft()
+
+    def on_mind(self, event: Event) -> None:
+        """Plans et réflexions : seulement dans l'historique (H), en italique de pensée."""
+        data = event.data
+        if event.kind == "plan":
+            label = "Nouveau plan" if data.get("replan") else "Plan du jour"
+            text = data.get("intention") or ", ".join(i["action"] for i in data.get("items", []))
+        else:
+            label = "Réflexion"
+            text = " ".join(i["text"] for i in data.get("insights", []))
+            if data.get("goal"):
+                text += f" (objectif : {data['goal']})"
+        minute = event.minute % (24 * 60)
+        self.history.append(HistoryEntry(f"{minute // 60:02d}:{minute % 60:02d}", label, data["name"],
+                                         text, THOUGHT))
         while len(self.history) > self.history_size:
             self.history.popleft()
 

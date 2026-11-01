@@ -20,6 +20,7 @@ from agents.actions import (
     score_action,
 )
 from agents.agent import ActiveAction, Agent
+from agents.memory import keywords
 from agents.needs import Needs
 from agents.scheduler import Scheduler
 from llm.prompts import (
@@ -37,6 +38,7 @@ from sim.clock import SimClock, parse_hhmm
 from sim.config import AppConfig
 from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
+from sim.mind import Mind
 from sim.random_events import RandomEvents
 from world.house import PURCHASE_OBJECTS, House, InteractiveObject
 from world.pathfinding import NEIGHBORS, manhattan
@@ -80,8 +82,9 @@ LAWN_FINE = 150.0          # pelouse à 100 : amende de la ville (au plus une fo
 CAR_COMMUTE_SAVING = 30    # minutes gagnées au retour du travail en auto
 CAR_GROCERY_MINUTES = 60
 
-SAVE_VERSION = 2
-SUPPORTED_SAVE_VERSIONS = {1, 2}  # v1 : avant l'économie (le ménage repart des valeurs de départ)
+SAVE_VERSION = 3
+# v1 : avant l'économie (le ménage repart des valeurs de départ) ; v2 : avant plans et réflexions
+SUPPORTED_SAVE_VERSIONS = {1, 2, 3}
 
 
 class Engine:
@@ -104,6 +107,7 @@ class Engine:
         self.random_events = RandomEvents(config.events)
         self.last_event: tuple[str, bool, int] | None = None  # (texte, bonne nouvelle, minute)
         self.game_over = False
+        self.mind = Mind(self)
 
     # ------------------------------------------------------------------ utilitaires
 
@@ -211,7 +215,8 @@ class Engine:
         self.publish("action", agent=agent.id, name=agent.name, action=action.name,
                      label=action.label, forced=action.forced, reason=action.reason)
         if action.name in MEMORABLE_ACTIONS:
-            self.remember(agent, MEMORABLE_ACTIONS[action.name])
+            self.remember(agent, MEMORABLE_ACTIONS[action.name], 1)
+        self.mind.on_action_started(agent, action)
         return True
 
     def options_for(self, agent: Agent) -> list[Option]:
@@ -243,6 +248,7 @@ class Engine:
                 score = max(score, 0.5)
             options.append(Option(action=definition.name, label=definition.label, score=score))
         options += self._economic_options(agent)
+        self.mind.boost(agent, options)
         options.sort(key=lambda o: (o.urgent, o.score), reverse=True)
         return options
 
@@ -321,6 +327,15 @@ class Engine:
         options = self.options_for(agent)
         if not options:
             return
+        planned = self.mind.planned_option(agent, options)
+        if planned is not None:
+            option, item = planned
+            note = f"Prévu : {item.note}" if item.note else "Comme prévu"
+            action = self.make_action(agent, option.action, option.target, reason=note)
+            if action is not None and self.start_action(agent, action):
+                item.status = "done"
+                return
+            # Objet occupé : on fait autre chose et on retentera pendant la fenêtre du plan
         pick = self.pick_deterministic(agent, options)
         if self._should_ask_llm(agent, options) and self._request_decision(agent, options, pick):
             return
@@ -337,15 +352,21 @@ class Engine:
 
     # ------------------------------------------------------------------ décisions LLM
 
-    def memories_for(self, agent: Agent) -> tuple[list[str], str | None]:
-        """Souvenirs récents + dernier résumé, pour les prompts."""
-        return agent.memory.recent(self.config.memory.recall_count), agent.memory.latest_summary
+    def memories_for(self, agent: Agent, about: list[str] | None = None) -> tuple[list[str], str | None]:
+        """Souvenirs les plus utiles (fraîcheur, importance, lien avec about) + dernier résumé."""
+        cfg = self.config.memory
+        now = self.clock.total_minutes
+        query = keywords(" ".join(t for t in (about or []) if t))
+        events = agent.memory.retrieve(now, query, cfg.recall_count, cfg.recency_half_life_hours)
+        return [e.formatted_at(now) for e in events], agent.memory.latest_summary
 
     # ------------------------------------------------------------------ mémoire
 
-    def remember(self, agent: Agent, text: str) -> None:
+    def remember(self, agent: Agent, text: str, importance: int = 3, kind: str = "event") -> None:
+        """Ajoute un souvenir ; importance de 1 (banal) à 10 (inoubliable)."""
         cfg = self.config.memory
-        agent.memory.add(self.clock.total_minutes, self.clock.hhmm, text, cfg.short_term_size)
+        agent.memory.add(self.clock.total_minutes, self.clock.hhmm, text, cfg.short_term_size, importance,
+                         kind, cfg.keep_from_importance, cfg.long_term_size)
         if agent.memory.since_summary >= cfg.summary_every and agent.id not in self.pending_summaries:
             self._request_summary(agent)
 
@@ -386,10 +407,14 @@ class Engine:
     def _request_decision(self, agent: Agent, options: list[Option], pick: Option) -> bool:
         assert self.llm is not None
         top = options[:6]
-        memories, summary = self.memories_for(agent)
-        request = build_decision_request(agent, self.room_of(agent), self.clock.label(), top,
+        room = self.room_of(agent)
+        present = [a.name for a in self.agents if a is not agent and a.is_available and self.room_of(a) == room]
+        about = [room, *present, agent.plan.intention if agent.plan else "", agent.goal.text if agent.goal else ""]
+        memories, summary = self.memories_for(agent, about)
+        request = build_decision_request(agent, room, self.clock.label(), top,
                                          memories, summary, self.config.llm.max_tokens,
-                                         self.family_context([agent]), self._prompt_meta())
+                                         self.family_context([agent]), self._prompt_meta(),
+                                         now=self.clock.total_minutes)
         names = {a.id: a.name for a in self.agents}
         fallback = ActionDecision(action=pick.action, target=pick.target, reason="")
         future = self.llm.try_submit(request, ActionDecision, fallback,
@@ -409,6 +434,7 @@ class Engine:
         """Appelé à chaque image (fil principal) : applique les réponses LLM arrivées."""
         self._poll_dialogues()
         self._poll_summaries()
+        self.mind.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -428,7 +454,7 @@ class Engine:
             if agent.action is None and not agent.is_away:
                 self._start_option(agent, decision.action, decision.target, decision.reason, pending.options)
                 if result.ok and decision.reason and agent.action is not None:
-                    self.remember(agent, f"J'ai décidé : {agent.action.label} (« {decision.reason} »)")
+                    self.remember(agent, f"J'ai décidé : {agent.action.label} (« {decision.reason} »)", 2)
 
     def _check_decision_timeout(self, agent: Agent) -> None:
         pending = self.pending_decisions.get(agent.id)
@@ -461,7 +487,7 @@ class Engine:
 
     def _roll_events(self) -> None:
         for event, text in self.random_events.roll(self, self.rng):
-            self._news(text, event.good)
+            self._news(text, event.good, event.id)
 
     def family_context(self, agents: list[Agent]) -> str:
         """Situation de la famille pour les prompts : argent, santé, chômage, deuils, dernière nouvelle."""
@@ -500,7 +526,8 @@ class Engine:
         for agent in self.agents:
             if agent.persona.is_adult:
                 warning = " On est dans le rouge." if money < 0 else ""
-                self.remember(agent, f"Les factures sont passées : {total:.0f} $ (solde {money:.0f} $).{warning}")
+                self.remember(agent, f"Les factures sont passées : {total:.0f} $ (solde {money:.0f} $).{warning}",
+                              7 if money < 0 else 4)
 
     # ------------------------------------------------------------------ rencontres et dialogues
 
@@ -542,10 +569,11 @@ class Engine:
         assert self.llm is not None
         memories, summaries = {}, {}
         for agent in group:
-            memories[agent.id], summaries[agent.id] = self.memories_for(agent)
+            about = [room, *(a.name for a in group if a is not agent)]
+            memories[agent.id], summaries[agent.id] = self.memories_for(agent, about)
         request = build_dialogue_request(group, room, self.clock.label(), memories, summaries,
                                          self.config.llm.max_tokens, self.family_context(group),
-                                         self._prompt_meta())
+                                         self._prompt_meta(), now=self.clock.total_minutes)
         names = {a.id: a.name for a in group}
         future = self.llm.try_submit(request, Dialogue, None, lambda d: validate_dialogue(d, names))
         if future is None:
@@ -589,7 +617,7 @@ class Engine:
             agent.grieving_until = None
         if agent.unemployed_until is not None and now >= agent.unemployed_until:
             agent.unemployed_until = None
-            self.remember(agent, "La mise à pied est finie : retour au travail.")
+            self.remember(agent, "La mise à pied est finie : retour au travail.", 5)
         if self._update_health(agent, minutes):
             return  # vient de mourir ou d'être hospitalisé
 
@@ -622,6 +650,8 @@ class Engine:
                 # Objet occupé ou chemin bloqué : on retentera au prochain tick (dans la fenêtre)
                 agent.fired.pop(scheduled.key, None)
 
+        if not agent.is_sleeping:
+            self.mind.update(agent)
         if agent.thinking:
             self._check_decision_timeout(agent)
         if agent.action is None and not agent.thinking:
@@ -671,12 +701,12 @@ class Engine:
             self._buy(agent, action.target)
         elif action.name == "tondre":
             self.economy.household.lawn = 0.0
-            self.remember(agent, "J'ai tondu la pelouse. Ça sent l'été.")
+            self.remember(agent, "J'ai tondu la pelouse. Ça sent l'été.", 2)
 
     def _buy(self, agent: Agent, item_id: str) -> None:
         item = self.economy.buy(self.clock.total_minutes, item_id, agent.name)
         if item is None:
-            self.remember(agent, "Finalement, on n'avait pas les moyens de l'acheter.")
+            self.remember(agent, "Finalement, on n'avait pas les moyens de l'acheter.", 4)
             return
         if item_id in PURCHASE_OBJECTS:
             self.house.add_object(PURCHASE_OBJECTS[item_id])
@@ -685,7 +715,7 @@ class Engine:
                      money=self.economy.household.money)
         for other in self.agents:
             if not other.dead:
-                self.remember(other, text)
+                self.remember(other, text, 6)
 
     def _daily_yard(self) -> None:
         """Chaque matin, le gazon pousse ; trop long, le voisin tond (payant) ou la ville donne une amende."""
@@ -703,13 +733,16 @@ class Engine:
             household.last_fine_day = self.clock.day
             self._news("Amende de la ville : la pelouse est trop haute (150 $). Les voisins chialent.", good=False)
 
-    def _news(self, text: str, good: bool) -> None:
+    def _news(self, text: str, good: bool, id_: str = "cour") -> None:
+        """Nouvelle pour toute la famille ; hors pelouse (« cour »), chacun revoit son plan."""
         self.last_event = (text, good, self.clock.total_minutes)
-        self.publish("evenement", id="cour", text=text, good=good, money=self.economy.household.money)
+        self.publish("evenement", id=id_, text=text, good=good, money=self.economy.household.money)
         prefix = "Bonne nouvelle : " if good else "Mauvaise nouvelle : "
         for agent in self.agents:
             if not agent.dead:
-                self.remember(agent, prefix + text)
+                self.remember(agent, prefix + text, 5 if good else 6)
+        if id_ != "cour":
+            self.mind.mark_stale(prefix + text)
 
     # ------------------------------------------------------------------ santé et mort
 
@@ -750,7 +783,8 @@ class Engine:
                 continue
             other.grieving_until = grief_end
             other.needs.apply({"fun": -40, "social": -30})
-            self.remember(other, f"{agent.name} nous a quittés ({cause}). Tout le monde a le cœur gros.")
+            self.remember(other, f"{agent.name} nous a quittés ({cause}). Tout le monde a le cœur gros.", 10)
+        self.mind.mark_stale(f"{agent.name} est mort {cause}.")
         if self.alive_count() == 0:
             self.game_over = True
             self.publish("fin", day=self.clock.day + 1, label=self.clock.label())
@@ -765,10 +799,11 @@ class Engine:
         agent.needs.hunger = max(agent.needs.hunger, 70.0)
         agent.needs.energy = max(agent.needs.energy, 70.0)
         self.publish("hopital", agent=agent.id, name=agent.name)
-        self.remember(agent, "J'ai perdu connaissance : direction l'hôpital.")
+        self.remember(agent, "J'ai perdu connaissance : direction l'hôpital.", 8)
         for other in self.agents:
             if other is not agent and not other.dead:
-                self.remember(other, f"{agent.name} est à l'hôpital pour quelques jours.")
+                self.remember(other, f"{agent.name} est à l'hôpital pour quelques jours.", 8)
+        self.mind.mark_stale(f"{agent.name} est à l'hôpital.")
 
     def _eat(self, agent: Agent, action_name: str) -> bool:
         """Prend la nourriture du garde-manger au début d'un repas ; False si le frigo est vide."""
@@ -776,7 +811,7 @@ class Engine:
         if self.economy.consume(portions):
             return True
         self.publish("frigo_vide", agent=agent.id, name=agent.name, action=action_name)
-        self.remember(agent, "Le frigo est vide, rien à manger.")
+        self.remember(agent, "Le frigo est vide, rien à manger.", 6)
         return False
 
     def _leave(self, agent: Agent, action: ActiveAction) -> None:
@@ -803,11 +838,11 @@ class Engine:
             # Le lunch vient du garde-manger ; sans lunch, on rentre affamé
             if self.economy.enabled and not self.economy.consume(self.economy.config.meal_portions):
                 agent.needs.apply({"hunger": -25})
-                self.remember(agent, "Parti sans lunch : le frigo était vide.")
+                self.remember(agent, "Parti sans lunch : le frigo était vide.", 5)
         agent.action = None
         agent.path = []
         self.publish("depart", agent=agent.id, name=agent.name, label=agent.away_label)
-        self.remember(agent, f"Je pars {away_phrase(agent.away_label)}.")
+        self.remember(agent, f"Je pars {away_phrase(agent.away_label)}.", 1)
 
     def _return_home(self, agent: Agent) -> None:
         drove = agent.drove
@@ -823,7 +858,7 @@ class Engine:
         self.publish("retour", agent=agent.id, name=agent.name, label=label)
         place = label or "travail"
         origin = f"de l'{place}" if away_phrase(place).startswith("à l'") else f"du {place}"
-        self.remember(agent, f"De retour {origin}.")
+        self.remember(agent, f"De retour {origin}.", 1)
         if not self.economy.enabled:
             return
         now = self.clock.total_minutes
@@ -837,9 +872,9 @@ class Engine:
             self.publish("epicerie", agent=agent.id, name=agent.name, portions=bought, amount=-cost,
                          money=self.economy.household.money)
             if bought:
-                self.remember(agent, f"Épicerie faite : {bought} portions pour {cost:.0f} $.")
+                self.remember(agent, f"Épicerie faite : {bought} portions pour {cost:.0f} $.", 2)
             else:
-                self.remember(agent, "Pas assez d'argent pour faire l'épicerie...")
+                self.remember(agent, "Pas assez d'argent pour faire l'épicerie...", 7)
 
     # ------------------------------------------------------------------ sauvegarde
 
@@ -878,6 +913,7 @@ class Engine:
         self.pending_decisions.clear()
         self.pending_dialogues.clear()
         self.pending_summaries.clear()
+        self.mind.clear()
         self.game_over = self.alive_count() == 0
         if self.llm is not None and "llm_stats" in data:
             for key, value in data["llm_stats"].items():

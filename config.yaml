@@ -42,6 +42,17 @@ memory:
   recall_count: 5             # souvenirs envoyés au LLM
   summary_every: 12           # nouveaux événements avant un résumé
   max_summaries: 5
+  long_term_size: 40          # souvenirs marquants gardés au-delà de la mémoire courte
+  keep_from_importance: 6     # importance (1-10) à partir de laquelle un souvenir va en mémoire longue
+  recency_half_life_hours: 24 # la fraîcheur d'un souvenir est divisée par 2 toutes les N heures
+  max_beliefs: 6              # constats tirés des réflexions du soir
+
+mind:
+  plans_enabled: true         # chaque personnage écrit son plan de la journée au réveil
+  reflections_enabled: true   # au coucher : constats sur la journée + objectif du lendemain
+  plan_item_window_minutes: 90  # retard toléré avant qu'une activité prévue soit manquée
+  max_replans_per_day: 2      # nouveau plan après un imprévu (nouvelle, décès, hôpital)
+  goal_boost: 1.5             # poids de l'activité visée par l'objectif du soir
 
 economy:
   enabled: true

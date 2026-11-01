@@ -11,7 +11,8 @@ from sim.clock import SimClock
 from sim.events import Event, EventBus
 
 LOGGED_KINDS = ("dialogue", "decision", "depart", "retour", "resume", "dialogue_echec",
-                "paie", "factures", "epicerie", "frigo_vide", "deces", "hopital", "fin", "evenement")
+                "paie", "factures", "epicerie", "frigo_vide", "deces", "hopital", "fin", "evenement",
+                "plan", "reflexion")
 
 
 class JsonlJournal:

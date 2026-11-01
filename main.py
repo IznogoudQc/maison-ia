@@ -20,7 +20,7 @@ from sim.engine import Engine
 from sim.events import EventBus
 from sim.journal import JsonlJournal
 from ui import theme
-from ui.dialogue_box import NEWS_KINDS, DialogueBox
+from ui.dialogue_box import MIND_KINDS, NEWS_KINDS, DialogueBox
 from ui.hud import Hud, draw_game_over
 from ui.renderer import Renderer
 from ui.sprites import TILE
@@ -94,6 +94,8 @@ def main() -> None:
     bus.subscribe("dialogue", dialogue_box.on_dialogue)
     for kind in NEWS_KINDS:
         bus.subscribe(kind, dialogue_box.on_news)
+    for kind in MIND_KINDS:
+        bus.subscribe(kind, dialogue_box.on_mind)
     journal = JsonlJournal(config.log_dir, clock)
     journal.attach(bus)
     frame_clock = pygame.time.Clock()
