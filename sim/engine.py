@@ -381,6 +381,7 @@ class Engine:
                 score = max(score, 0.5)
             options.append(Option(action=definition.name, label=definition.label, score=score))
         options += self._economic_options(agent) + self._care_options(agent)
+        self.inventory.boost(agent, options)
         self.mind.boost(agent, options)
         options.sort(key=lambda o: (o.urgent, o.score), reverse=True)
         return options
@@ -1000,6 +1001,8 @@ class Engine:
             self.inventory.buy(agent, action.target)
         elif action.name == "revendre":
             self.inventory.sell(agent, action.target)
+        elif action.name == "promener":
+            self.inventory.walked(agent)
         elif action.name == "soigner":
             baby = self.agent_by_id(action.target or "")
             if baby is not None and not baby.dead:

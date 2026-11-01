@@ -787,6 +787,134 @@ KIND_DRAWERS = {"berceau": _crib, "console": _console, "piano": _piano, "trampol
 LABEL_DRAWERS = {"Panneaux": _solar, "Congélateur": _freezer, "Comptoir": _counter, "Toilette": _toilet, "Télé": _tv, "Commode": _dresser, "Établi": _workbench}
 
 
+# Lot G3
+def _espresso(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, pygame.Rect(r.x + 4, r.y + 4, 8, 9), (60, 60, 66))
+    pygame.draw.rect(surf, (230, 230, 236), (r.x + 6, r.y + 10, 3, 3))  # la tasse
+
+
+def _wood_stove(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-4, -4), (44, 40, 40))
+    pygame.draw.rect(surf, (230, 120, 40), (r.x + 5, r.y + 8, 6, 4))
+    pygame.draw.rect(surf, (70, 66, 66), (r.centerx - 1, r.y, 3, 3))  # le tuyau
+
+
+def _washer(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-3, -3), (236, 238, 242))
+    pygame.draw.circle(surf, (110, 150, 200), r.center, 4)
+    pygame.draw.circle(surf, (80, 90, 100), r.center, 4, 1)
+
+
+def _well(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.circle(surf, (130, 130, 136), r.center, 6)
+    pygame.draw.circle(surf, (40, 70, 110), r.center, 4)
+    pygame.draw.line(surf, (110, 80, 50), (r.x + 2, r.y + 2), (r.right - 3, r.y + 2), 2)
+
+
+def _fire_pit(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.circle(surf, (120, 120, 126), r.center, min(r.width, r.height) // 2 - 3)
+    pygame.draw.circle(surf, (60, 46, 40), r.center, min(r.width, r.height) // 2 - 6)
+    pygame.draw.line(surf, (150, 104, 62), (r.centerx - 4, r.centery + 2), (r.centerx + 4, r.centery - 2), 2)
+
+
+def _exercise_bike(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.line(surf, (60, 60, 66), (r.x + 3, r.bottom - 4), (r.right - 4, r.bottom - 4), 2)
+    pygame.draw.circle(surf, (200, 60, 50), (r.right - 5, r.centery + 1), 3)
+    pygame.draw.line(surf, (60, 60, 66), (r.x + 5, r.bottom - 4), (r.x + 6, r.y + 4), 2)
+
+
+def _desk(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -6), (170, 128, 84))
+    pygame.draw.rect(surf, (245, 245, 240), (r.x + 4, r.y + 5, 5, 4))  # un cahier
+
+
+def _bunk_bed(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -2), (150, 108, 66))
+    half = r.height // 2
+    for y in (r.y + 2, r.y + half + 1):
+        pygame.draw.rect(surf, (90, 130, 200), (r.x + 3, y, r.width - 6, half - 3))
+    pygame.draw.line(surf, (110, 80, 50), (r.right - 3, r.y + 2), (r.right - 3, r.bottom - 3))
+
+
+def _pool_table(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -4), (110, 70, 40))
+    felt = r.inflate(-6, -8)
+    pygame.draw.rect(surf, (40, 130, 70), felt)
+    for color, dx in (((250, 248, 240), 4), ((220, 40, 40), 10), ((240, 200, 40), 14)):
+        pygame.draw.circle(surf, color, (felt.x + dx, felt.centery), 1)
+
+
+def _foosball(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -4), (70, 120, 70))
+    for x in range(r.x + 5, r.right - 3, 6):
+        pygame.draw.line(surf, (200, 200, 206), (x, r.y + 2), (x, r.bottom - 3))
+
+
+def _ping_pong(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -4), (30, 80, 150))
+    pygame.draw.line(surf, (250, 250, 250), (r.centerx, r.y + 2), (r.centerx, r.bottom - 3))
+
+
+def _home_theater(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, pygame.Rect(r.x + 2, r.y + 2, r.width - 4, r.height - 6), (24, 24, 30))
+    pygame.draw.rect(surf, (80, 120, 200), (r.x + 4, r.y + 4, r.width - 8, r.height - 10))
+    for x in (r.x + 1, r.right - 4):
+        pygame.draw.rect(surf, (50, 50, 56), (x, r.bottom - 5, 3, 4))  # les haut-parleurs
+
+
+def _aquarium(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r.inflate(-2, -5), (70, 70, 76))
+    pygame.draw.rect(surf, (90, 170, 220), r.inflate(-4, -7))
+    surf.set_at((r.x + 5, r.centery), (250, 140, 40))
+    surf.set_at((r.x + 10, r.centery + 1), (250, 220, 60))
+
+
+def _beehive(surf: pygame.Surface, r: pygame.Rect) -> None:
+    for i, y in enumerate(range(r.y + 4, r.bottom - 3, 3)):
+        pygame.draw.rect(surf, (240, 200, 60) if i % 2 else (220, 170, 40), (r.x + 4, y, r.width - 8, 3))
+
+
+def _sugar_shack(surf: pygame.Surface, r: pygame.Rect) -> None:
+    body = pygame.Rect(r.x + 3, r.y + 8, r.width - 6, r.height - 10)
+    box(surf, body, (130, 86, 52))
+    pygame.draw.polygon(surf, (170, 50, 40), [(body.x - 2, body.y), (body.right + 1, body.y), (body.centerx, r.y + 2)])
+    pygame.draw.rect(surf, (90, 60, 40), (body.centerx - 2, body.bottom - 6, 4, 6))
+    pygame.draw.rect(surf, (210, 210, 216), (body.right - 5, r.y + 1, 2, 5))  # cheminée de vapeur
+
+
+def _kayak(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.ellipse(surf, (230, 120, 30), r.inflate(-6, -2))
+    pygame.draw.ellipse(surf, (40, 40, 46), pygame.Rect(r.centerx - 2, r.centery - 3, 4, 6))
+
+
+def _doghouse(surf: pygame.Surface, r: pygame.Rect) -> None:
+    body = pygame.Rect(r.x + 2, r.y + 6, r.width - 4, r.height - 7)
+    box(surf, body, (170, 120, 70))
+    pygame.draw.polygon(surf, (150, 50, 40), [(body.x - 1, body.y), (body.right, body.y), (body.centerx, r.y + 1)])
+    pygame.draw.ellipse(surf, (40, 30, 24), (body.centerx - 3, body.bottom - 6, 6, 6))
+
+
+def draw_dog(surf: pygame.Surface, center: tuple[int, int], t: float, facing: int = 1) -> None:
+    """Petit chien brun vu de côté, la queue qui bat."""
+    cx, cy = center
+    body = (150, 100, 56)
+    pygame.draw.ellipse(surf, body, (cx - 4, cy - 2, 8, 4))
+    pygame.draw.circle(surf, body, (cx + 4 * facing, cy - 3), 2)
+    surf.set_at((cx + 5 * facing, cy - 3), (30, 24, 20))
+    for dx in (-3, 2):
+        pygame.draw.line(surf, shade(body, -40), (cx + dx, cy + 1), (cx + dx, cy + 3))
+    wag = 1 if int(t * 8) % 2 else -1
+    pygame.draw.line(surf, body, (cx - 4 * facing, cy - 1), (cx - 6 * facing, cy - 3 + wag))
+
+
+KIND_DRAWERS.update({"cafe": _espresso, "foyer": _fire_pit, "exercice": _exercise_bike, "etude": _desk,
+                     "billard": _pool_table, "babyfoot": _foosball, "pingpong": _ping_pong,
+                     "cinema": _home_theater, "aquarium": _aquarium, "ruche": _beehive,
+                     "erabliere": _sugar_shack, "kayak": _kayak, "chien": _doghouse, "balancoire": _swing})
+LABEL_DRAWERS.update({"Poêle à bois": _wood_stove, "Laveuse-sécheuse": _washer, "Puits artésien": _well,
+                      "Lits superposés": _bunk_bed})
+
+
 def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
     x, y, w, h = obj.rect
     rect = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
@@ -797,6 +925,8 @@ def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
             _small_tree(surf, rect, obj.label)
         else:
             _tree(surf, rect)
+    elif obj.kind == "lit" and obj.label.startswith("Lits superposés"):
+        _bunk_bed(surf, rect)
     elif obj.kind == "lit" and obj.id not in OBJECT_DRAWERS:
         _bed(surf, rect, obj)
     elif obj.id in OBJECT_DRAWERS:

@@ -165,7 +165,11 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
 - **Bibliothèque d'objets** (`data/catalogue.yaml`, à enrichir) : lits en gammes (matelas, lit
   simple, double, king), divans, bibliothèque, coffre à jouets, ordinateur, console, piano,
   congélateur (épicerie 8 % moins chère), potager (2 portions par jour), poulailler (1,5 portion par
-  jour), trampoline, hamac, balançoire, spa, panneaux solaires (Hydro −30 $ par semaine). Chaque objet
+  jour), trampoline, hamac, balançoire, spa, panneaux solaires (Hydro −30 $ par semaine), machine à
+  espresso, laveuse-sécheuse, poêle à bois, puits, foyer extérieur, vélo stationnaire, bureau d'étude,
+  lits superposés, billard, babyfoot, ping-pong, cinéma maison, aquarium, ruche (miel), cabane à
+  sucre (sirop d'érable), kayak, et un **chien** : il faut le promener chaque jour, sinon il fait un
+  dégât et le moral baisse. Chaque objet
   a un prix, des frais hebdomadaires éventuels, une taille, une activité (avec une qualité qui la rend
   plus ou moins efficace) et les pièces où il peut aller. Le moteur propose chaque jour quelques
   achats pertinents (un lit en priorité pour qui dort sur un matelas, une gamme supérieure, un objet

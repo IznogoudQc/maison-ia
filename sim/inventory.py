@@ -46,6 +46,7 @@ class CatalogItem(BaseModel):
     places: int = 1
     lieu: list[str] = Field(default_factory=lambda: ["salon"])
     effet: dict[str, float] = Field(default_factory=dict)
+    recolte: str = ""
     utilite: str = ""
 
 
@@ -233,13 +234,15 @@ class Inventory:
         owned = OwnedItem(uid=eco.household.next_item_uid, item_id=item.id, label=item.label, kind=item.type,
                           room=room, rect=rect, uses=uses, quality=item.qualite, weekly=item.hebdo,
                           food=item.effet.get("nourriture", 0.0), hydro=item.effet.get("hydro", 0.0),
-                          discount=item.effet.get("epicerie", 0.0), price=item.prix)
+                          discount=item.effet.get("epicerie", 0.0), price=item.prix, harvest=item.recolte)
         eco.household.next_item_uid += 1
         eco.household.last_item_day = engine.clock.day
         eco.household.items.append(owned)
         obj = self._place(owned)
         if item.type == "lit":
             self._assign_bed(obj, for_id, previous)
+        if item.type == "chien":
+            eco.household.dog_walk_day = engine.clock.day
         text = f"{agent.name} a acheté {item.label} ({item.prix:.0f} $)" + (f", l'ancien revendu {refund} $" if refund else "")
         engine.publish("achat_objet", agent=agent.id, item=item.id, room=room, amount=-item.prix, text=text)
         for other in engine.agents:
@@ -301,14 +304,52 @@ class Inventory:
         household.last_harvest_day = engine.clock.day
         for owned in self.items:
             if owned.food:  # le potager donne des légumes, les poules des œufs
-                food_id = "oeufs" if owned.kind == "poulailler" else "legumes"
+                food_id = owned.harvest or ("oeufs" if owned.kind == "poulailler" else "legumes")
                 engine.economy.add_food(food_id, owned.food, engine.clock.day)
+        self._dog_check()
         spoiled = engine.economy.spoil(engine.clock.day)
         if spoiled:
             text = ", ".join(f"{name} ({portions:.0f})" for name, portions in spoiled)
             for agent in engine.agents:
                 if agent.persona.is_adult and not agent.dead:
                     engine.remember(agent, f"Il a fallu jeter de la bouffe périmée : {text}.", 3)
+
+    # ------------------------------------------------------------------ chien
+
+    def has_dog(self) -> bool:
+        return any(o.kind == "chien" for o in self.items)
+
+    def dog_walked_today(self) -> bool:
+        return self.engine.economy.household.dog_walk_day >= self.engine.clock.day
+
+    def boost(self, agent: Agent, options: list[Option]) -> None:
+        """Le chien n'est pas sorti aujourd'hui : la promenade devient pressante en après-midi."""
+        if not self.has_dog() or self.dog_walked_today():
+            return
+        hour = self.engine.clock.minute_of_day // 60
+        for option in options:
+            if option.action == "promener":
+                option.score = round(option.score + (14.0 if hour >= 15 else 6.0), 2)
+                option.label = "promène le chien (il attend sa marche depuis ce matin)"
+
+    def walked(self, agent: Agent) -> None:
+        household = self.engine.economy.household
+        first = household.dog_walk_day < self.engine.clock.day
+        household.dog_walk_day = self.engine.clock.day
+        if first:
+            self.engine.remember(agent, "J'ai promené le chien, il était fou de joie.", 2)
+
+    def _dog_check(self) -> None:
+        """Chaque matin : si personne n'a sorti le chien hier, il a fait des dégâts."""
+        engine = self.engine
+        household = engine.economy.household
+        if not self.has_dog() or household.dog_walk_day >= engine.clock.day - 1:
+            return
+        household.dog_walk_day = engine.clock.day - 1  # un seul dégât par oubli
+        for agent in engine.agents:
+            if not agent.dead and agent.persona.stage != "bebe":
+                agent.needs.apply({"fun": -10})
+                engine.remember(agent, "Personne n'a sorti le chien hier : il a fait un dégât dans la maison.", 4)
 
     def restore(self) -> None:
         """Après un chargement : les objets possédés reprennent leur place."""
@@ -319,7 +360,10 @@ class Inventory:
     def context_line(self) -> str:
         if not self.items:
             return ""
-        return "Objets achetés : " + ", ".join(f"{o.label} ({'dehors' if o.room == 'exterieur' else o.room.lower()})"
+        dog = ""
+        if self.has_dog():
+            dog = "Le chien a eu sa marche aujourd'hui. " if self.dog_walked_today() else "Le chien attend encore sa marche. "
+        return dog + "Objets achetés : " + ", ".join(f"{o.label} ({'dehors' if o.room == 'exterieur' else o.room.lower()})"
                                                for o in self.items[-8:]) + "."
 
     def hud_lines(self) -> list[str]:

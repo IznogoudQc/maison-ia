@@ -10,6 +10,7 @@
 #   qualite : multiplie les gains de l'activité (1 = normal) ; places : personnes en même temps
 #   lieu : pièces possibles (chambre, cuisine, salle_de_bain, salon, bureau, atelier) ou exterieur
 #   effet : nourriture (portions par jour), hydro ($ économisés par semaine), epicerie (rabais, 0.08 = 8 %)
+#   recolte : aliment produit par « nourriture » (légumes par défaut, œufs pour le poulailler)
 
 objets:
   - {id: matelas, label: un matelas, famille: lit, niveau: 1, prix: 120, taille: [1, 2], type: lit, qualite: 0.8,
@@ -54,6 +55,43 @@ objets:
      utilite: "relaxer dans l'eau chaude"}
   - {id: panneaux_solaires, label: des panneaux solaires, prix: 5000, taille: [2, 1], type: deco,
      lieu: [exterieur], effet: {hydro: 30}, utilite: "la facture d'Hydro baisse de 30 $ par semaine"}
+
+  # Lot G3 : plus d'objets (recolte = aliment produit chaque matin, data/aliments.yaml)
+  - {id: machine_cafe, label: une machine à espresso, prix: 180, taille: [1, 1], type: cafe, lieu: [cuisine],
+     utilite: "un bon café : un regain d'énergie le matin"}
+  - {id: laveuse, label: une laveuse-sécheuse, prix: 1200, hebdo: -8, taille: [1, 1], type: deco,
+     lieu: [salle_de_bain, cuisine, atelier], utilite: "fini la buanderie : 8 $ économisés par semaine"}
+  - {id: poele_bois, label: un poêle à bois, prix: 2500, taille: [1, 1], type: deco, lieu: [salon],
+     effet: {hydro: 15}, utilite: "chauffe au bois : Hydro baisse de 15 $ par semaine"}
+  - {id: puits, label: un puits artésien, prix: 4000, taille: [1, 1], type: deco, lieu: [exterieur],
+     effet: {hydro: 10}, utilite: "l'eau du puits : 10 $ de moins par semaine"}
+  - {id: foyer_exterieur, label: un foyer extérieur, prix: 250, taille: [2, 2], type: foyer, places: 4,
+     lieu: [exterieur], utilite: "des feux de camp entre amis, le soir"}
+  - {id: velo_stationnaire, label: un vélo stationnaire, prix: 600, taille: [1, 1], type: exercice,
+     lieu: [salon, bureau, atelier, chambre], utilite: "s'entraîner sans sortir : bon pour le moral"}
+  - {id: bureau_etude, label: un bureau d'étude, prix: 300, taille: [1, 1], type: etude, lieu: [chambre, bureau],
+     utilite: "les jeunes font leurs devoirs"}
+  - {id: lits_superposes, label: des lits superposés, prix: 900, taille: [1, 2], type: lit, qualite: 0.95,
+     places: 2, lieu: [chambre], utilite: "deux enfants dans une seule chambre"}
+  - {id: billard, label: une table de billard, prix: 2500, taille: [3, 2], type: billard, places: 2,
+     lieu: [salon, atelier, bureau], utilite: "des parties de billard, gros plaisir à deux"}
+  - {id: babyfoot, label: un babyfoot, prix: 400, taille: [2, 1], type: babyfoot, places: 2,
+     lieu: [salon, atelier, bureau], utilite: "jouer à deux, ça crie fort"}
+  - {id: pingpong, label: une table de ping-pong, prix: 350, taille: [2, 1], type: pingpong, places: 2,
+     lieu: [atelier, salon, exterieur], utilite: "des échanges endiablés"}
+  - {id: cinema_maison, label: un cinéma maison, prix: 4500, hebdo: 5, taille: [3, 1], type: cinema, places: 4,
+     lieu: [salon], utilite: "un film en famille sur grand écran"}
+  - {id: aquarium, label: un aquarium, prix: 350, hebdo: 3, taille: [1, 1], type: aquarium,
+     lieu: [salon, chambre, bureau], utilite: "regarder les poissons, ça calme"}
+  - {id: ruche, label: une ruche, prix: 500, taille: [1, 1], type: ruche, lieu: [exterieur], recolte: miel,
+     effet: {nourriture: 0.5}, utilite: "du miel : une demi-portion par jour"}
+  - {id: erabliere, label: une petite cabane à sucre, prix: 2500, taille: [2, 2], type: erabliere, places: 2,
+     lieu: [exterieur], recolte: sirop_erable, effet: {nourriture: 1},
+     utilite: "faire les sucres : du sirop d'érable chaque jour"}
+  - {id: kayak, label: un kayak, prix: 900, taille: [1, 2], type: kayak, lieu: [exterieur],
+     utilite: "une sortie en kayak, ça fait du bien"}
+  - {id: chien, label: un chien (et sa niche), prix: 600, hebdo: 20, taille: [1, 1], type: chien, places: 2,
+     lieu: [exterieur], utilite: "un compagnon fidèle : à promener chaque jour, sinon il fait des dégâts"}
 
 # Véhicules : garés automatiquement près de l'entrée ; chacun part avec le plus utile qui reste libre.
 #   places : passagers ; trajet : minutes gagnées au retour du travail (0 = pas pour le travail)

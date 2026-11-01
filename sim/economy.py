@@ -52,6 +52,7 @@ class OwnedItem(BaseModel):
     quality: float = 1.0
     weekly: float = 0.0
     food: float = 0.0              # portions produites par jour (potager, poulailler)
+    harvest: str = ""              # aliment produit (vide : légumes, ou œufs pour le poulailler)
     hydro: float = 0.0             # $ économisés par semaine sur Hydro
     discount: float = 0.0          # rabais sur l'épicerie
     price: float = 0.0
@@ -116,6 +117,7 @@ class Household(BaseModel):
     vehicles: list[OwnedVehicle] = Field(default_factory=list)
     loans: list[Loan] = Field(default_factory=list)
     foods: list[FoodStock] = Field(default_factory=list)  # détail du garde-manger par aliment
+    dog_walk_day: int = -1         # dernier jour où le chien a été promené
     credit_score: int = 680          # dossier de crédit (300 à 900)
     next_loan_uid: int = 1
     last_vehicle_day: int = -100
@@ -154,7 +156,7 @@ class Economy:
                 label = f"Entretien : {owned.label}"
                 items[label] = items.get(label, 0) + owned.weekly
             if owned.hydro:
-                label = "Économie d'Hydro (panneaux solaires)"
+                label = f"Économie : {owned.label}"
                 items[label] = items.get(label, 0) - owned.hydro
         items.update(self._vehicle_bills())
         return items

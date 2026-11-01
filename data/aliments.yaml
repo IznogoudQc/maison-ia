@@ -16,4 +16,5 @@ aliments:
   - {id: tourtiere, label: tourtière, prix: 16, portions: 6, conserve: 4, plaisir: 6, congelable: true, styles: [gaterie]}
   - {id: steak, label: steaks, prix: 24, portions: 4, conserve: 3, plaisir: 7, congelable: true, styles: [gaterie]}
   - {id: pouding_chomeur, label: pouding chômeur, prix: 9, portions: 6, conserve: 5, plaisir: 8, styles: [gaterie]}
+  - {id: miel, label: miel, prix: 9, portions: 8, conserve: 365, plaisir: 4, styles: [gaterie]}
   - {id: sirop_erable, label: sirop d'érable, prix: 12, portions: 10, conserve: 365, plaisir: 5, styles: [gaterie]}

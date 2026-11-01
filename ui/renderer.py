@@ -367,6 +367,7 @@ class Renderer:
                 sprites.draw_vehicle(low, vehicle)
         if "piscine" in self.house.objects:
             sprites.draw_pool_shimmer(low, self.house.objects["piscine"], t)
+        self._draw_dogs(low, agents, t)
         self._draw_windows(low, hour)
         self._draw_memorials(low, agents)
         visible = [a for a in agents if not a.is_away and not a.dead]
@@ -471,6 +472,27 @@ class Renderer:
     def _fire_burning(self, agents: list[Agent]) -> bool:
         hour = self.time_of_day
         return FIRE_HOURS[0] <= hour < FIRE_HOURS[1] or any(self._active(a, "cuisiner", "veiller") for a in agents)
+
+    def _draw_dogs(self, low: pygame.Surface, agents: list[Agent], t: float) -> None:
+        """Le chien trotte autour de qui le promène ou le flatte, sinon il flâne devant sa niche."""
+        for niche in self.house.objects_of_kind("chien"):
+            friend = next((a for a in agents if a.action is not None and a.action.started and not a.is_away
+                           and a.action.name in ("promener", "flatter") and a.action.use_pos in niche.use_positions),
+                          None)
+            if friend is not None:
+                fx, fy = self.display_pos.get(friend.id, friend.pos)
+                radius = 9 if friend.action.name == "promener" else 5
+                angle = t * (2.5 if friend.action.name == "promener" else 1.0)
+                cx = round(fx * TILE + TILE / 2 + radius * math.cos(angle))
+                cy = round(fy * TILE + TILE - 3 + radius * 0.5 * math.sin(angle))
+                facing = -1 if math.sin(angle) > 0 else 1
+            else:
+                x, y, w, h = niche.rect
+                drift = math.sin(t * 0.7)
+                cx = round((x + w) * TILE + 4 + 3 * drift)
+                cy = round((y + h) * TILE - 4)
+                facing = 1 if math.cos(t * 0.7) > 0 else -1
+            sprites.draw_dog(low, (cx, cy), t, facing)
 
     def _draw_agent(self, low: pygame.Surface, agent: Agent) -> tuple[Agent, int, int]:
         pose = self._pose(agent)
