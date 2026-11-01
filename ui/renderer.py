@@ -143,6 +143,10 @@ class Renderer:
                            math.ceil(self.size[1] / self.scale) + 1)
         return rect.clip(pygame.Rect((0, 0), self.low_size))
 
+    def screen_to_tile(self, pos: tuple[int, int]) -> tuple[int, int]:
+        cx, cy = self._cam()
+        return int((pos[0] / self.scale + cx) // TILE), int((pos[1] / self.scale + cy) // TILE)
+
     def to_screen(self, low_x: float, low_y: float) -> tuple[int, int]:
         cx, cy = self._cam()
         return int((low_x - cx) * self.scale), int((low_y - cy) * self.scale)

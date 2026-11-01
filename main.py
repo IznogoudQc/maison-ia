@@ -23,6 +23,7 @@ from sim.journal import JsonlJournal
 from ui import theme
 from ui.dialogue_box import MIND_KINDS, NEWS_KINDS, DialogueBox
 from ui.hud import Hud, draw_game_over
+from ui import tooltip
 from ui.journal import JournalScreen
 from ui.renderer import Renderer
 from ui.sprites import TILE
@@ -206,6 +207,9 @@ def main() -> None:
         renderer.draw(screen, agents, selected_id, clock.minute_of_day)
         dialogue_box.draw(screen)
         journal_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
+        mouse = pygame.mouse.get_pos()
+        if not journal_screen.open and not dialogue_box.show_history and mouse[0] < map_w and not dragging:
+            tooltip.draw(screen, tooltip.describe(engine, renderer, mouse), mouse, pygame.Rect(0, 0, map_w, map_h))
         selected = engine.agent_by_id(selected_id) if selected_id else None
         promises = [f"{p.text} ({engine.social.when_label(p.minute)})"
                     for p in engine.social.promises if p.status == "pending"]
