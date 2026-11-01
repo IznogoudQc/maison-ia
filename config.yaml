@@ -37,6 +37,12 @@ dialogue:
   line_display_s: 3.5         # durée d'affichage d'une réplique (secondes réelles)
   history_size: 300
 
+memory:
+  short_term_size: 30         # événements gardés par agent
+  recall_count: 5             # souvenirs envoyés au LLM
+  summary_every: 12           # nouveaux événements avant un résumé
+  max_summaries: 5
+
 family_file: data/family.yaml
 save_file: save.json
 log_dir: logs

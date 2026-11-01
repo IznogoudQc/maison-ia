@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import argparse
 import random
+from pathlib import Path
 
 import pygame
 from dotenv import load_dotenv
@@ -28,8 +30,13 @@ MAX_TICKS_PER_FRAME = 60
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Simulation Maison IA")
+    parser.add_argument("--nouveau", action="store_true", help="ignorer save.json et repartir de zéro")
+    parser.add_argument("--config", default="config.yaml")
+    args = parser.parse_args()
+
     load_dotenv()
-    config = load_config("config.yaml")
+    config = load_config(args.config)
     rng = random.Random(config.sim.seed)
 
     try:
@@ -48,6 +55,13 @@ def main() -> None:
     bus = EventBus()
     engine = Engine(config, house, agents, clock, rng, bus, llm)
     engine.initialize()
+    save_path = Path(config.save_file)
+    if save_path.exists() and not args.nouveau:
+        try:
+            engine.load_state(save_path)
+            print(f"[Sauvegarde] {save_path} chargée : {clock.label()}")
+        except (ValueError, KeyError, OSError) as exc:
+            print(f"[Sauvegarde] {save_path} illisible ({exc}) -> nouvelle partie")
 
     pygame.init()
     pygame.display.set_caption("Maison IA — famille Gagnon")
@@ -108,6 +122,8 @@ def main() -> None:
         hud.draw(screen, clock, speed, paused, agents, selected, llm, llm_label)
         pygame.display.flip()
 
+    engine.save_state(save_path)
+    print(f"[Sauvegarde] état écrit dans {save_path} ({clock.label()})")
     llm.shutdown()
     journal.close()
     pygame.quit()

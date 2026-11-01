@@ -164,5 +164,7 @@ class MockProvider(LLMProvider):
             summary = "Rien de spécial ces temps-ci."
         else:
             picked = [events[0]] + ([events[-1]] if len(events) > 1 else [])
-            summary = "En gros : " + " ; puis ".join(e.split(" : ", 1)[-1] for e in picked)
+            # Retire l'horodatage « [HH:MM] » et garde le début de chaque événement
+            parts = [e.split("] ", 1)[-1][:90].rstrip() for e in picked]
+            summary = "En gros : " + " ; puis ".join(parts)
         return json.dumps({"summary": summary[:300]}, ensure_ascii=False)

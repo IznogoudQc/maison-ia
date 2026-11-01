@@ -50,11 +50,19 @@ class DialogueConfig(BaseModel):
     history_size: int = 300
 
 
+class MemoryConfig(BaseModel):
+    short_term_size: int = 30   # événements gardés par agent
+    recall_count: int = 5       # souvenirs envoyés au LLM
+    summary_every: int = 12     # nouveaux événements avant un résumé LLM
+    max_summaries: int = 5
+
+
 class AppConfig(BaseModel):
     sim: SimConfig = Field(default_factory=SimConfig)
     display: DisplayConfig = Field(default_factory=DisplayConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     dialogue: DialogueConfig = Field(default_factory=DialogueConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"

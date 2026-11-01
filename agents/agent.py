@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pydantic import BaseModel, ConfigDict, Field
 
 from agents.actions import action_label, away_phrase
+from agents.memory import Memory
 from agents.needs import Needs
 from agents.persona import Persona
 from world.pathfinding import find_path
@@ -43,6 +44,7 @@ class Agent(BaseModel):
     away_label: str | None = None
     fired: dict[str, int] = Field(default_factory=dict)  # tâche d'horaire -> dernier jour exécuté
     last_decision_minute: int = -10**9   # dernière décision demandée au LLM
+    memory: Memory = Field(default_factory=Memory)
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property

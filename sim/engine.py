@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import random
 from concurrent.futures import Future
 from dataclasses import dataclass
+from pathlib import Path
 
 from agents.actions import (
     ACTIONS,
@@ -21,8 +23,10 @@ from agents.scheduler import Scheduler
 from llm.prompts import (
     ActionDecision,
     Dialogue,
+    MemorySummary,
     build_decision_request,
     build_dialogue_request,
+    build_summary_request,
     validate_decision,
     validate_dialogue,
 )
@@ -56,6 +60,17 @@ def pair_key(a: str, b: str) -> str:
     return "|".join(sorted((a, b)))
 
 
+# Actions d'horaire qui laissent un souvenir
+MEMORABLE_ACTIONS = {
+    "souper": "Souper en famille.",
+    "dejeuner": "Déjeuner avant la journée.",
+    "cuisiner": "J'ai préparé le souper.",
+    "dormir": "Au lit pour la nuit.",
+}
+
+SAVE_VERSION = 1
+
+
 class Engine:
     def __init__(self, config: AppConfig, house: House, agents: list[Agent], clock: SimClock,
                  rng: random.Random, bus: EventBus | None = None, llm: LLMService | None = None) -> None:
@@ -70,6 +85,8 @@ class Engine:
         self.pending_decisions: dict[str, PendingDecision] = {}
         self.pending_dialogues: list[PendingDialogue] = []
         self.pair_last_talk: dict[str, int] = {}  # paire -> minute absolue de la dernière conversation
+        # agent -> (future du résumé, nombre d'événements couverts)
+        self.pending_summaries: dict[str, tuple[Future[StructuredResult[MemorySummary]], int]] = {}
 
     # ------------------------------------------------------------------ utilitaires
 
@@ -156,6 +173,8 @@ class Engine:
         agent.action = action
         self.publish("action", agent=agent.id, name=agent.name, action=action.name,
                      label=action.label, forced=action.forced, reason=action.reason)
+        if action.name in MEMORABLE_ACTIONS:
+            self.remember(agent, MEMORABLE_ACTIONS[action.name])
         return True
 
     def options_for(self, agent: Agent) -> list[Option]:
@@ -213,9 +232,44 @@ class Engine:
 
     # ------------------------------------------------------------------ décisions LLM
 
-    def memories_for(self, agent: Agent, count: int = 5) -> tuple[list[str], str | None]:
-        """Souvenirs récents + dernier résumé (mémoire branchée à l'étape 5)."""
-        return [], None
+    def memories_for(self, agent: Agent) -> tuple[list[str], str | None]:
+        """Souvenirs récents + dernier résumé, pour les prompts."""
+        return agent.memory.recent(self.config.memory.recall_count), agent.memory.latest_summary
+
+    # ------------------------------------------------------------------ mémoire
+
+    def remember(self, agent: Agent, text: str) -> None:
+        cfg = self.config.memory
+        agent.memory.add(self.clock.total_minutes, self.clock.hhmm, text, cfg.short_term_size)
+        if agent.memory.since_summary >= cfg.summary_every and agent.id not in self.pending_summaries:
+            self._request_summary(agent)
+
+    def _request_summary(self, agent: Agent) -> None:
+        if self.llm is None:
+            return
+        events = agent.memory.pending_for_summary()
+        request = build_summary_request(agent, events, agent.memory.latest_summary, self.config.llm.max_tokens)
+        # Repli sans LLM : les derniers événements mis bout à bout
+        fallback = MemorySummary(summary=" ; ".join(e.split("] ", 1)[-1] for e in events[-3:])[:300])
+        future = self.llm.try_submit(request, MemorySummary, fallback)
+        if future is not None:
+            self.pending_summaries[agent.id] = (future, len(events))
+
+    def _poll_summaries(self) -> None:
+        for agent_id, (future, covered) in list(self.pending_summaries.items()):
+            if not future.done():
+                continue
+            del self.pending_summaries[agent_id]
+            agent = self.agent_by_id(agent_id)
+            try:
+                result = future.result()
+            except Exception as exc:
+                result = StructuredResult(value=None, ok=False, attempts=0, error=str(exc))
+            if agent is None or result.value is None:
+                continue
+            agent.memory.add_summary(result.value.summary.strip(), covered, self.config.memory.max_summaries)
+            self.publish("resume", agent=agent.id, name=agent.name, summary=result.value.summary,
+                         ok=result.ok, error=result.error)
 
     def _should_ask_llm(self, agent: Agent, options: list[Option]) -> bool:
         cfg = self.config.llm
@@ -247,6 +301,7 @@ class Engine:
     def poll(self) -> None:
         """Appelé à chaque image (fil principal) : applique les réponses LLM arrivées."""
         self._poll_dialogues()
+        self._poll_summaries()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -265,6 +320,8 @@ class Engine:
                          attempts=result.attempts, error=result.error)
             if agent.action is None and not agent.is_away:
                 self._start_option(agent, decision.action, decision.target, decision.reason, pending.options)
+                if result.ok and decision.reason and agent.action is not None:
+                    self.remember(agent, f"J'ai décidé : {agent.action.label} (« {decision.reason} »)")
 
     def _check_decision_timeout(self, agent: Agent) -> None:
         pending = self.pending_decisions.get(agent.id)
@@ -353,10 +410,13 @@ class Engine:
                 self.publish("dialogue_echec", room=pending.room, participants=names, error=result.error)
                 continue
             lines = [line.model_dump() for line in result.value.lines]
+            transcript = " / ".join(f"{l['speaker']} : « {l['text']} »" for l in lines)
             for agent_id in pending.participant_ids:
                 agent = self.agent_by_id(agent_id)
                 if agent is not None:
                     agent.needs.apply({"social": self.config.dialogue.social_gain})
+                    others = ", ".join(n for n in names if n != agent.name)
+                    self.remember(agent, f"Jasé avec {others} ({pending.room}) : {transcript}"[:400])
             self.publish("dialogue", room=pending.room, participants=names, lines=lines,
                          time=self.clock.hhmm, attempts=result.attempts)
 
@@ -428,6 +488,7 @@ class Engine:
         agent.action = None
         agent.path = []
         self.publish("depart", agent=agent.id, name=agent.name, label=agent.away_label)
+        self.remember(agent, f"Je pars {away_phrase(agent.away_label)}.")
 
     def _return_home(self, agent: Agent) -> None:
         door = self.house.objects["porte"].use_positions[0]
@@ -437,3 +498,41 @@ class Engine:
         agent.away_until = None
         agent.away_label = None
         self.publish("retour", agent=agent.id, name=agent.name, label=label)
+        place = label or "travail"
+        origin = f"de l'{place}" if away_phrase(place).startswith("à l'") else f"du {place}"
+        self.remember(agent, f"De retour {origin}.")
+
+    # ------------------------------------------------------------------ sauvegarde
+
+    def save_state(self, path: str | Path) -> None:
+        """Écrit l'état complet (horloge, agents, cooldowns, compteurs LLM) en JSON."""
+        data: dict = {
+            "version": SAVE_VERSION,
+            "total_minutes": self.clock.total_minutes,
+            "agents": {a.id: a.model_dump(mode="json") for a in self.agents},
+            "pair_last_talk": self.pair_last_talk,
+        }
+        if self.llm is not None:
+            stats = self.llm.stats
+            data["llm_stats"] = {"calls": stats.calls, "input_tokens": stats.input_tokens,
+                                 "output_tokens": stats.output_tokens}
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def load_state(self, path: str | Path) -> None:
+        """Restaure une sauvegarde ; les agents absents du fichier gardent leur état initial."""
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if data.get("version") != SAVE_VERSION:
+            raise ValueError(f"Version de sauvegarde non prise en charge : {data.get('version')}")
+        self.clock.total_minutes = data["total_minutes"]
+        self.pair_last_talk = dict(data.get("pair_last_talk", {}))
+        saved = data.get("agents", {})
+        for index, agent in enumerate(self.agents):
+            if agent.id in saved:
+                # Remplacement en place : le moteur, le rendu et les bulles partagent cette liste
+                self.agents[index] = Agent.model_validate({**saved[agent.id], "persona": agent.persona})
+        self.pending_decisions.clear()
+        self.pending_dialogues.clear()
+        self.pending_summaries.clear()
+        if self.llm is not None and "llm_stats" in data:
+            for key, value in data["llm_stats"].items():
+                setattr(self.llm.stats, key, value)

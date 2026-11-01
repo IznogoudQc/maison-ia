@@ -9,13 +9,14 @@ from agents.needs import NEED_LABELS
 from llm.service import LLMService
 from sim.clock import SimClock
 from ui import theme
+from ui.dialogue_box import wrap_text
 
 CONTROLS = [
     "Espace : pause / reprise",
     "1-4 : vitesse",
     "Clic : sélectionner un agent (clic vide : famille)",
     "H : historique des dialogues",
-    "Échap : quitter",
+    "Échap : sauvegarder et quitter",
 ]
 
 
@@ -38,12 +39,14 @@ class Hud:
             y = self._draw_llm(surface, x, y, llm, llm_label)
         y += 8
 
+        controls_top = self.rect.bottom - 18 * len(CONTROLS) - 10
         if selected is None:
-            y = self._draw_family(surface, x, y, agents)
+            self._draw_family(surface, x, y, agents)
         else:
             y = self._draw_agent(surface, x, y, selected)
+            self._draw_memory(surface, x, y, selected, controls_top - 8)
 
-        y = self.rect.bottom - 18 * len(CONTROLS) - 10
+        y = controls_top
         for line in CONTROLS:
             surface.blit(theme.font(13).render(line, True, theme.TEXT_DIM), (x, y))
             y += 18
@@ -97,6 +100,29 @@ class Hud:
             pygame.draw.rect(surface, _need_color(value), fill, border_radius=4)
             y += 20
         return y + 6
+
+
+    def _draw_memory(self, surface: pygame.Surface, x: int, y: int, agent: Agent, bottom: int) -> None:
+        """Résumé puis souvenirs du plus récent au plus ancien, tant qu'il reste de la place."""
+        font = theme.font(12)
+        line_h = font.get_linesize()
+        width = self.rect.width - 28
+        surface.blit(theme.font(14, bold=True).render("Mémoire", True, theme.TEXT), (x, y))
+        y += 22
+        blocks: list[tuple[str, tuple[int, int, int]]] = []
+        if agent.memory.latest_summary:
+            blocks.append((f"Résumé : {agent.memory.latest_summary}", theme.ACCENT))
+        blocks += [(event.formatted(), theme.TEXT_DIM) for event in reversed(agent.memory.events)]
+        if not blocks:
+            blocks.append(("Aucun souvenir pour l'instant.", theme.TEXT_DIM))
+        for text, color in blocks:
+            lines = wrap_text(text, font, width)[:3]
+            if y + line_h * len(lines) > bottom:
+                break
+            for line in lines:
+                surface.blit(font.render(line, True, color), (x, y))
+                y += line_h
+            y += 3
 
 
 def _need_color(value: float) -> tuple[int, int, int]:
