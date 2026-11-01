@@ -7,8 +7,8 @@ import math
 import pygame
 
 from agents.agent import Agent
-from ui import sprites, theme
-from ui.sprites import SIT_FRAME, TILE
+from ui import pawns, sprites, theme
+from ui.sprites import TILE
 from world.house import House
 
 ZOOM_LEVELS = (1.0, 1.5, 2.0, 3.0)
@@ -46,6 +46,9 @@ class Renderer:
         self.low = pygame.Surface(self.low_size)
         self.night = pygame.Surface(self.low_size, pygame.SRCALPHA)
         self.tint = pygame.Surface(self.low_size, pygame.SRCALPHA)
+        self.overlay = pygame.Surface(self.low_size, pygame.SRCALPHA)  # accessoires tenus, devant les personnages
+        self._pawn_jobs: list[tuple[Agent, float, float, str, bool, bool]] = []
+        self._light: tuple[int, set[str], float, float] = (0, set(), 0.0, 0.0)
         self._label_cache: dict[str, pygame.Surface] = {}
         indoor = {n: r for n, r in house.rooms.items() if n not in house.outdoor_rooms}
         self.room_rects = {name: pygame.Rect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE)
@@ -64,7 +67,6 @@ class Renderer:
         self.moving: dict[str, bool] = {}
         self.time = 0.0
         self.time_of_day = 12.0
-        self._top_rows: dict[int, int] = {}
 
     # ------------------------------------------------------------------ décor statique
 
@@ -376,6 +378,8 @@ class Renderer:
         steam_points = self._draw_object_states(low, visible)
 
         # Personnages du haut vers le bas pour que ceux du bas passent devant
+        self._pawn_jobs = []
+        self.overlay.fill((0, 0, 0, 0), view)
         overlays: list[tuple[Agent, int, int]] = []  # (agent, centre x, haut de la tête) en basse résolution
         for agent in sorted(visible, key=lambda a: self.display_pos.get(a.id, a.pos)[1]):
             overlays.append(self._draw_agent(low, agent))
@@ -398,6 +402,8 @@ class Renderer:
                                         (round(view.w * self.scale), round(view.h * self.scale)))
         surface.fill((20, 22, 26), map_area)
         surface.blit(scaled, (0, 0))
+        self._draw_pawns(surface)
+        surface.blit(pygame.transform.scale(self.overlay.subsurface(view), scaled.get_size()), (0, 0))
         self._draw_labels(surface)
         for agent in visible:
             if self._pose(agent) == "lying":
@@ -519,38 +525,57 @@ class Renderer:
             sprites.draw_swimmer(low, agent.persona, center, self.time)
             return agent, center[0], center[1] - 6
 
+        # Personnage lisse dessiné plus tard en haute résolution (_draw_pawns) ; ici l'ombre et les accessoires
         fx, fy = self.display_pos.get(agent.id, agent.pos)
-        cx = round(fx * TILE + TILE / 2)
-        feet = round(fy * TILE + TILE - SPRITE_LIFT)
+        cx = fx * TILE + TILE / 2
+        feet = fy * TILE + TILE - SPRITE_LIFT
         direction = self.facing.get(agent.id, "down")
-        frames = sprites.character_frames(agent.persona)
+        sitting = pose == "sitting"
         if pose == "shower":
-            # Dans la cabine, derrière la vitre embuée
             shower = self._shower_of(agent)
             x, y, w, h = shower.rect
-            cx, feet, direction = x * TILE + w * TILE // 2, (y + h) * TILE - 3, "down"
-            sprite = frames[(direction, 0)]
-        elif pose == "sitting":
-            sprite = frames[(direction, SIT_FRAME)]
-            if self._active(agent, "tele"):
-                feet += SOFA_SEAT_OFFSET
-        else:
-            image = (1 + int(self.time * WALK_FPS) % 2) if self.moving.get(agent.id) else 0
-            sprite = frames[(direction, image)]
-
-        left = cx - sprite.get_width() // 2
-        top = feet - sprite.get_height() + 1
+            cx, feet, direction = x * TILE + w * TILE / 2, (y + h) * TILE - 3, "down"
+        elif sitting and self._active(agent, "tele"):
+            feet += SOFA_SEAT_OFFSET
+        height = pawns.pawn_height(agent.persona) * TILE
+        bob = 0.0
+        if self.moving.get(agent.id) and not sitting:
+            bob = abs(math.sin(self.time * WALK_FPS * math.pi / 2)) * 1.2  # petit rebond de marche
         if pose != "shower":
             shadow = pygame.Rect(0, 0, 11, 5)
-            shadow.center = (cx + 1, feet)
+            shadow.center = (round(cx) + 1, round(feet))
             sprites.draw_shadow(low, shadow, ellipse=True, alpha=90, offset=(0, 0))
-        low.blit(sprite, (left, top))
-        head_top = top + self._top_row(sprite)
-        if pose == "shower":
-            self._draw_shower_glass(low, self._shower_of(agent))
-        else:
-            self._draw_accessory(low, agent, direction, left, top)
-        return agent, cx, head_top
+        self._pawn_jobs.append((agent, cx, feet - bob, direction, sitting, pose == "shower"))
+        top = round(feet - height)
+        if pose != "shower":
+            # Les accessoires gardent le repère de l'ancien sprite de 16 px de large
+            self._draw_accessory(self.overlay, agent, direction, round(cx) - 8, top + 4)
+        return agent, round(cx), top
+
+    def _draw_pawns(self, surface: pygame.Surface) -> None:
+        """Personnages en haute résolution, éclairés comme la pièce où ils sont."""
+        alpha, lit_rooms, golden, dawn = self._light
+        tint = (255, 168, 80, round(golden)) if golden >= 1 else (255, 150, 140, round(dawn)) if dawn >= 1 else None
+        for agent, cx, feet, direction, sitting, shower in sorted(self._pawn_jobs, key=lambda job: job[2]):
+            height = round(pawns.pawn_height(agent.persona) * TILE * self.scale)
+            image = pawns.pawn_image(agent.persona, direction, sitting, height)
+            room = self.house.room_at(agent.pos)
+            darkness = alpha / 255 * (LIT_ROOM_FACTOR if room in lit_rooms else 1.0)
+            image = pawns.lit(image, darkness, tint)
+            rect = image.get_rect(midbottom=self.to_screen(cx, feet))
+            surface.blit(image, rect)
+            if shower:
+                self._draw_shower_glass(surface, self._shower_of(agent))
+
+    def _draw_shower_glass(self, surface: pygame.Surface, shower) -> None:
+        """Vitre embuée devant la personne dans la douche (en haute résolution)."""
+        x, y, w, h = shower.rect
+        sx, sy = self.to_screen(x * TILE, y * TILE + h * TILE // 2 - 2)
+        size = (round(w * TILE * self.scale), round((h * TILE // 2 + 2) * self.scale))
+        glass = pygame.Surface(size, pygame.SRCALPHA)
+        glass.fill((225, 240, 248, 175))
+        pygame.draw.line(glass, (170, 220, 245), (0, size[1] - 2), (size[0], size[1] - 2), max(1, round(self.scale)))
+        surface.blit(glass, (sx, sy))
 
     def _swim_spot(self, agent: Agent) -> tuple[int, int]:
         """Point dans l'eau, un peu à l'intérieur de la piscine depuis la case d'usage."""
@@ -566,13 +591,6 @@ class Renderer:
         if obj is None and agent.action is not None and agent.action.use_pos is not None:
             obj = self.house.object_at_spot(agent.action.use_pos)
         return obj if obj is not None and obj.kind == "douche" and obj.id != "baril" else None
-
-    def _draw_shower_glass(self, low: pygame.Surface, shower) -> None:
-        x, y, w, h = shower.rect
-        glass = pygame.Surface((w * TILE, h * TILE // 2 + 2), pygame.SRCALPHA)
-        glass.fill((225, 240, 248, 170))
-        low.blit(glass, (x * TILE, y * TILE + h * TILE // 2 - 2))
-        pygame.draw.line(low, (170, 220, 245), (x * TILE, (y + h) * TILE - 1), ((x + w) * TILE - 1, (y + h) * TILE - 1))
 
     def _draw_accessory(self, low: pygame.Surface, agent: Agent, direction: str, left: int, top: int) -> None:
         """Objet tenu ou posé selon l'action en cours (coordonnées du sprite 16 px de large)."""
@@ -597,13 +615,6 @@ class Renderer:
             px, py = left + 8, top + 12
             sprites.draw_mug(low, round(px + (tcx - px) * 0.35), round(py + (tcy - py) * 0.35))
 
-    def _top_row(self, sprite: pygame.Surface) -> int:
-        key = id(sprite)
-        if key not in self._top_rows:
-            self._top_rows[key] = next((y for y in range(sprite.get_height())
-                                        if any(sprite.get_at((x, y)).a for x in range(sprite.get_width()))), 0)
-        return self._top_rows[key]
-
     # ------------------------------------------------------------------ éclairage
 
     def _draw_lighting(self, low: pygame.Surface, hour: float, agents: list[Agent], view: pygame.Rect) -> None:
@@ -618,10 +629,11 @@ class Renderer:
             low.blit(self.tint, view.topleft, view)
 
         alpha = _night_alpha(hour)
-        if not alpha:
-            return
         # Lampes allumées là où quelqu'un est éveillé ; les pièces vides restent dans le noir
         lit = {self.house.room_at(a.pos) for a in agents if a.is_available} & set(self.room_rects)
+        self._light = (alpha, lit, golden, dawn)  # pour éclairer les personnages dessinés en haute résolution
+        if not alpha:
+            return
         self.night.fill((10, 15, 50, alpha), view)
         for room in lit:
             self.night.fill((10, 15, 50, round(alpha * LIT_ROOM_FACTOR)), self.room_rects[room].clip(view))
