@@ -225,6 +225,8 @@ class DialogueBox:
         width = max(font.size(line)[0] for line in lines) + 16
         height = line_h * len(lines) + 10
         cx, cy = self.renderer.agent_screen_pos(agent)
+        if not self.renderer.on_screen((cx, cy), 20):
+            return  # personnage hors de la vue (grand terrain)
         rect = pygame.Rect(0, 0, width, height)
         rect.midbottom = (cx, cy - self.renderer.ts // 2 - 16)  # au-dessus de la tête du sprite
         map_rect = pygame.Rect((0, 0), self.renderer.size)

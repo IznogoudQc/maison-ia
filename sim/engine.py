@@ -41,7 +41,7 @@ from sim.events import Event, EventBus
 from sim.mind import Mind
 from sim.social import Social
 from sim.random_events import RandomEvents
-from world.house import PURCHASE_OBJECTS, House, InteractiveObject
+from world.house import House, InteractiveObject
 from world.pathfinding import NEIGHBORS, manhattan
 
 Pos = tuple[int, int]
@@ -83,9 +83,12 @@ LAWN_FINE = 150.0          # pelouse à 100 : amende de la ville (au plus une fo
 CAR_COMMUTE_SAVING = 30    # minutes gagnées au retour du travail en auto
 CAR_GROCERY_MINUTES = 60
 
-SAVE_VERSION = 3
-# v1 : avant l'économie (le ménage repart des valeurs de départ) ; v2 : avant plans et réflexions
-SUPPORTED_SAVE_VERSIONS = {1, 2, 3}
+FLANER_RADIUS = 10         # flâner : une case pas trop loin (sur un grand terrain)
+ENCOUNTER_RADIUS = 6       # dehors, on ne jase qu'avec quelqu'un d'assez proche
+
+SAVE_VERSION = 4
+# v1 : avant l'économie ; v2 : avant plans et réflexions ; v3 : avant les scénarios (monde « maison »)
+SUPPORTED_SAVE_VERSIONS = {1, 2, 3, 4}
 
 
 class Engine:
@@ -159,7 +162,7 @@ class Engine:
         """Place les agents : au lit s'ils dorment à l'heure de départ, sinon à la cuisine."""
         for agent in self.agents:
             agent.needs = Needs(**{n: self.rng.uniform(55, 85) for n in Needs.model_fields})
-            agent.pos = self.house.random_tile(self.rng, "Cuisine")
+            agent.pos = self.house.spawn_tile(self.rng)
             scheduled = self.scheduler.check(agent, self.clock)
             if scheduled and scheduled.action == "dormir":
                 action = self.make_action(agent, "dormir", forced=True, until=scheduled.until)
@@ -186,7 +189,9 @@ class Engine:
             if use_pos is None:
                 return None
         elif name == "flaner":
-            use_pos = self.house.random_tile(self.rng, self.room_of(agent))
+            room = self.room_of(agent)
+            nearby = [p for p in self.house.walkable_tiles(room) if manhattan(p, agent.pos) <= FLANER_RADIUS]
+            use_pos = self.rng.choice(nearby) if nearby else agent.pos
         elif name in AWAY_ACTIONS:
             # En auto si elle est à la maison (adultes) ; sinon l'arrêt d'autobus, partagé par tous
             if agent.persona.is_adult and self.car_home():
@@ -270,6 +275,8 @@ class Engine:
         return options + self._money_options(agent)
 
     def _yard_options(self, agent: Agent) -> list[Option]:
+        if self.house.layout.wild:
+            return []  # terrain sauvage : pas de pelouse à tondre
         lawn = self.economy.household.lawn
         minute = self.clock.minute_of_day
         someone_mowing = any(a.action is not None and a.action.name == "tondre" for a in self.agents)
@@ -282,7 +289,10 @@ class Engine:
     def _purchase_options(self, agent: Agent) -> list[Option]:
         """Achats permis seulement s'il reste un coussin de deux semaines de dépenses."""
         options = []
+        allowed = self.house.layout.catalog
         for item in self.economy.affordable(self.alive_count()):
+            if allowed is not None and item.id not in allowed:
+                continue
             weekly = f", puis {item.weekly_cost:.0f} $/semaine" if item.weekly_cost else ""
             label = f"achète {item.label} ({item.price:,.0f} ${weekly}) : {item.benefit}".replace(",", " ")
             options.append(Option(action="acheter", target=item.id, label=label, score=6.0))
@@ -483,7 +493,8 @@ class Engine:
         if self.economy.enabled and self.random_events.due(self.clock, self.economy.household):
             self._roll_events()
         household = self.economy.household
-        if self.economy.enabled and self.clock.minute_of_day >= 6 * 60 and household.last_lawn_day != self.clock.day:
+        yard_due = self.clock.minute_of_day >= 6 * 60 and household.last_lawn_day != self.clock.day
+        if self.economy.enabled and not self.house.layout.wild and yard_due:
             self._daily_yard()
         for agent in self.agents:
             self._update_agent(agent)
@@ -558,6 +569,10 @@ class Engine:
                 by_room.setdefault(room, []).append(agent)
 
         for room, present in by_room.items():
+            if room in self.house.outdoor_rooms:
+                # Dehors (un grand terrain) : seulement les personnes à portée de voix
+                present = [a for a in present
+                           if any(b is not a and manhattan(a.pos, b.pos) <= ENCOUNTER_RADIUS for b in present)]
             if len(present) < 2:
                 continue
             candidates = present[:]
@@ -702,7 +717,11 @@ class Engine:
 
         definition = ACTIONS[action.name]
         if definition.duration > 0:
-            agent.needs.apply(definition.effects, minutes / definition.duration)
+            # Un baril d'eau lave moins bien qu'une douche, une tente repose moins qu'un lit
+            spot = self.house.object_at_spot(agent.pos)
+            quality = spot.quality if spot is not None else 1.0
+            effects = {need: gain * quality if gain > 0 else gain for need, gain in definition.effects.items()}
+            agent.needs.apply(effects, minutes / definition.duration)
         action.remaining -= minutes
         if action.until_minute is not None:
             done = now >= action.until_minute
@@ -725,8 +744,8 @@ class Engine:
         if item is None:
             self.remember(agent, "Finalement, on n'avait pas les moyens de l'acheter.", 4)
             return
-        if item_id in PURCHASE_OBJECTS:
-            self.house.add_object(PURCHASE_OBJECTS[item_id])
+        if item_id in self.house.purchase_objects:
+            self.house.add_object(self.house.purchase_objects[item_id])
         text = f"{agent.name} a acheté {item.label} ({item.price:,.0f} $) !".replace(",", " ")
         self.publish("achat", agent=agent.id, name=agent.name, item=item_id, amount=-item.price, text=text,
                      money=self.economy.household.money)
@@ -904,6 +923,7 @@ class Engine:
             "pair_last_talk": self.pair_last_talk,
             "household": self.economy.household.model_dump(mode="json"),
             "social": self.social.to_dict(),
+            "world": {"scenario": self.house.layout.name, "removed": sorted(self.house.removed)},
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -916,13 +936,19 @@ class Engine:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         if data.get("version") not in SUPPORTED_SAVE_VERSIONS:
             raise ValueError(f"Version de sauvegarde non prise en charge : {data.get('version')}")
+        world = data.get("world", {"scenario": "maison", "removed": []})
+        if world["scenario"] != self.house.layout.name:
+            raise ValueError(f"sauvegarde du scénario « {world['scenario']} », "
+                             f"pas « {self.house.layout.name} »")
         self.clock.total_minutes = data["total_minutes"]
+        for obj_id in world.get("removed", []):
+            self.house.remove_object(obj_id)
         self.pair_last_talk = dict(data.get("pair_last_talk", {}))
         if "household" in data:
             self.economy.household = Household.model_validate(data["household"])
         for item_id in self.economy.household.purchases:
-            if item_id in PURCHASE_OBJECTS:
-                self.house.add_object(PURCHASE_OBJECTS[item_id])
+            if item_id in self.house.purchase_objects:
+                self.house.add_object(self.house.purchase_objects[item_id])
         saved = data.get("agents", {})
         for index, agent in enumerate(self.agents):
             if agent.id in saved:

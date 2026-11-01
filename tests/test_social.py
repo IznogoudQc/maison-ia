@@ -181,7 +181,7 @@ def test_promesse_tenue(setup):
     engine.social.promises.append(Promise(id=50, people=["pere", "enfant"], by="pere", action="jouer",
                                           minute=minute, text="Lego avec Félix"))
     run_until(engine, minute + 30)
-    promise = engine.social.promises[-1]
+    promise = next(p for p in engine.social.promises if p.id == 50)
     assert promise.status == "kept"
     actions = {e.data["name"]: e.data["action"] for e in events
                if e.kind == "action" and e.minute >= minute and e.data["reason"].startswith("Promesse")}
@@ -200,7 +200,7 @@ def test_promesse_brisee_fache_celui_qui_attendait(setup):
     engine.social.promises.append(Promise(id=51, people=["pere", "enfant"], by="pere", action="jouer",
                                           minute=minute, text="Lego avec Félix"))
     run_until(engine, minute + engine.config.dialogue.promise_window_minutes + 5)
-    assert engine.social.promises[-1].status == "broken"
+    assert next(p for p in engine.social.promises if p.id == 51).status == "broken"
     relation = engine.agent_by_id("enfant").relation("pere")
     assert relation.tension > 15 and "pas tenu" in relation.note
     assert any("Stéphane n'a pas tenu sa promesse" in m.text for m in engine.agent_by_id("enfant").memory.events)

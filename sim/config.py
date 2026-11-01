@@ -113,6 +113,25 @@ class EventsConfig(BaseModel):
     frequency: float = 1.0              # multiplicateur des probabilités (0 = jamais, 2 = deux fois plus)
 
 
+class TerrainConfig(BaseModel):
+    """Scénario « terrain » : un couple, une tente et un lot boisé à bâtir."""
+    width: int = 120
+    height: int = 80
+    seed: int | None = None             # None = sim.seed
+    tree_density: float = 1.0
+    family_file: str = "data/couple.yaml"
+    start_money: float = 3000.0
+    start_pantry: float = 20.0
+    weekly_bills: dict[str, float] = Field(default_factory=lambda: {
+        "Taxes du terrain": 35.0, "Cellulaires": 45.0, "Assurances": 15.0,
+    })
+
+
+class WorldConfig(BaseModel):
+    scenario: Literal["maison", "terrain"] = "maison"
+    terrain: TerrainConfig = Field(default_factory=TerrainConfig)
+
+
 class AppConfig(BaseModel):
     sim: SimConfig = Field(default_factory=SimConfig)
     display: DisplayConfig = Field(default_factory=DisplayConfig)
@@ -123,6 +142,7 @@ class AppConfig(BaseModel):
     health: HealthConfig = Field(default_factory=HealthConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     mind: MindConfig = Field(default_factory=MindConfig)
+    world: WorldConfig = Field(default_factory=WorldConfig)
     family_file: str = "data/family.yaml"
     save_file: str = "save.json"
     log_dir: str = "logs"
@@ -140,4 +160,15 @@ def load_config(path: str | Path = "config.yaml", required: bool = False) -> App
             raise FileNotFoundError(f"Fichier de configuration introuvable : {path.resolve()}")
         return AppConfig()
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return AppConfig.model_validate(data)
+    return apply_scenario(AppConfig.model_validate(data))
+
+
+def apply_scenario(config: AppConfig) -> AppConfig:
+    """Scénario « terrain » : famille, argent de départ et factures propres au terrain."""
+    if config.world.scenario == "terrain":
+        terrain = config.world.terrain
+        config.family_file = terrain.family_file
+        config.economy.start_money = terrain.start_money
+        config.economy.start_pantry = terrain.start_pantry
+        config.economy.weekly_bills = dict(terrain.weekly_bills)
+    return config

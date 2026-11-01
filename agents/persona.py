@@ -48,6 +48,7 @@ class Persona(BaseModel):
     bed: str
     favorite_actions: list[str] = Field(default_factory=list)
     salary_per_day: float = 0.0   # paie nette par journée de travail (0 = pas d'emploi)
+    look: dict = Field(default_factory=dict)  # apparence : hair, pants (RGB), long_hair (bool)
     schedule: Schedule
 
     @property

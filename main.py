@@ -25,22 +25,35 @@ from ui.hud import Hud, draw_game_over
 from ui.renderer import Renderer
 from ui.sprites import TILE
 from world.house import House
+from world.terrain import build_house
 
 SPEED_KEYS = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3}
+PAN_KEYS = {pygame.K_LEFT: (-1, 0), pygame.K_a: (-1, 0), pygame.K_RIGHT: (1, 0), pygame.K_d: (1, 0),
+            pygame.K_UP: (0, -1), pygame.K_w: (0, -1), pygame.K_DOWN: (0, 1), pygame.K_s: (0, 1)}
+PAN_SPEED = 700         # px écran par seconde
+SCROLL_SCALE = 2.0      # zoom de départ quand la carte ne tient pas à l'écran
 MAX_TICKS_PER_FRAME = 60
 SCALES = (3.0, 2.0, 1.5, 1.0)
 SCREEN_MARGIN = (40, 90)  # bordure de fenêtre et barre des tâches
 
 
-def fit_scale(house: House, hud_width: int) -> float:
-    """Plus grand agrandissement qui fait tenir la carte et le panneau dans l'écran."""
+def fit_view(house: House, hud_width: int, wanted: float | str) -> tuple[float, tuple[int, int] | None]:
+    """Zoom et taille de la zone de carte.
+
+    La carte entière tient à l'écran (maison) : plus grand agrandissement qui la fait tenir.
+    Sinon (grand terrain) : zoom SCROLL_SCALE et zone de carte = tout l'écran disponible, avec défilement.
+    """
     info = pygame.display.Info()
-    max_w, max_h = info.current_w - SCREEN_MARGIN[0], info.current_h - SCREEN_MARGIN[1]
+    max_w, max_h = info.current_w - SCREEN_MARGIN[0] - hud_width, info.current_h - SCREEN_MARGIN[1]
+    if wanted != "auto":
+        scale = float(wanted)
+        if house.width * TILE * scale <= max_w and house.height * TILE * scale <= max_h:
+            return scale, None
+        return scale, (max_w, max_h)
     for scale in SCALES:
-        tile = round(TILE * scale)
-        if house.width * tile + hud_width <= max_w and house.height * tile <= max_h:
-            return scale
-    return SCALES[-1]
+        if house.width * round(TILE * scale) <= max_w and house.height * round(TILE * scale) <= max_h:
+            return scale, None
+    return SCROLL_SCALE, (max_w, max_h)
 
 
 def main() -> None:
@@ -66,7 +79,9 @@ def main() -> None:
         llm_label = "mock (repli : config LLM invalide)"
     llm = LLMService(provider, config.llm.max_calls_per_minute, config.llm.max_workers)
 
-    house = House()
+    terrain = config.world.terrain
+    seed = terrain.seed if terrain.seed is not None else config.sim.seed
+    house = build_house(config.world.scenario, terrain.width, terrain.height, seed, terrain.tree_density)
     personas = load_family(config.family_file)
     agents = [Agent(persona=p, pos=house.random_tile(rng)) for p in personas]
     clock = SimClock(config.sim.start_day, config.sim.start_time, config.sim.tick_minutes)
@@ -82,11 +97,12 @@ def main() -> None:
             print(f"[Sauvegarde] {save_path} illisible ({exc}) -> nouvelle partie")
 
     pygame.init()
-    pygame.display.set_caption("Maison IA — famille Gagnon")
-    scale = config.display.pixel_scale
-    if scale == "auto":
-        scale = fit_scale(house, config.display.hud_width)
-    renderer = Renderer(house, scale)
+    title = "Maison IA — le terrain" if config.world.scenario == "terrain" else "Maison IA — famille Gagnon"
+    pygame.display.set_caption(title)
+    scale, viewport = fit_view(house, config.display.hud_width, config.display.pixel_scale)
+    renderer = Renderer(house, scale, viewport)
+    camp = next((a for a in agents if not a.is_away), agents[0])
+    renderer.center_on(*camp.pos)
     map_w, map_h = renderer.size
     screen = pygame.display.set_mode((map_w + config.display.hud_width, map_h))
     hud = Hud(pygame.Rect(map_w, 0, config.display.hud_width, map_h))
@@ -104,6 +120,8 @@ def main() -> None:
     speed_index = 0
     paused = False
     selected_id: str | None = None
+    follow = False          # F : la caméra suit l'agent sélectionné
+    dragging = False        # clic droit maintenu : on fait glisser la vue
     tick_accumulator = 0.0
     running = True
 
@@ -121,12 +139,32 @@ def main() -> None:
                     dialogue_box.toggle_history()
                 elif event.key in SPEED_KEYS:
                     speed_index = min(SPEED_KEYS[event.key], len(config.sim.speed_multipliers) - 1)
+                elif event.key == pygame.K_f:
+                    follow = not follow and selected_id is not None
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if event.pos[0] < map_w:
+                if event.pos[0] < map_w and not renderer.minimap_click(event.pos):
                     clicked = renderer.agent_at(agents, event.pos)
                     selected_id = clicked.id if clicked else None
-            elif event.type == pygame.MOUSEWHEEL and dialogue_box.show_history:
-                dialogue_box.scroll_history(event.y * 3)
+                    follow = follow and selected_id is not None
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3 and event.pos[0] < map_w:
+                dragging = True
+                follow = False
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 3:
+                dragging = False
+            elif event.type == pygame.MOUSEMOTION and dragging:
+                renderer.pan(-event.rel[0], -event.rel[1])
+            elif event.type == pygame.MOUSEWHEEL:
+                if dialogue_box.show_history:
+                    dialogue_box.scroll_history(event.y * 3)
+                else:
+                    mouse = pygame.mouse.get_pos()
+                    renderer.zoom(1 if event.y > 0 else -1, mouse if mouse[0] < map_w else None)
+
+        keys = pygame.key.get_pressed()
+        pan = [sum(d[i] for k, d in PAN_KEYS.items() if keys[k]) for i in (0, 1)]
+        if pan != [0, 0]:
+            follow = False
+            renderer.pan(pan[0] * PAN_SPEED * dt, pan[1] * PAN_SPEED * dt)
 
         speed = config.sim.speed_multipliers[speed_index]
         if not paused:
@@ -141,6 +179,9 @@ def main() -> None:
 
         renderer.set_yard(engine.economy.household.lawn, engine.car_home())
         renderer.update_display(agents, dt)
+        followed = engine.agent_by_id(selected_id) if follow and selected_id else None
+        if followed is not None and not followed.is_away:
+            renderer.center_on(*renderer.display_pos.get(followed.id, followed.pos))
         dialogue_box.update(0.0 if paused else dt)
         screen.fill(theme.BACKGROUND)
         renderer.draw(screen, agents, selected_id, clock.minute_of_day)

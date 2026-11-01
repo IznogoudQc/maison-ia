@@ -20,10 +20,10 @@ PLAN_MISSED = (200, 110, 100)
 PLAN_THOUGHT = (180, 170, 230)
 
 CONTROLS = [
-    "Espace : pause / reprise",
-    "1-4 : vitesse",
+    "Espace : pause / reprise    1-4 : vitesse",
     "Clic : sélectionner un agent (clic vide : famille)",
-    "H : historique des dialogues",
+    "Flèches / clic droit glissé : vue   molette : zoom",
+    "F : suivre l'agent   H : historique des dialogues",
     "Échap : sauvegarder et quitter",
 ]
 

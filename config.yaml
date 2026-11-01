@@ -89,6 +89,21 @@ events:
   check_time: "08:30"         # tirage quotidien
   frequency: 1.0              # 0 = jamais, 2 = deux fois plus souvent
 
+world:
+  scenario: maison            # maison : la famille Gagnon et sa maison ; terrain : un couple, une tente, un lot à bâtir
+  terrain:
+    width: 120                # tuiles (la caméra défile : flèches, clic droit glissé, molette = zoom)
+    height: 80
+    seed: null                # null = sim.seed ; même graine = même forêt
+    tree_density: 1.0
+    family_file: data/couple.yaml
+    start_money: 3000
+    start_pantry: 20
+    weekly_bills:
+      Taxes du terrain: 35
+      Cellulaires: 45
+      Assurances: 15
+
 family_file: data/family.yaml
 save_file: save.json
 log_dir: logs

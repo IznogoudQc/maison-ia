@@ -107,6 +107,10 @@ def draw_surface(surf: pygame.Surface, x: int, y: int, kind: str) -> None:
         pygame.draw.rect(surf, (196, 194, 188), rect)
         pygame.draw.line(surf, (160, 158, 152), rect.topleft, (rect.left, rect.bottom - 1))
         pygame.draw.line(surf, (170, 168, 162), rect.topleft, (rect.right - 1, rect.top))
+    elif kind == "dirt":
+        pygame.draw.rect(surf, (156, 124, 86), rect)
+        for _ in range(7):
+            surf.set_at((rect.x + rng.randrange(t), rect.y + rng.randrange(t)), (132, 104, 72))
     else:  # pavés de l'allée
         pygame.draw.rect(surf, (176, 150, 126), rect)
         for j in range(0, t, 4):
@@ -450,12 +454,112 @@ def draw_swimmer(surf: pygame.Surface, persona: Persona, center: tuple[int, int]
     surf.blit(head, (cx - 8, cy - 6 + bob))
 
 
+
+# ---------------------------------------------------------------------- terrain (scénario « terrain »)
+
+TREE_COLORS = {
+    "Érable": ((54, 112, 52), (68, 136, 60), (92, 160, 72)),
+    "Bouleau": ((96, 150, 70), (120, 172, 84), (150, 196, 104)),
+}
+
+
+def _small_tree(surf: pygame.Surface, r: pygame.Rect, species: str) -> None:
+    """Arbre d'une tuile dont le feuillage déborde : en rangées serrées, ça fait une forêt."""
+    cx, bottom = r.centerx, r.bottom
+    rng = random.Random(r.x * 7 + r.y * 13)
+    if species == "Sapin":
+        pygame.draw.rect(surf, (90, 62, 40), (cx - 1, bottom - 4, 3, 4))
+        for i, (half, color) in enumerate(((8, (34, 86, 52)), (6, (42, 102, 60)), (4, (52, 118, 70)))):
+            top = bottom - 7 - i * 5
+            pygame.draw.polygon(surf, color, [(cx - half, top + 6), (cx + half, top + 6), (cx, top - 3)])
+        return
+    trunk = (226, 222, 210) if species == "Bouleau" else (100, 70, 44)
+    pygame.draw.rect(surf, trunk, (cx - 1, bottom - 6, 3, 6))
+    if species == "Bouleau":
+        surf.set_at((cx, bottom - 4), (40, 40, 40))
+    dark, mid, light = TREE_COLORS.get(species, TREE_COLORS["Érable"])
+    jitter = rng.randint(-1, 1)
+    pygame.draw.circle(surf, dark, (cx + jitter, bottom - 9), 8)
+    pygame.draw.circle(surf, mid, (cx - 2 + jitter, bottom - 11), 6)
+    pygame.draw.circle(surf, light, (cx - 3 + jitter, bottom - 13), 2)
+
+
+def draw_water(surf: pygame.Surface, x: int, y: int, t: float = 0.0) -> None:
+    rect = pygame.Rect(x * TILE, y * TILE, TILE, TILE)
+    pygame.draw.rect(surf, (64, 124, 196), rect)
+    rng = random.Random(x * 101 + y * 37)
+    for _ in range(2):
+        px, py = rect.x + rng.randrange(2, TILE - 4), rect.y + rng.randrange(2, TILE - 2)
+        pygame.draw.line(surf, (110, 168, 226), (px, py), (px + 3, py))
+
+
+def _tent(surf: pygame.Surface, r: pygame.Rect) -> None:
+    body = r.inflate(-2, -2)
+    pygame.draw.polygon(surf, (60, 120, 90), [body.bottomleft, body.bottomright, (body.centerx, body.top - 6)])
+    pygame.draw.polygon(surf, (40, 90, 66), [body.bottomleft, body.bottomright, (body.centerx, body.top - 6)], 1)
+    pygame.draw.polygon(surf, (36, 60, 48), [(body.centerx - 5, body.bottom), (body.centerx + 5, body.bottom),
+                                            (body.centerx, body.top + 4)])  # ouverture
+    pygame.draw.line(surf, (200, 200, 190), (body.left - 2, body.bottom), (body.left + 3, body.bottom - 4))
+    pygame.draw.line(surf, (200, 200, 190), (body.right + 1, body.bottom), (body.right - 4, body.bottom - 4))
+
+
+def _campfire(surf: pygame.Surface, r: pygame.Rect) -> None:
+    rng = random.Random(r.x + r.y)
+    for angle in range(0, 360, 45):
+        a = math.radians(angle + rng.randint(-8, 8))
+        pygame.draw.circle(surf, (128, 124, 120), (r.centerx + round(math.cos(a) * 6), r.centery + round(math.sin(a) * 5)), 2)
+    pygame.draw.line(surf, (110, 70, 40), (r.centerx - 4, r.centery + 2), (r.centerx + 4, r.centery - 2), 2)
+    pygame.draw.line(surf, (96, 60, 36), (r.centerx - 4, r.centery - 2), (r.centerx + 4, r.centery + 2), 2)
+
+
+def draw_flames(surf: pygame.Surface, fire: InteractiveObject, t: float) -> tuple[int, int]:
+    """Flammes animées du feu de camp ; renvoie le point d'où monte la fumée."""
+    x, y, _w, _h = fire.rect
+    cx, cy = x * TILE + TILE // 2, y * TILE + TILE // 2
+    for i, (color, height) in enumerate((((236, 96, 40), 6), ((250, 170, 50), 4), ((255, 236, 140), 2))):
+        flicker = math.sin(t * 9 + i * 1.7) * 1.5
+        top = cy - 4 - height - round(flicker)
+        pygame.draw.polygon(surf, color, [(cx - 4 + i, cy + 1), (cx + 4 - i, cy + 1), (cx, top)])
+    return cx, cy - 8
+
+
+def _cooler(surf: pygame.Surface, r: pygame.Rect) -> None:
+    body = pygame.Rect(r.x + 2, r.y + 4, r.width - 4, r.height - 6)
+    box(surf, body, (210, 60, 56))
+    pygame.draw.rect(surf, (244, 244, 240), (body.x, body.y, body.width, 3))
+    pygame.draw.line(surf, (60, 60, 60), (body.centerx - 2, body.y - 1), (body.centerx + 2, body.y - 1))
+
+
+def _picnic_table(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.rect(surf, (128, 92, 58), (r.x, r.y - 3, r.width, 2))   # banc du haut
+    pygame.draw.rect(surf, (128, 92, 58), (r.x, r.bottom + 1, r.width, 2))  # banc du bas
+    top = pygame.Rect(r.x + 1, r.y + 2, r.width - 2, r.height - 4)
+    box(surf, top, (166, 120, 76))
+    for xx in range(top.x + 4, top.right - 1, 5):
+        pygame.draw.line(surf, (140, 100, 62), (xx, top.y + 1), (xx, top.bottom - 2))
+
+
+def _barrel(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.ellipse(surf, (60, 90, 140), r.inflate(-3, -3))
+    pygame.draw.ellipse(surf, (40, 60, 100), r.inflate(-3, -3), 1)
+    pygame.draw.ellipse(surf, (110, 160, 210), r.inflate(-8, -8))
+
+
+def _outhouse(surf: pygame.Surface, r: pygame.Rect) -> None:
+    body = r.inflate(-2, 0)
+    box(surf, body, (138, 98, 60))
+    pygame.draw.polygon(surf, (90, 60, 40), [(body.x - 1, body.y + 3), (body.right, body.y + 3),
+                                            (body.centerx, body.y - 2)])
+    pygame.draw.circle(surf, (40, 30, 20), (body.centerx, body.y + 9), 2)  # la lune dans la porte
+
+
 OBJECT_DRAWERS = {
     "frigo": _fridge, "cuisiniere": _stove, "comptoir": _counter, "table": _table,
     "commode": _dresser, "ordi": _computer, "jouets": _toys, "douche": _shower,
     "toilette": _toilet, "tele": _tv, "canape": _sofa, "biblio": _bookshelf, "porte": _bus_stop,
     "cabanon": _shed, "patio": _patio, "balancoire": _swing, "boite_lettres": _mailbox,
-    "piscine": _pool, "bbq": _bbq,
+    "piscine": _pool, "bbq": _bbq, "tente": _tent, "feu": _campfire, "glaciere": _cooler,
+    "table_pique_nique": _picnic_table, "baril": _barrel, "becosse": _outhouse,
 }
 
 
@@ -465,12 +569,15 @@ def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
     if obj.kind == "auto":
         return  # dessinée à chaque image : elle part et revient
     if obj.kind == "arbre":
-        _tree(surf, rect)
-    elif obj.kind == "lit":
+        if w == 1 and h == 1:
+            _small_tree(surf, rect, obj.label)
+        else:
+            _tree(surf, rect)
+    elif obj.kind == "lit" and obj.id not in OBJECT_DRAWERS:
         _bed(surf, rect, obj)
     elif obj.id in OBJECT_DRAWERS:
         OBJECT_DRAWERS[obj.id](surf, rect)
-    else:
+    elif w and h:  # les objets sans tuile (places autour du feu) ne se dessinent pas
         box(surf, rect.inflate(-2, -2), (156, 136, 112))
 
 
@@ -560,7 +667,7 @@ def _body_rows(direction: str, legs: list[str], long_hair: bool, child: bool) ->
 
 
 def _palette(persona: Persona) -> tuple[dict[str, Color], dict]:
-    style = STYLES.get(persona.id, DEFAULT_STYLE)
+    style = {**DEFAULT_STYLE, **STYLES.get(persona.id, {}), **persona.look}
     palette = {
         "H": style["hair"], "S": SKIN, "E": (40, 30, 44),
         "T": tuple(persona.color), "P": style["pants"], "B": (46, 36, 32),

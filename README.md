@@ -30,6 +30,19 @@ Une sauvegarde `save.json` est rechargée au démarrage ; `uv run python main.py
 Si le fournisseur est mal configuré (clé absente par exemple), la simulation le signale dans la
 console et passe en mode mock.
 
+## Scénarios
+
+- **maison** (par défaut) : la famille Gagnon dans sa maison de banlieue, avec ses deux cours.
+- **terrain** : un jeune couple (Maxime et Camille, `data/couple.yaml`) vient d'acheter un grand lot
+  boisé (120 × 80 tuiles : forêt en massifs d'érables, de sapins et de bouleaux, un étang). Au départ :
+  une tente, un feu de camp, une glacière, une table de pique-nique, un baril d'eau de pluie et une
+  bécosse. Pas d'hypothèque : seulement les taxes du terrain, les cellulaires et les assurances. La
+  tente repose moins bien qu'un lit et le baril lave moins bien qu'une douche (qualité des objets).
+  La même graine redonne la même forêt.
+
+Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
+`uv run python main.py --nouveau`. Une sauvegarde d'un scénario n'est pas rechargée dans l'autre.
+
 ## Survie de la famille
 
 - **Argent** : compte commun. Les parents sont payés au retour du travail (`salary_per_day` dans
@@ -105,6 +118,10 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | 1 à 4 | vitesse (multiplicateurs `sim.speed_multipliers`) |
 | Clic sur un agent | besoins, action, humeur et mémoire dans le panneau ; clic dans le vide : vue famille |
 | H | historique des dialogues (molette pour défiler) |
+| Flèches ou WASD, clic droit glissé | déplacer la vue (grande carte) |
+| Molette | zoom (dans l'historique : défiler) |
+| Clic sur la mini-carte | centrer la vue à cet endroit |
+| F | la caméra suit l'agent sélectionné |
 | Échap | sauvegarde dans `save.json` et quitte |
 
 ## Configuration (`config.yaml`)
@@ -120,6 +137,7 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | `economy` | `enabled`, `start_money`, `start_pantry`, `portion_price`, `weekly_bills`, `bills_weekday`, `grocery_days`, `low_pantry_days`, `overtime_below` |
 | `health` | `mortality`, `starvation_per_hour`, `exhaustion_per_hour`, `regen_per_hour`, `hospital_days`, `grief_days` |
 | `events` | `enabled`, `check_time`, `frequency` (0 = jamais, 2 = deux fois plus souvent) |
+| `world` | `scenario` (`maison` ou `terrain`) ; `terrain` : `width`, `height`, `seed`, `tree_density`, `family_file`, `start_money`, `start_pantry`, `weekly_bills` |
 
 Le compteur d'appels et de tokens est affiché en haut du panneau, avec le solde, le garde-manger
 et les derniers mouvements d'argent. Chaque dialogue, décision LLM, départ, retour, résumé, paie,
@@ -174,7 +192,7 @@ réflexion, répliques tour par tour (point de vue de chacun), relations et prom
 
 ```
 main.py              boucle pygame (tick fixe, poll LLM non bloquant, rendu)
-world/               maison, cours avant et arrière, objets (dont ceux à acheter) ; A*
+world/               monde générique (house.py : Layout + maison des Gagnon), terrain boisé (terrain.py), A*
 agents/              persona, besoins, actions, horaire, mémoire pondérée, plan du jour, relations, état de l'agent
 llm/                 interface + factory, Claude, Ollama, mock, prompts (décision, plan, réplique, bilan), service
 sim/                 horloge, moteur, vie intérieure (mind.py), conversations et promesses (social.py), économie,
