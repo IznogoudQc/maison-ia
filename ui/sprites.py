@@ -18,8 +18,8 @@ TILE = 16
 Color = tuple[int, int, int]
 
 OUTLINE: Color = (34, 28, 36)
-WALL_TOP: Color = (70, 64, 64)
-WALL_FACE: Color = (166, 150, 132)
+WALL_TOP: Color = (172, 162, 146)    # dessus du mur (plâtre et pierre)
+WALL_FACE: Color = (120, 108, 96)    # courte face visible au-dessus d'un plancher
 EARTH: Color = (128, 116, 98)      # teinte vers laquelle on adoucit les couleurs (palette terreuse)
 SHADOW_ALPHA = 70
 GLASS: Color = (150, 200, 232)
@@ -216,20 +216,33 @@ def draw_door_floor(surf: pygame.Surface, x: int, y: int) -> None:
         pygame.draw.line(surf, shade(WOOD, -25), (x * t + i, y * t), (x * t + i, y * t + t - 1))
 
 
-def draw_wall(surf: pygame.Surface, x: int, y: int, floor_below: bool) -> None:
-    """Dessus du mur foncé ; face peinte visible quand le sol est juste au sud."""
+def draw_wall(surf: pygame.Surface, x: int, y: int, floor_below: bool,
+              open_sides: frozenset[str] = frozenset()) -> None:
+    """Mur plein vu de dessus : dessus clair, liseré clair au nord-ouest, bord foncé au sud-est.
+
+    open_sides : côtés (n, s, e, o) qui ne touchent pas un autre mur. Quand le plancher est juste au sud,
+    on voit en plus une courte face du mur, qui donne l'impression de hauteur.
+    """
     t = TILE
     rect = pygame.Rect(x * t, y * t, t, t)
-    pygame.draw.rect(surf, WALL_TOP, rect)
-    pygame.draw.line(surf, shade(WALL_TOP, 18), rect.topleft, (rect.right - 1, rect.top))
+    top = shade(WALL_TOP, round(_noise(x, y, 6) * 3))
+    pygame.draw.rect(surf, top, rect)
+    rng = random.Random(x * 3301 + y * 7717)
+    for _ in range(4):  # crépi
+        surf.set_at((rect.x + rng.randrange(t), rect.y + rng.randrange(t)), shade(top, rng.choice((-8, 6))))
+    if "n" in open_sides:
+        pygame.draw.line(surf, shade(top, 26), rect.topleft, (rect.right - 1, rect.top))
+    if "o" in open_sides:
+        pygame.draw.line(surf, shade(top, 18), rect.topleft, (rect.left, rect.bottom - 1))
+    if "e" in open_sides:
+        pygame.draw.line(surf, shade(top, -40), (rect.right - 1, rect.top), (rect.right - 1, rect.bottom - 1))
     if floor_below:
-        face = pygame.Rect(rect.x, rect.y + t // 2, t, t // 2)
+        face = pygame.Rect(rect.x, rect.bottom - 5, t, 5)
         pygame.draw.rect(surf, WALL_FACE, face)
-        pygame.draw.line(surf, shade(WALL_FACE, 25), face.topleft, (face.right - 1, face.top))
-        pygame.draw.line(surf, shade(WALL_FACE, -50), (face.left, face.bottom - 2),
-                         (face.right - 1, face.bottom - 2))
-        pygame.draw.line(surf, shade(WALL_FACE, -70), (face.left, face.bottom - 1),
-                         (face.right - 1, face.bottom - 1))
+        pygame.draw.line(surf, shade(top, -45), face.topleft, (face.right - 1, face.top))
+        pygame.draw.line(surf, shade(WALL_FACE, -45), (face.left, face.bottom - 1), (face.right - 1, face.bottom - 1))
+    elif "s" in open_sides:
+        pygame.draw.line(surf, shade(top, -45), (rect.left, rect.bottom - 1), (rect.right - 1, rect.bottom - 1))
 
 
 def draw_window(surf: pygame.Surface, x: int, y: int, vertical: bool, on_face: bool,
@@ -239,7 +252,7 @@ def draw_window(surf: pygame.Surface, x: int, y: int, vertical: bool, on_face: b
     if vertical:
         glass = pygame.Rect(x * t + t // 2 - 3, y * t + 2, 6, t - 4)
     elif on_face:
-        glass = pygame.Rect(x * t + 3, y * t + t // 2 + 1, t - 6, t // 2 - 4)
+        glass = pygame.Rect(x * t + 2, y * t + 4, t - 4, 6)
     else:
         glass = pygame.Rect(x * t + 2, y * t + t // 2 - 3, t - 4, 6)
     pygame.draw.rect(surf, sky, glass)

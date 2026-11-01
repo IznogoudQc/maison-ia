@@ -15,6 +15,7 @@ ZOOM_LEVELS = (1.0, 1.5, 2.0, 3.0)
 WILD_GRASS = 55.0      # herbe d'un terrain sauvage (jamais tondu)
 MINIMAP_WIDTH = 180    # px à l'écran
 FIRE_HOURS = (17, 23)  # le feu de camp brûle en soirée (ou quand on cuisine / veille autour)
+WALL_SIDES = {"n": (0, -1), "s": (0, 1), "e": (1, 0), "o": (-1, 0)}
 STYLE_COLORS = {"wood": (186, 138, 94), "ceramic": (230, 224, 206), "carpet": (150, 128, 170)}
 WALK_FPS = 8          # images de marche par seconde
 SPRITE_LIFT = 4       # le personnage déborde un peu sur la tuile du dessus (effet de profondeur)
@@ -187,7 +188,9 @@ class Renderer:
         elif pos in house.fences:
             sprites.draw_fence(surf, x, y, lawn, vertical=x == house.width - 1)
         else:
-            sprites.draw_wall(surf, x, y, floor_below=(x, y + 1) in house.floor)
+            sides = frozenset(name for name, (dx, dy) in WALL_SIDES.items()
+                              if house.in_bounds((x + dx, y + dy)) and not house.is_wall((x + dx, y + dy)))
+            sprites.draw_wall(surf, x, y, floor_below=(x, y + 1) in house.floor, open_sides=sides)
 
     def _build_background(self) -> pygame.Surface:
         self._built_key = (self.house.revision, self._lawn_bucket())
