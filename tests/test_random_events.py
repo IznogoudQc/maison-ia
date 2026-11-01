@@ -39,7 +39,8 @@ def run_until(eng, minute):
 def test_frequence_zero_aucun_evenement():
     eng, events = make_engine(frequency=0.0)
     run_until(eng, 7 * DAY)
-    assert not any(e.kind == "evenement" for e in events)
+    # Les nouvelles de la cour (tonte, amende) ne sont pas aléatoires
+    assert not any(e.kind == "evenement" and e.data["id"] != "cour" for e in events)
 
 
 def test_au_plus_deux_evenements_par_jour_et_un_tirage_par_jour():

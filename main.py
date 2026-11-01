@@ -23,10 +23,24 @@ from ui import theme
 from ui.dialogue_box import NEWS_KINDS, DialogueBox
 from ui.hud import Hud, draw_game_over
 from ui.renderer import Renderer
+from ui.sprites import TILE
 from world.house import House
 
 SPEED_KEYS = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3}
 MAX_TICKS_PER_FRAME = 60
+SCALES = (3.0, 2.0, 1.5, 1.0)
+SCREEN_MARGIN = (40, 90)  # bordure de fenêtre et barre des tâches
+
+
+def fit_scale(house: House, hud_width: int) -> float:
+    """Plus grand agrandissement qui fait tenir la carte et le panneau dans l'écran."""
+    info = pygame.display.Info()
+    max_w, max_h = info.current_w - SCREEN_MARGIN[0], info.current_h - SCREEN_MARGIN[1]
+    for scale in SCALES:
+        tile = round(TILE * scale)
+        if house.width * tile + hud_width <= max_w and house.height * tile <= max_h:
+            return scale
+    return SCALES[-1]
 
 
 def main() -> None:
@@ -69,7 +83,10 @@ def main() -> None:
 
     pygame.init()
     pygame.display.set_caption("Maison IA — famille Gagnon")
-    renderer = Renderer(house, config.display.pixel_scale)
+    scale = config.display.pixel_scale
+    if scale == "auto":
+        scale = fit_scale(house, config.display.hud_width)
+    renderer = Renderer(house, scale)
     map_w, map_h = renderer.size
     screen = pygame.display.set_mode((map_w + config.display.hud_width, map_h))
     hud = Hud(pygame.Rect(map_w, 0, config.display.hud_width, map_h))
@@ -119,6 +136,7 @@ def main() -> None:
             tick_accumulator = min(tick_accumulator, 1.0)  # évite la spirale de rattrapage
         engine.poll()  # réponses LLM arrivées (non bloquant)
 
+        renderer.set_yard(engine.economy.household.lawn, engine.car_home())
         renderer.update_display(agents, dt)
         dialogue_box.update(0.0 if paused else dt)
         screen.fill(theme.BACKGROUND)

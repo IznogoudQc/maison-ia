@@ -20,6 +20,7 @@ class ActionDef:
     only_below: tuple[str, float] | None = None  # proposée seulement si ce besoin est sous le seuil
     allowed: tuple[str, ...] | None = None       # ids de persona autorisés (None = tous)
     excluded: tuple[str, ...] = ()               # ids de persona exclus
+    daytime_only: bool = False                   # activité extérieure : seulement de jour
 
 
 ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
@@ -35,16 +36,28 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("sieste", "fait une sieste", "lit", 45, {"energy": 18}, only_below=("energy", 30)),
     ActionDef("jaser", "va jaser avec {target}", None, 15, {"social": 30, "fun": 5}),
     ActionDef("flaner", "flâne", None, 10, {"fun": 3}),
+    # Cour arrière (les objets achetés n'existent qu'après l'achat)
+    ActionDef("baignade", "se baigne dans la piscine", "piscine", 40, {"fun": 45, "social": 10, "hygiene": -5},
+              daytime_only=True),
+    ActionDef("jardin", "relaxe sur le patio", "patio", 30, {"fun": 20, "social": 10, "energy": 3},
+              daytime_only=True),
+    ActionDef("balancoire", "se balance", "balancoire", 25, {"fun": 40}, allowed=("enfant",),
+              daytime_only=True),
     # Actions imposées par l'horaire
     ActionDef("dejeuner", "déjeune", "table", 20, {"hunger": 45, "social": 5}, selectable=False),
     ActionDef("souper", "soupe en famille", "table", 35, {"hunger": 65, "social": 15}, selectable=False),
     ActionDef("cuisiner", "prépare le souper", "cuisiniere", 40, {"fun": 5}, selectable=False),
+    ActionDef("bbq", "fait un BBQ", "bbq", 40, {"fun": 15, "social": 5}, selectable=False),
     ActionDef("dormir", "dort", "lit", 480, {}, selectable=False),
     ActionDef("partir", "part {target}", "porte", 0, {}, selectable=False),
     # Actions économiques : proposées par le moteur selon l'état du ménage (pas par les besoins)
     ActionDef("epicerie", "va faire l'épicerie", "porte", 0, {}, selectable=False),
     ActionDef("heures_sup", "part faire des heures supplémentaires", "porte", 0, {}, selectable=False),
+    ActionDef("acheter", "commande {target}", None, 10, {"fun": 10}, selectable=False),
+    ActionDef("tondre", "tond la pelouse", None, 60, {"fun": -5, "energy": -4}, selectable=False),
 ]}
+
+DAYTIME_HOURS = (7 * 60, 21 * 60)  # activités extérieures
 
 # Actions qui font sortir de la maison une fois la porte atteinte
 AWAY_ACTIONS = {"partir", "epicerie", "heures_sup"}

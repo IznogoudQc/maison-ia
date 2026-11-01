@@ -1,4 +1,4 @@
-"""Maison : grille de tuiles, pièces, murs et objets interactifs."""
+"""Maison et terrain : grille de tuiles, pièces, cours, murs, clôtures et objets interactifs."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 
 Pos = tuple[int, int]
 
-WIDTH, HEIGHT = 37, 24
+WIDTH, HEIGHT = 49, 33
 
-# Intérieurs des pièces (x0, y0, x1, y1) inclusifs ; tout le reste est mur
+# Intérieurs des pièces et des cours (x0, y0, x1, y1) inclusifs ; le reste est mur, clôture ou rue
 ROOMS: dict[str, tuple[int, int, int, int]] = {
     "Chambre parents": (1, 1, 11, 8),
     "Chambre ado": (13, 1, 21, 8),
@@ -18,10 +18,19 @@ ROOMS: dict[str, tuple[int, int, int, int]] = {
     "Couloir": (1, 10, 35, 11),
     "Cuisine": (1, 13, 13, 22),
     "Salon": (15, 13, 35, 22),
+    "Cour arrière": (37, 1, 47, 23),
+    "Cour avant": (0, 24, 47, 31),
 }
+OUTDOOR_ROOMS = {"Cour arrière", "Cour avant"}
 
-# Ouvertures entre les pièces (tuiles franchissables sans pièce associée)
-DOORS: list[Pos] = [(6, 9), (17, 9), (26, 9), (33, 9), (7, 12), (25, 12), (14, 17)]
+# Ouvertures (tuiles franchissables sans pièce associée) : portes intérieures, porte d'entrée, porte-patio
+DOORS: list[Pos] = [(6, 9), (17, 9), (26, 9), (33, 9), (7, 12), (25, 12), (14, 17), (30, 23), (36, 18)]
+
+STREET_Y = HEIGHT - 1
+# Revêtements particuliers dans la cour avant (le reste des cours est en gazon)
+DRIVEWAY = {(x, y) for x in range(40, 44) for y in range(24, 32)}
+WALKWAY = {(30, y) for y in range(24, 31)}
+SIDEWALK = {(x, 31) for x in range(WIDTH - 1)}
 
 
 @dataclass
@@ -63,15 +72,33 @@ OBJECTS: list[InteractiveObject] = [
     InteractiveObject("canape", "tele", "Canapé (télé)", "Salon", (27, 17, 6, 1),
                       [(28, 16), (30, 16), (32, 16)]),
     InteractiveObject("biblio", "livres", "Bibliothèque", "Salon", (35, 19, 1, 3), [(34, 20)]),
-    InteractiveObject("porte", "porte", "Porte d'entrée", "Salon", (30, 23, 1, 1), [(30, 22)]),
+    # Extérieur
+    InteractiveObject("porte", "porte", "Arrêt d'autobus", "Cour avant", (30, STREET_Y, 1, 1), [(30, 31)]),
+    InteractiveObject("cabanon", "deco", "Cabanon", "Cour arrière", (44, 2, 3, 3)),
+    InteractiveObject("patio", "patio", "Table de patio", "Cour arrière", (39, 6, 2, 2),
+                      [(38, 6), (41, 7), (39, 8)]),
+    InteractiveObject("balancoire", "balancoire", "Balançoire", "Cour arrière", (45, 18, 2, 1), [(45, 19)]),
+    InteractiveObject("arbre_1", "arbre", "Érable", "Cour arrière", (45, 9, 2, 2)),
+    InteractiveObject("arbre_2", "arbre", "Érable", "Cour avant", (3, 26, 2, 2)),
+    InteractiveObject("arbre_3", "arbre", "Érable", "Cour avant", (15, 27, 2, 2)),
+    InteractiveObject("arbre_4", "arbre", "Érable", "Cour avant", (24, 26, 2, 2)),
+    InteractiveObject("boite_lettres", "deco", "Boîte aux lettres", "Cour avant", (32, 30, 1, 1)),
 ]
+
+# Objets qui n'apparaissent qu'une fois achetés (voir sim/economy.py, CATALOG)
+PURCHASE_OBJECTS: dict[str, InteractiveObject] = {
+    "auto": InteractiveObject("auto", "auto", "Auto", "Cour avant", (41, 25, 2, 3), [(40, 26)]),
+    "piscine": InteractiveObject("piscine", "piscine", "Piscine", "Cour arrière", (40, 12, 5, 4),
+                                 [(39, 13), (39, 14), (45, 13), (45, 14)]),
+    "bbq": InteractiveObject("bbq", "bbq", "BBQ", "Cour arrière", (39, 20, 1, 1), [(39, 19)]),
+}
 
 
 class House:
     def __init__(self) -> None:
         self.width = WIDTH
         self.height = HEIGHT
-        # Nom de pièce par tuile ; None = mur (ou porte, voir self.doors)
+        # Nom de pièce par tuile ; None = mur, clôture, rue (ou porte, voir self.doors)
         self.room_grid: list[list[str | None]] = [[None] * WIDTH for _ in range(HEIGHT)]
         self.floor: set[Pos] = set()
         for name, (x0, y0, x1, y1) in ROOMS.items():
@@ -81,8 +108,21 @@ class House:
                     self.floor.add((x, y))
         self.doors: set[Pos] = set(DOORS)
         self.floor |= self.doors
+        self.street: set[Pos] = {(x, STREET_Y) for x in range(WIDTH)}
+        # Clôture : tout ce qui n'est ni sol, ni rue, ni la maison elle-même
+        self.fences: set[Pos] = {(x, y) for x in range(WIDTH) for y in range(HEIGHT)
+                                 if (x, y) not in self.floor and (x, y) not in self.street
+                                 and not (x <= 36 and y <= 23)}
         self.objects: dict[str, InteractiveObject] = {o.id: o for o in OBJECTS}
         self.blocked: set[Pos] = {t for o in OBJECTS for t in o.tiles}
+        self.revision = 0  # incrémenté à chaque ajout d'objet (le rendu reconstruit le décor)
+
+    def add_object(self, obj: InteractiveObject) -> None:
+        if obj.id in self.objects:
+            return
+        self.objects[obj.id] = obj
+        self.blocked |= set(obj.tiles)
+        self.revision += 1
 
     def in_bounds(self, pos: Pos) -> bool:
         x, y = pos
@@ -93,6 +133,19 @@ class House:
 
     def is_wall(self, pos: Pos) -> bool:
         return pos not in self.floor
+
+    def is_outdoor(self, pos: Pos) -> bool:
+        return self.room_at(pos) in OUTDOOR_ROOMS
+
+    def surface_at(self, pos: Pos) -> str | None:
+        """Revêtement extérieur particulier (entrée, allée, trottoir), sinon None."""
+        if pos in DRIVEWAY:
+            return "asphalt"
+        if pos in WALKWAY:
+            return "pavers"
+        if pos in SIDEWALK:
+            return "concrete"
+        return None
 
     def room_at(self, pos: Pos) -> str | None:
         if not self.in_bounds(pos):
@@ -108,6 +161,10 @@ class House:
         if room is not None:
             tiles = [p for p in tiles if self.room_at(p) == room]
         return sorted(tiles)
+
+    def lawn_tiles(self) -> list[Pos]:
+        """Cases de gazon franchissables (pour tondre)."""
+        return [p for p in self.walkable_tiles() if self.is_outdoor(p) and self.surface_at(p) is None]
 
     def random_tile(self, rng: random.Random, room: str | None = None) -> Pos:
         return rng.choice(self.walkable_tiles(room))

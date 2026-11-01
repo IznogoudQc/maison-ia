@@ -9,7 +9,7 @@ import pygame
 from agents.agent import Agent
 from ui import sprites, theme
 from ui.sprites import SIT_FRAME, TILE
-from world.house import ROOMS, House
+from world.house import OUTDOOR_ROOMS, ROOMS, House
 
 # Fenêtres sur les murs extérieurs : (x, y, verticale)
 WINDOWS: list[tuple[int, int, bool]] = [
@@ -37,6 +37,10 @@ class Renderer:
         self.low_size = (house.width * TILE, house.height * TILE)
         self.ts = round(TILE * scale)  # taille d'une tuile à l'écran
         self.size = (house.width * self.ts, house.height * self.ts)
+        # État de la cour fourni par set_yard ; le décor est reconstruit quand il change
+        self.lawn = 20.0
+        self.car_home = False
+        self._built_key: tuple[int, int] | None = None
         self.background = self._build_background()
         self.low = pygame.Surface(self.low_size)
         self.night = pygame.Surface(self.low_size, pygame.SRCALPHA)
@@ -55,7 +59,16 @@ class Renderer:
 
     # ------------------------------------------------------------------ décor statique
 
+    def set_yard(self, lawn: float, car_home: bool) -> None:
+        self.lawn = lawn
+        self.car_home = car_home
+
+    def _lawn_bucket(self) -> int:
+        return min(3, int(self.lawn // 25))  # 4 états visuels du gazon
+
     def _build_background(self) -> pygame.Surface:
+        self._built_key = (self.house.revision, self._lawn_bucket())
+        lawn = self._lawn_bucket() * 25 + 12
         surf = pygame.Surface(self.low_size)
         house = self.house
         for y in range(house.height):
@@ -63,10 +76,20 @@ class Renderer:
                 pos = (x, y)
                 if pos in house.doors:
                     sprites.draw_door_floor(surf, x, y)
+                elif house.is_outdoor(pos):
+                    surface = house.surface_at(pos)
+                    if surface:
+                        sprites.draw_surface(surf, x, y, surface)
+                    else:
+                        sprites.draw_grass(surf, x, y, lawn)
                 elif not house.is_wall(pos):
                     room = house.room_at(pos) or ""
                     sprites.draw_floor(surf, x, y, sprites.FLOOR_STYLES.get(room, "wood"),
                                        theme.ROOM_COLORS.get(room, (200, 200, 200)))
+                elif pos in house.street:
+                    sprites.draw_surface(surf, x, y, "street")
+                elif pos in house.fences:
+                    sprites.draw_fence(surf, x, y, lawn, vertical=x == house.width - 1)
                 else:
                     sprites.draw_wall(surf, x, y, floor_below=(x, y + 1) in house.floor)
         for obj in house.objects.values():
@@ -140,6 +163,8 @@ class Renderer:
             return "lying"
         if self._active(agent, "douche"):
             return "shower"
+        if self._active(agent, "baignade") and "piscine" in self.house.objects:
+            return "swimming"
         if self._active(agent, *SITTING_ACTIONS) and agent.pos == agent.action.use_pos and not self.moving.get(agent.id):
             return "sitting"
         return "standing"
@@ -181,7 +206,14 @@ class Renderer:
         low = self.low
         t = self.time
         hour = minute_of_day / 60.0
+        if self._built_key != (self.house.revision, self._lawn_bucket()):
+            self.background = self._build_background()  # achat ou gazon qui a poussé
         low.blit(self.background, (0, 0))
+        car = self.house.objects.get("auto")
+        if car is not None and self.car_home:
+            sprites.draw_car(low, car)
+        if "piscine" in self.house.objects:
+            sprites.draw_pool_shimmer(low, self.house.objects["piscine"], t)
         self._draw_windows(low, hour)
         self._draw_memorials(low, agents)
         visible = [a for a in agents if not a.is_away and not a.dead]
@@ -244,6 +276,9 @@ class Renderer:
         if any(self._active(a, "douche") for a in agents) and "douche" in objects:
             x, y, w, h = objects["douche"].rect
             steam.append((x * TILE + w * TILE // 2, y * TILE + 6))
+        if any(self._active(a, "bbq") for a in agents) and "bbq" in objects:
+            x, y, _w, _h = objects["bbq"].rect
+            steam.append((x * TILE + TILE // 2, y * TILE + 4))
         return steam
 
     def _draw_agent(self, low: pygame.Surface, agent: Agent) -> tuple[Agent, int, int]:
@@ -255,6 +290,10 @@ class Renderer:
             rect = head.get_rect(center=(round(hx), round(hy)))
             low.blit(head, rect)
             return agent, rect.centerx, rect.top
+        if pose == "swimming":
+            center = self._swim_spot(agent)
+            sprites.draw_swimmer(low, agent.persona, center, self.time)
+            return agent, center[0], center[1] - 6
 
         fx, fy = self.display_pos.get(agent.id, agent.pos)
         cx = round(fx * TILE + TILE / 2)
@@ -288,6 +327,14 @@ class Renderer:
             self._draw_accessory(low, agent, direction, left, top)
         return agent, cx, head_top
 
+    def _swim_spot(self, agent: Agent) -> tuple[int, int]:
+        """Point dans l'eau, un peu à l'intérieur de la piscine depuis la case d'usage."""
+        x, y, w, h = self.house.objects["piscine"].rect
+        ax, ay = agent.pos
+        px = x * TILE + 8 if ax < x else (x + w) * TILE - 8
+        py = min(max(ay * TILE + TILE // 2, y * TILE + 8), (y + h) * TILE - 8)
+        return px, py
+
     def _draw_shower_glass(self, low: pygame.Surface) -> None:
         x, y, w, h = self.house.objects["douche"].rect
         glass = pygame.Surface((w * TILE, h * TILE // 2 + 2), pygame.SRCALPHA)
@@ -305,6 +352,8 @@ class Renderer:
             sprites.draw_book(low, left + 5 if direction == "down" else hand_x - 2, hand_y + 1)
         elif self._active(agent, "jouer"):
             sprites.draw_lego(low, left + 8, top + 14)
+        elif self._active(agent, "tondre"):
+            sprites.draw_mower(low, left + (12 if direction != "left" else -2), top + 12)
         elif self._active(agent, "dejeuner") and agent.persona.age >= 18 and "table" in self.house.objects:
             # Café du matin posé sur la table, entre l'adulte et le centre de la table
             x, y, w, h = self.house.objects["table"].rect
@@ -336,7 +385,7 @@ class Renderer:
         if not alpha:
             return
         # Lampes allumées là où quelqu'un est éveillé ; les pièces vides restent dans le noir
-        lit = {self.house.room_at(a.pos) for a in agents if a.is_available} - {None}
+        lit = {self.house.room_at(a.pos) for a in agents if a.is_available} - {None} - OUTDOOR_ROOMS
         self.night.fill((10, 15, 50, alpha))
         for room in lit:
             self.night.fill((10, 15, 50, round(alpha * LIT_ROOM_FACTOR)), self.room_rects[room])

@@ -20,7 +20,7 @@ class SimConfig(BaseModel):
 
 
 class DisplayConfig(BaseModel):
-    pixel_scale: float = 2.0   # tuiles de 16 px agrandies de ce facteur
+    pixel_scale: float | Literal["auto"] = "auto"   # tuiles de 16 px agrandies de ce facteur
     fps: int = 60
     hud_width: int = 360
 

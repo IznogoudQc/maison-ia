@@ -74,6 +74,66 @@ def draw_floor(surf: pygame.Surface, x: int, y: int, style: str, base: Color) ->
             surf.set_at((ox + rng.randrange(t), oy + rng.randrange(t)), shade(base, delta))
 
 
+GRASS: Color = (96, 158, 72)
+
+
+def draw_grass(surf: pygame.Surface, x: int, y: int, lawn: float) -> None:
+    """Gazon : plus il est long, plus il est foncé et plein de touffes (et de pissenlits)."""
+    t = TILE
+    base = shade(GRASS, -int(lawn * 0.25))
+    pygame.draw.rect(surf, base, (x * t, y * t, t, t))
+    rng = random.Random(x * 92821 + y * 68917)
+    tufts = 4 + int(lawn / 8)
+    for _ in range(tufts):
+        px, py = x * t + rng.randrange(t), y * t + rng.randrange(1, t)
+        height = 1 + int(lawn / 35)
+        pygame.draw.line(surf, shade(base, 28), (px, py), (px, py - height))
+    if lawn >= 60 and rng.random() < (lawn - 50) / 100:
+        surf.set_at((x * t + rng.randrange(2, t - 2), y * t + rng.randrange(2, t - 2)), (250, 220, 60))
+
+
+def draw_surface(surf: pygame.Surface, x: int, y: int, kind: str) -> None:
+    """Revêtements extérieurs : asphalte (entrée, rue), béton (trottoir), pavés (allée)."""
+    t = TILE
+    rect = pygame.Rect(x * t, y * t, t, t)
+    rng = random.Random(x * 31 + y * 17)
+    if kind == "asphalt" or kind == "street":
+        pygame.draw.rect(surf, (78, 78, 84), rect)
+        for _ in range(6):
+            surf.set_at((rect.x + rng.randrange(t), rect.y + rng.randrange(t)), (96, 96, 102))
+        if kind == "street" and x % 3 == 0:
+            pygame.draw.rect(surf, (236, 200, 70), (rect.x + 2, rect.centery - 1, t - 4, 2))
+    elif kind == "concrete":
+        pygame.draw.rect(surf, (196, 194, 188), rect)
+        pygame.draw.line(surf, (160, 158, 152), rect.topleft, (rect.left, rect.bottom - 1))
+        pygame.draw.line(surf, (170, 168, 162), rect.topleft, (rect.right - 1, rect.top))
+    else:  # pavés de l'allée
+        pygame.draw.rect(surf, (176, 150, 126), rect)
+        for j in range(0, t, 4):
+            offset = 0 if (j // 4) % 2 == 0 else 4
+            pygame.draw.line(surf, (140, 116, 96), (rect.x, rect.y + j), (rect.right - 1, rect.y + j))
+            for i in range(offset, t, 8):
+                pygame.draw.line(surf, (140, 116, 96), (rect.x + i, rect.y + j), (rect.x + i, rect.y + j + 3))
+
+
+def draw_fence(surf: pygame.Surface, x: int, y: int, lawn: float, vertical: bool = False) -> None:
+    """Clôture de bois blanchie sur fond de gazon."""
+    draw_grass(surf, x, y, lawn)
+    t = TILE
+    ox, oy = x * t, y * t
+    if vertical:
+        pygame.draw.line(surf, (226, 220, 206), (ox + 5, oy), (ox + 5, oy + t - 1))
+        pygame.draw.line(surf, (226, 220, 206), (ox + 11, oy), (ox + 11, oy + t - 1))
+        for j in range(1, t, 4):
+            pygame.draw.rect(surf, (240, 236, 224), (ox + 2, oy + j, 12, 2))
+        return
+    pygame.draw.line(surf, (226, 220, 206), (ox, oy + 5), (ox + t - 1, oy + 5))
+    pygame.draw.line(surf, (226, 220, 206), (ox, oy + 11), (ox + t - 1, oy + 11))
+    for i in range(1, t, 4):
+        pygame.draw.rect(surf, (240, 236, 224), (ox + i, oy + 2, 2, 12))
+        surf.set_at((ox + i, oy + 2), (200, 194, 180))
+
+
 def draw_door_floor(surf: pygame.Surface, x: int, y: int) -> None:
     t = TILE
     pygame.draw.rect(surf, shade(WOOD, 10), (x * t, y * t, t, t))
@@ -280,24 +340,133 @@ def _bookshelf(surf: pygame.Surface, r: pygame.Rect) -> None:
             pygame.draw.line(surf, color, (bx, shelf_y + 1 + rng.randrange(2)), (bx, shelf_y + 5))
 
 
-def _door(surf: pygame.Surface, r: pygame.Rect) -> None:
-    door = pygame.Rect(r.x + 2, r.y, r.width - 4, r.height - 2)
-    box(surf, door, (128, 84, 44))
-    pygame.draw.rect(surf, shade((128, 84, 44), 20), door.inflate(-4, -6), 1)
-    surf.set_at((door.right - 3, door.centery), (240, 210, 90))
+def _bus_stop(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.line(surf, (120, 120, 128), (r.centerx, r.y + 2), (r.centerx, r.bottom - 1))
+    sign = pygame.Rect(r.centerx - 5, r.y - 6, 10, 8)
+    box(surf, sign, (40, 110, 200))
+    pygame.draw.rect(surf, (250, 250, 250), sign.inflate(-4, -4))
+
+
+def _shed(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r, (150, 70, 56))
+    for yy in range(r.y + 3, r.bottom - 1, 4):
+        pygame.draw.line(surf, (120, 52, 42), (r.x + 1, yy), (r.right - 2, yy))
+    pygame.draw.line(surf, (90, 40, 32), (r.centerx, r.y), (r.centerx, r.bottom - 1))  # faîte du toit
+    door = pygame.Rect(r.centerx - 4, r.bottom - 8, 8, 8)
+    box(surf, door, (196, 180, 150))
+
+
+def _patio(surf: pygame.Surface, r: pygame.Rect) -> None:
+    table = r.inflate(-6, -6)
+    pygame.draw.ellipse(surf, (236, 236, 230), table)
+    pygame.draw.ellipse(surf, (150, 150, 150), table, 1)
+    pygame.draw.circle(surf, (230, 90, 70), table.center, 4)  # parasol vu de haut
+    pygame.draw.circle(surf, (250, 240, 230), table.center, 4, 1)
+
+
+def _swing(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.line(surf, (110, 80, 50), (r.x + 1, r.y + 3), (r.right - 2, r.y + 3), 2)
+    for px in (r.x + 1, r.right - 3):
+        pygame.draw.rect(surf, (110, 80, 50), (px, r.y, 2, r.height))
+    seat = pygame.Rect(r.centerx - 4, r.y + 9, 8, 3)
+    pygame.draw.line(surf, (90, 90, 90), (seat.x + 1, r.y + 4), (seat.x + 1, seat.y))
+    pygame.draw.line(surf, (90, 90, 90), (seat.right - 2, r.y + 4), (seat.right - 2, seat.y))
+    box(surf, seat, (200, 60, 60))
+
+
+def _tree(surf: pygame.Surface, r: pygame.Rect) -> None:
+    trunk = pygame.Rect(r.centerx - 2, r.bottom - 8, 4, 7)
+    pygame.draw.rect(surf, (100, 70, 44), trunk)
+    for dx, dy, radius, color in ((-5, -2, 9, (54, 112, 52)), (6, -1, 8, (60, 124, 56)),
+                                  (0, -7, 10, (68, 136, 60)), (0, -3, 7, (84, 156, 70))):
+        pygame.draw.circle(surf, color, (r.centerx + dx, r.centery + dy), radius)
+    pygame.draw.circle(surf, (110, 176, 86), (r.centerx - 3, r.centery - 9), 3)
+
+
+def _mailbox(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.line(surf, (110, 80, 50), (r.centerx, r.y + 6), (r.centerx, r.bottom - 1), 2)
+    body = pygame.Rect(r.centerx - 4, r.y + 2, 9, 5)
+    box(surf, body, (50, 50, 60))
+    surf.set_at((body.right - 2, body.y + 1), (220, 50, 50))  # drapeau
+
+
+def _pool(surf: pygame.Surface, r: pygame.Rect) -> None:
+    box(surf, r, (210, 214, 220), -60)
+    water = r.inflate(-4, -4)
+    pygame.draw.rect(surf, (70, 160, 220), water)
+    pygame.draw.rect(surf, (110, 190, 236), water, 1)
+    ladder = pygame.Rect(r.right - 3, r.centery - 3, 2, 6)
+    pygame.draw.rect(surf, (230, 230, 236), ladder)
+
+
+def draw_pool_shimmer(surf: pygame.Surface, pool: InteractiveObject, t: float) -> None:
+    """Reflets qui bougent sur l'eau."""
+    x, y, w, h = pool.rect
+    water = pygame.Rect(x * TILE + 3, y * TILE + 3, w * TILE - 6, h * TILE - 6)
+    rng = random.Random(int(t * 2))
+    for _ in range(14):
+        px, py = water.x + rng.randrange(water.width - 3), water.y + rng.randrange(water.height)
+        pygame.draw.line(surf, (170, 220, 250), (px, py), (px + 2, py))
+
+
+def _bbq(surf: pygame.Surface, r: pygame.Rect) -> None:
+    pygame.draw.circle(surf, (30, 30, 34), r.center, 6)
+    pygame.draw.circle(surf, (70, 70, 76), r.center, 6, 1)
+    pygame.draw.line(surf, (90, 90, 96), (r.centerx - 4, r.centery), (r.centerx + 4, r.centery))
+    pygame.draw.line(surf, (90, 90, 96), (r.centerx, r.centery - 4), (r.centerx, r.centery + 4))
+
+
+def draw_car(surf: pygame.Surface, car: InteractiveObject) -> None:
+    """Auto vue de dessus, garée dans l'entrée."""
+    x, y, w, h = car.rect
+    body = pygame.Rect(x * TILE + 3, y * TILE + 2, w * TILE - 6, h * TILE - 4)
+    for wx in (body.x - 1, body.right - 2):
+        for wy in (body.y + 6, body.bottom - 10):
+            pygame.draw.rect(surf, (24, 24, 28), (wx, wy, 3, 6))
+    pygame.draw.rect(surf, (178, 40, 44), body, border_radius=5)
+    pygame.draw.rect(surf, (110, 20, 24), body, 1, border_radius=5)
+    windshield = pygame.Rect(body.x + 3, body.y + 8, body.width - 6, 6)
+    pygame.draw.rect(surf, (150, 196, 226), windshield, border_radius=2)
+    rear = pygame.Rect(body.x + 3, body.bottom - 12, body.width - 6, 5)
+    pygame.draw.rect(surf, (130, 176, 206), rear, border_radius=2)
+    for lx in (body.x + 2, body.right - 4):
+        pygame.draw.rect(surf, (252, 240, 180), (lx, body.y + 1, 2, 2))
+
+
+def draw_mower(surf: pygame.Surface, x: int, y: int) -> None:
+    pygame.draw.rect(surf, (200, 40, 40), (x, y, 6, 5))
+    pygame.draw.rect(surf, (30, 30, 30), (x, y, 6, 5), 1)
+    pygame.draw.line(surf, (60, 60, 60), (x + 1, y), (x - 2, y - 5))
+
+
+def draw_swimmer(surf: pygame.Surface, persona: Persona, center: tuple[int, int], t: float) -> None:
+    """Tête qui dépasse de l'eau, avec des ronds dans l'eau."""
+    head = character_frames(persona)[("down", 0)].subsurface((0, 0, 16, 9))
+    cx, cy = center
+    bob = round(math.sin(t * 3) * 1)
+    ripple = pygame.Rect(0, 0, 14, 6)
+    ripple.center = (cx, cy + 4)
+    pygame.draw.ellipse(surf, (150, 206, 240), ripple, 1)
+    surf.blit(head, (cx - 8, cy - 6 + bob))
 
 
 OBJECT_DRAWERS = {
     "frigo": _fridge, "cuisiniere": _stove, "comptoir": _counter, "table": _table,
     "commode": _dresser, "ordi": _computer, "jouets": _toys, "douche": _shower,
-    "toilette": _toilet, "tele": _tv, "canape": _sofa, "biblio": _bookshelf, "porte": _door,
+    "toilette": _toilet, "tele": _tv, "canape": _sofa, "biblio": _bookshelf, "porte": _bus_stop,
+    "cabanon": _shed, "patio": _patio, "balancoire": _swing, "boite_lettres": _mailbox,
+    "piscine": _pool, "bbq": _bbq,
 }
 
 
 def draw_object(surf: pygame.Surface, obj: InteractiveObject) -> None:
     x, y, w, h = obj.rect
     rect = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
-    if obj.kind == "lit":
+    if obj.kind == "auto":
+        return  # dessinée à chaque image : elle part et revient
+    if obj.kind == "arbre":
+        _tree(surf, rect)
+    elif obj.kind == "lit":
         _bed(surf, rect, obj)
     elif obj.id in OBJECT_DRAWERS:
         OBJECT_DRAWERS[obj.id](surf, rect)

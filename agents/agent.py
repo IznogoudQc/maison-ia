@@ -44,6 +44,7 @@ class Agent(BaseModel):
     away_label: str | None = None
     away_kind: str | None = None     # travail, ecole, epicerie, heures_sup, hopital
     away_pay: float = 0.0            # paie versée au retour
+    drove: bool = False              # parti avec l'auto familiale
     health: float = 100.0
     dead: bool = False
     died_minute: int | None = None
