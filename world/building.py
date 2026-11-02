@@ -29,6 +29,7 @@ class Furniture:
     size: tuple[int, int]
     capacity: int = 1             # places d'usage voulues (lit double : 2)
     slot: str = "wall"            # wall : contre le mur nord ou un côté ; center : milieu ; facing : face au mur nord
+    fallback: tuple["Furniture", ...] = ()  # s'il ne rentre pas : ces meubles plus petits, chacun si la place le permet
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,9 @@ ROOM_TYPES: dict[str, RoomType] = {
         Furniture("toilette", "deco", "Toilette", (1, 1)),
     ), "ceramic", "une vraie douche chaude"),
     "chambre": RoomType("Chambre", (3, 6), (3, 6), (
-        Furniture("lit", "lit", "Lit double", (2, 2), capacity=2),
+        Furniture("lit", "lit", "Lit double", (2, 2), capacity=2,
+                  fallback=(Furniture("lit", "lit", "Lit simple", (1, 2)),
+                            Furniture("lit_2", "lit", "Lit simple", (1, 2)))),
         Furniture("commode", "deco", "Commode", (1, 1)),
     ), "carpet", "dormir dans un vrai lit"),
     "salon": RoomType("Salon", (4, 9), (4, 8), (
@@ -362,7 +365,9 @@ def furnish(house: House, room: PlannedRoom, doors: set[Pos]) -> list[Interactiv
     blocked: set[Pos] = set()
     placed: list[InteractiveObject] = []
     rtype = ROOM_TYPES[room.type]
-    for item in rtype.furniture:
+
+    def place(item: Furniture) -> bool:
+        nonlocal blocked
         w, h = item.size
         for x, y in _slots(room, item):
             tiles = {(x + dx, y + dy) for dx in range(w) for dy in range(h)}
@@ -389,7 +394,13 @@ def furnish(house: House, room: PlannedRoom, doors: set[Pos]) -> list[Interactiv
             placed.append(InteractiveObject(f"maison_{room.id}_{item.key}", item.kind,
                                             f"{item.label} ({room.name.lower()})", room.name,
                                             (x, y, w, h), spots))
-            break
+            return True
+        return False
+
+    for item in rtype.furniture:
+        if not place(item):
+            for smaller in item.fallback:  # trop petit pour un lit double : un ou deux lits simples
+                place(smaller)
     return placed
 
 

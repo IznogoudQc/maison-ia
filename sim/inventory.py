@@ -172,6 +172,35 @@ class Inventory:
             suggestions.append(Option(action="acheter_objet", target=f"{item.id}|{room}|", label=label, score=score))
         return options + suggestions
 
+    def rehouse(self) -> None:
+        """Une place libre dans un vrai lit : qui dort sous la tente ou sur un matelas s'y installe.
+
+        Les lits ne sont donnés qu'au moment de bâtir ou d'acheter ; ce tour du soir rattrape une place restée
+        libre (lit acheté pour une autre personne, chambre bâtie quand le lit ne rentrait pas, vieille partie).
+        """
+        engine = self.engine
+        objects = engine.house.objects
+        beds = [o for o in objects.values() if o.kind == "lit" and o.id != "tente" and o.capacity > 0]
+        if not beds:
+            return
+        living = [a for a in engine.agents if not a.dead]
+
+        def comfort(agent: Agent) -> float:
+            bed = objects.get(agent.bed_id)
+            return -1.0 if agent.bed_id == "tente" or bed is None else bed.quality
+
+        sleepers = sorted((a for a in living if a.persona.stage != "bebe" and comfort(a) < 0.85), key=comfort)
+        for agent in sleepers:
+            free = [b for b in beds if b.quality > comfort(agent)
+                    and sum(1 for a in living if a.bed_id == b.id) < b.capacity]
+            if not free:
+                continue
+            bed = max(free, key=lambda b: b.quality)
+            was_tent = agent.bed_id == "tente"
+            agent.bed = bed.id
+            engine.remember(agent, "Fini la tente : ce soir, je dors dans un vrai lit !" if was_tent
+                            else f"Je laisse le matelas pour un vrai lit : {bed.label.lower()}.", 6)
+
     def _bed_room(self, sleeper: Agent) -> str | None:
         """Chambre où mettre le lit : celle qui a le moins de lits."""
         house = self.engine.house

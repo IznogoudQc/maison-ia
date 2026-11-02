@@ -131,6 +131,7 @@ class Engine:
         self.scheduler = Scheduler(self.calendar)
         self.careers = Careers(self)  # emploi, promotions, études, école (sim/career.py)
         self._calendar_day = -1   # dernier jour où le calendrier a été appliqué (maladie, paie des congés)
+        self._rehouse_day = -1    # dernier soir où l'on a vérifié les places libres dans les lits
         self.pending_decisions: dict[str, PendingDecision] = {}
         self.pending_dialogues: list[PendingDialogue] = []
         self.pair_last_talk: dict[str, int] = {}  # paire -> minute absolue de la dernière conversation
@@ -712,6 +713,9 @@ class Engine:
         if self.clock.minute_of_day >= 5 * 60 and self._calendar_day != self.clock.day:
             self._calendar_day = self.clock.day
             self._daily_calendar()
+        if self.clock.minute_of_day >= 19 * 60 and self._rehouse_day != self.clock.day:
+            self._rehouse_day = self.clock.day
+            self.inventory.rehouse()   # avant le coucher : une place libre dans un vrai lit ne reste pas vide
         for agent in self.agents:
             self._update_agent(agent)
         self.social.update()
@@ -1407,6 +1411,7 @@ class Engine:
         self.family.after_load()
         self.careers.setup()   # carrières sauvegardées : salaire et horaire de la fiche ; sinon, celles de départ
         self.inventory.restore()
+        self.inventory.rehouse()
         self.garage.restore()
         self.pending_decisions.clear()
         self.pending_dialogues.clear()
