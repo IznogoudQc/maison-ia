@@ -8,7 +8,7 @@ alourdit le score de l'option visée le lendemain.
 from __future__ import annotations
 
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from agents.actions import ACTIONS, DAYTIME_HOURS, URGENT_THRESHOLD, Option, action_label, allowed_for
@@ -34,7 +34,10 @@ if TYPE_CHECKING:
 MIN_SLOT = 20            # plage libre minimale (minutes)
 TASK_MINUTES = 45        # durée bloquée par une tâche d'horaire (souper, cuisine)
 MIN_REFLECTION_EVENTS = 3
-MAX_REFLECTION_EVENTS = 15
+MAX_REFLECTION_EVENTS = 40      # souvenirs relus (la mémoire courte et la longue en gardent ~70)
+MAX_PREVIOUS_REFLECTIONS = 8    # constats des derniers jours relus pour une conclusion de fond
+REFLECT_THRESHOLD = 70          # importance accumulée qui fait réfléchir sans attendre le soir
+REFLECT_MIN_GAP = 4 * 60        # minutes de jeu entre deux réflexions
 
 
 @dataclass
@@ -48,6 +51,7 @@ class PendingPlan:
 class PendingReflection:
     future: Future[StructuredResult[Reflection]]
     events: list[MemoryEvent]
+    previous: list[str] = field(default_factory=list)   # constats précédents (sources d'une conclusion de fond)
 
 
 class Mind:
@@ -153,6 +157,9 @@ class Mind:
         if plan is not None and plan.day == clock.day:
             for item in plan.expire(clock.minute_of_day, self.config.plan_item_window_minutes):
                 engine.remember(agent, f"Pas eu le temps : {self._label(item)} ({item.hhmm}), comme prévu.", 2)
+        if (engine.llm is not None and agent.memory.importance_since_reflection >= REFLECT_THRESHOLD
+                and clock.total_minutes - agent.memory.last_reflection_minute >= REFLECT_MIN_GAP):
+            self._request_reflection(agent, "journee_chargee")  # une journée chargée : on y repense tout de suite
         if engine.llm is None or not self.config.plans_enabled or agent.id in self.pending_plans:
             return
         if agent.plan_requested_day != clock.day:
@@ -280,28 +287,40 @@ class Mind:
         day = clock.day if clock.minute_of_day >= wake else clock.day - 1
         return day, day * MINUTES_PER_DAY + wake
 
-    def _request_reflection(self, agent: Agent) -> None:
+    def _request_reflection(self, agent: Agent, reason: str = "soir") -> None:
+        """Le soir, ou après une journée chargée : relire les souvenirs depuis la dernière réflexion."""
         engine = self.engine
         if engine.llm is None or not self.config.reflections_enabled or agent.id in self.pending_reflections:
             return
         day, since = self._agent_day(agent)
-        if agent.reflected_day == day:
+        if reason == "soir" and agent.reflected_day == day:
             return
-        events = [e for e in agent.memory.since(since) if e.kind != "reflection"][-MAX_REFLECTION_EVENTS:]
+        memory = agent.memory
+        start = max(since if reason == "soir" else 0, memory.last_reflection_minute + 1)
+        history = memory.all_events()
+        events = [e for e in history if e.kind != "reflection" and e.minute >= start][-MAX_REFLECTION_EVENTS:]
         if len(events) < MIN_REFLECTION_EVENTS:
+            if reason == "soir" and memory.last_reflection_minute >= since:
+                agent.reflected_day = day  # déjà réfléchi plus tôt aujourd'hui, rien de neuf depuis
             return
+        previous = [e.text for e in history if e.kind == "reflection"][-MAX_PREVIOUS_REFLECTIONS:]
+        if len(previous) < 3:
+            previous = []  # trop tôt pour une conclusion de fond
         catalog = self.catalog(agent)
         texts = [e.formatted() for e in events]
         request = build_reflection_request(agent, engine.clock.total_minutes, texts, catalog,
-                                           engine.config.llm.max_tokens, engine.family_context([agent]),
-                                           engine.agents)
+                                           engine.config.llm.max_tokens, engine.dialogue_context([agent]),
+                                           engine.agents, previous, reason)
         names = {a.id: a.name for a in engine.agents}
         future = engine.llm.try_submit(request, Reflection, None,
-                                       lambda r: validate_reflection(r, len(events), catalog, names))
+                                       lambda r: validate_reflection(r, len(events), catalog, names, len(previous)))
         if future is None:
             return
-        agent.reflected_day = day
-        self.pending_reflections[agent.id] = PendingReflection(future, events)
+        if reason == "soir":
+            agent.reflected_day = day
+        memory.importance_since_reflection = 0
+        memory.last_reflection_minute = engine.clock.total_minutes
+        self.pending_reflections[agent.id] = PendingReflection(future, events, previous)
 
     def _apply_reflection(self, agent_id: str, pending: PendingReflection) -> None:
         engine = self.engine
@@ -318,6 +337,9 @@ class Mind:
         for insight in reflection.insights:
             agent.memory.add_belief(insight.text, insight.importance, now, mem_cfg.max_beliefs)
             engine.remember(agent, insight.text, insight.importance, kind="reflection")
+        if reflection.deep is not None:  # conclusion de fond : la plus durable des réflexions
+            agent.memory.add_belief(reflection.deep.text, reflection.deep.importance, now, mem_cfg.max_beliefs)
+            engine.remember(agent, f"Au fond : {reflection.deep.text}", reflection.deep.importance, kind="reflection")
         goal_text = None
         if reflection.goal is not None:
             spec = reflection.goal
@@ -326,9 +348,11 @@ class Mind:
             goal_text = f"{label} ({spec.why})" if spec.why else label
             agent.goal = Goal(text=goal_text, action=spec.action, target=spec.target,
                               until=now + MINUTES_PER_DAY)
+        evidence = [[pending.events[n - 1].text for n in i.sources] for i in reflection.insights]
         engine.publish("reflexion", agent=agent.id, name=agent.name,
                        insights=[i.model_dump() for i in reflection.insights], goal=goal_text,
-                       attempts=result.attempts)
+                       questions=reflection.questions, evidence=evidence,
+                       deep=reflection.deep.text if reflection.deep else None, attempts=result.attempts)
 
 
 def _result(future: Future) -> StructuredResult:

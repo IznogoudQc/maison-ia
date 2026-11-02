@@ -79,7 +79,14 @@ class History:
             return HistoryEntry(minute=minute, category="pensee", who=[d.get("name", "")],
                                 title=f"{d.get('name', '')}, {what} : {d.get('intention', '')}", lines=steps)
         if kind == "reflexion":
-            lines = [i["text"] for i in d.get("insights", [])]
+            lines = [f"Question : {q}" for q in d.get("questions", [])]
+            evidence = d.get("evidence") or []
+            for index, insight in enumerate(d.get("insights", [])):
+                lines.append(insight["text"])
+                proofs = evidence[index] if index < len(evidence) else []
+                lines += [f"   ← {proof}" for proof in proofs[:2]]   # les souvenirs qui le prouvent
+            if d.get("deep"):
+                lines.append(f"Au fond : {d['deep']}")
             if d.get("goal"):
                 lines.append(f"Objectif : {d['goal']}")
             return HistoryEntry(minute=minute, category="pensee", who=[d.get("name", "")],

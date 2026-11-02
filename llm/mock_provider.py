@@ -262,8 +262,15 @@ class MockProvider(LLMProvider):
             option = self.rng.choice(catalog)
             goal = {"action": option["action"], "target": option.get("target"),
                     "why": self.rng.choice(REASONS.get(option["action"], ["Ça va me faire du bien."]))}
-        return json.dumps({"insights": [{"text": insight, "importance": importance}],
-                           "important": important, "goal": goal}, ensure_ascii=False)
+        previous = request.meta.get("previous", [])
+        deep = None
+        if len(previous) >= 3:
+            deep = {"text": "Avec le temps, je vois que ce qui compte vraiment, c'est d'avancer ensemble.",
+                    "importance": 8, "sources": [1, len(previous)]}
+        sources = important or ([len(events)] if events else [])
+        return json.dumps({"questions": ["Qu'est-ce qui m'a marqué dernièrement ?"],
+                           "insights": [{"text": insight, "importance": importance, "sources": sources}],
+                           "deep": deep, "important": important, "goal": goal}, ensure_ascii=False)
 
     def _line(self, request: LLMRequest) -> str:
         """Une réplique : ouverture au premier tour, réponse ensuite, parfois une proposition."""

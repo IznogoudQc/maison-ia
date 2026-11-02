@@ -230,14 +230,19 @@ deuils, dernière nouvelle) : les dialogues en parlent naturellement.
   épicerie). Une activité impossible pendant 90 minutes est « manquée » et laisse un souvenir.
 - **Nouveau plan** : une nouvelle importante (mise à pied, prime, décès, hôpital) fait refaire le
   plan du reste de la journée, au plus deux fois par jour.
-- **Réflexion du soir** : au coucher, le LLM relit la journée, en tire 1 ou 2 constats (« l'argent
-  m'inquiète »), désigne les souvenirs marquants et peut fixer un objectif pour le lendemain. Les
-  constats sont envoyés dans tous les prompts suivants ; l'objectif rend l'activité visée plus
-  attirante (`mind.goal_boost`) jusqu'à ce qu'elle soit faite.
+- **Réflexion** (à la « Generative Agents ») : au coucher, ou plus tôt quand une journée chargée
+  accumule assez d'importance, le LLM relit jusqu'à 40 souvenirs depuis la dernière réflexion. Il pose
+  d'abord les grandes questions du moment, puis tire un constat par question en citant les souvenirs
+  qui le prouvent ; quand assez de constats se sont accumulés, il peut en tirer une conclusion de fond
+  (« Au fond : … »), plus importante et plus durable. Il désigne aussi les souvenirs marquants et peut
+  fixer un objectif pour le lendemain, qui rend l'activité visée plus attirante (`mind.goal_boost`).
+  Le journal (J) montre les questions, les constats et leurs preuves.
 - **Mémoire pondérée** : chaque souvenir a une importance (1 à 10 ; un décès vaut 10, une
   collation 1). Les souvenirs marquants passent en mémoire longue au lieu d'être oubliés, et les
   souvenirs envoyés au LLM sont choisis selon fraîcheur + importance + lien avec la situation
-  (personnes présentes, pièce, intention). Une mise à pied peut donc revenir dans une conversation
+  (personnes présentes, pièce, intention), par thèmes : « budget » et « paie » se reconnaissent comme
+  le même sujet. Dans la fiche (P), la touche M ouvre le flux de mémoire : chaque souvenir avec son
+  importance, les réflexions, et les souvenirs retenus pour la dernière demande à l'IA. Une mise à pied peut donc revenir dans une conversation
   des semaines plus tard.
 
 Le panneau d'un personnage affiche son intention, son plan (vert = fait, rouge = manqué), son

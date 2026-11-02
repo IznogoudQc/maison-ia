@@ -149,7 +149,8 @@ class Engine:
         self.garage = Garage(self)
         self.credit = Credit(self)
         self.history = History(self.bus)  # conversations, actions, pensées, événements
-        self.portraits = Portraits(self)  # fiche personnage : humeur et avis, avec la voix de l'IA
+        self.portraits = Portraits(self)
+        self.last_recall: dict[str, list] = {}   # agent -> souvenirs retenus pour sa dernière demande à l'IA  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
 
@@ -580,6 +581,7 @@ class Engine:
         now = self.clock.total_minutes
         query = keywords(" ".join(t for t in (about or []) if t))
         events = agent.memory.retrieve(now, query, cfg.recall_count, cfg.recency_half_life_hours)
+        self.last_recall[agent.id] = events   # pour l'écran « Flux de mémoire » (touche M de la fiche)
         return [e.formatted_at(now) for e in events], agent.memory.latest_summary
 
     # ------------------------------------------------------------------ mémoire

@@ -1,6 +1,6 @@
-"""Fiche personnage (touche P) : caractère, humeur et pourquoi, avis sur chacun.
+"""Fiche personnage (touche P) : caractère, humeur et pourquoi, avis sur chacun ; M : flux de mémoire.
 
-Tab ou flèches gauche/droite : personne suivante ; P ou Échap : fermer.
+Tab ou flèches gauche/droite : personne suivante ; M : souvenirs et réflexions ; P ou Échap : fermer.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import pygame
 
 from agents.actions import ACTIONS
 from sim.food import FOODS
+from sim.mind import REFLECT_THRESHOLD
 from ui import theme
 from ui.dialogue_box import wrap_text
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from sim.engine import Engine
 
 GOOD, BAD, NOTE = (140, 210, 120), (235, 120, 110), (200, 190, 150)
+THOUGHT = (190, 160, 240)   # réflexions dans le flux de mémoire
 HEADER = (235, 200, 120)
 Row = tuple[str, tuple[int, int, int]]
 
@@ -70,6 +72,7 @@ class PortraitScreen:
         self.engine = engine
         self.open = False
         self.agent_id: str | None = None
+        self.memory_view = False   # M : flux de mémoire au lieu de la fiche
 
     def people(self) -> list[Agent]:
         return [a for a in self.engine.agents if not a.dead]
@@ -101,6 +104,8 @@ class PortraitScreen:
         key = event.key
         if key in (pygame.K_ESCAPE, pygame.K_p):
             self.open = False
+        elif key == pygame.K_m:
+            self.memory_view = not self.memory_view
         elif key in (pygame.K_TAB, pygame.K_RIGHT, pygame.K_LEFT):
             people = self.people()
             if people:
@@ -126,6 +131,9 @@ class PortraitScreen:
         top = y + 52
         font = theme.font(13)
         column = (panel.width - 48) // 2
+        if self.memory_view:
+            self._draw_memory(surface, panel, agent, x, top, column)
+            return
         # Colonne de gauche : caractère puis humeur
         y = top
         rows = character_rows(agent) + career_rows(self.engine, agent) + [("", theme.TEXT)] + mood_rows(self.engine, agent)
@@ -159,7 +167,7 @@ class PortraitScreen:
                     surface.blit(small.render(line, True, NOTE), (rx + 14, y))
                     y += 15
             y += 8
-        help_text = "Tab : personne suivante   P : fermer"
+        help_text = "Tab : personne suivante   M : flux de mémoire   P : fermer"
         surface.blit(small.render(help_text, True, theme.TEXT_DIM), (x, panel.bottom - 26))
 
     @staticmethod
@@ -168,3 +176,50 @@ class PortraitScreen:
         bar = pygame.Rect(x + 58, y + 2, 90, 7)
         pygame.draw.rect(surface, (60, 60, 70), bar, border_radius=3)
         pygame.draw.rect(surface, color, (bar.x, bar.y, round(bar.width * value / 100), bar.height), border_radius=3)
+
+    def _draw_memory(self, surface: pygame.Surface, panel: pygame.Rect, agent: Agent, x: int, top: int,
+                     column: int) -> None:
+        """Flux de mémoire : chaque souvenir avec son importance, les réflexions, ce que l'IA a retenu."""
+        font, small = theme.font(13), theme.font(12)
+        memory = agent.memory
+        surface.blit(font.render("Flux de mémoire (du plus récent au plus ancien)", True, HEADER), (x, top))
+        y = top + 22
+        for event in reversed(memory.all_events()):
+            if y > panel.bottom - 46:
+                break
+            when = f"J{event.minute // (24 * 60) + 1} {event.time}"
+            surface.blit(small.render(when, True, theme.TEXT_DIM), (x, y + 1))
+            bar = pygame.Rect(x + 70, y + 5, 40, 6)
+            pygame.draw.rect(surface, (60, 60, 70), bar, border_radius=3)
+            color = BAD if event.importance >= 8 else HEADER if event.importance >= 5 else theme.TEXT_DIM
+            pygame.draw.rect(surface, color, (bar.x, bar.y, round(bar.width * event.importance / 10), bar.height),
+                             border_radius=3)
+            text_color = THOUGHT if event.kind == "reflection" else theme.TEXT
+            line = wrap_text(event.text, small, column - 120)[0]
+            surface.blit(small.render(line, True, text_color), (x + 118, y))
+            y += 17
+        rx, y = x + column + 16, top
+        surface.blit(font.render("Retenus pour sa dernière demande à l'IA", True, HEADER), (rx, y))
+        y += 22
+        recalled = self.engine.last_recall.get(agent.id, [])
+        for event in recalled or []:
+            for line in wrap_text(f"• {event.text}", small, column)[:2]:
+                surface.blit(small.render(line, True, THOUGHT if event.kind == "reflection" else theme.TEXT),
+                             (rx, y))
+                y += 15
+        if not recalled:
+            surface.blit(small.render("(pas encore de demande depuis le chargement)", True, theme.TEXT_DIM), (rx, y))
+            y += 15
+        y += 12
+        surface.blit(font.render("Constats en tête", True, HEADER), (rx, y))
+        y += 22
+        for belief in reversed(memory.beliefs):
+            for line in wrap_text(f"{belief.importance}/10  {belief.text}", small, column)[:2]:
+                surface.blit(small.render(line, True, THOUGHT), (rx, y))
+                y += 15
+        y += 12
+        charge = min(memory.importance_since_reflection, REFLECT_THRESHOLD)
+        surface.blit(small.render(f"Importance accumulée depuis la dernière réflexion : {charge}/{REFLECT_THRESHOLD}",
+                                  True, theme.TEXT_DIM), (rx, y))
+        help_text = "Tab : personne suivante   M : revenir à la fiche   P : fermer"
+        surface.blit(small.render(help_text, True, theme.TEXT_DIM), (x, panel.bottom - 26))

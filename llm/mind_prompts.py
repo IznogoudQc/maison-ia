@@ -17,7 +17,8 @@ if TYPE_CHECKING:
     from agents.agent import Agent
 
 MAX_PLAN_ITEMS = 6
-MAX_INSIGHTS = 2
+MAX_INSIGHTS = 3
+MAX_SOURCES = 4
 
 # ---------------------------------------------------------------- schémas de réponse
 
@@ -37,6 +38,7 @@ class PlanResponse(BaseModel):
 class Insight(BaseModel):
     text: str
     importance: int = 5
+    sources: list[int] = Field(default_factory=list)   # numéros des souvenirs (ou constats) qui le prouvent
 
 
 class GoalSpec(BaseModel):
@@ -46,7 +48,9 @@ class GoalSpec(BaseModel):
 
 
 class Reflection(BaseModel):
-    insights: list[Insight] = Field(min_length=1)
+    questions: list[str] = Field(default_factory=list)  # étape 1 : les grandes questions du moment
+    insights: list[Insight] = Field(min_length=1)        # étape 2 : un constat par question, avec ses sources
+    deep: Insight | None = None                          # constat de fond tiré des constats précédents
     important: list[int] = Field(default_factory=list)  # numéros des événements marquants
     goal: GoalSpec | None = None
 
@@ -100,21 +104,29 @@ def plan_items(response: PlanResponse) -> list[PlanItem]:
 
 
 def validate_reflection(reflection: Reflection, event_count: int, catalog: list[Option],
-                        names: dict[str, str]) -> Reflection:
-    insights = [Insight(text=i.text.strip()[:200], importance=max(1, min(10, i.importance)))
+                        names: dict[str, str], previous_count: int = 0) -> Reflection:
+    def sources(numbers: list[int], count: int) -> list[int]:
+        return sorted({n for n in numbers if 1 <= n <= count})[:MAX_SOURCES]
+
+    insights = [Insight(text=i.text.strip()[:200], importance=max(1, min(10, i.importance)),
+                        sources=sources(i.sources, event_count))
                 for i in reflection.insights if i.text.strip()][:MAX_INSIGHTS]
     if not insights:
         raise ValueError("réflexion vide")
+    deep = None
+    if reflection.deep is not None and reflection.deep.text.strip() and previous_count:
+        found = sources(reflection.deep.sources, previous_count)
+        if found:  # une conclusion de fond doit s'appuyer sur des constats précédents
+            deep = Insight(text=reflection.deep.text.strip()[:200], sources=found,
+                           importance=max(8, min(10, reflection.deep.importance)))
     important = sorted({n for n in reflection.important if 1 <= n <= event_count})[:3]
     goal = None
     if reflection.goal is not None:
         option = _match_option(reflection.goal.action, reflection.goal.target, catalog, names)
         if option is not None:
             goal = GoalSpec(action=option.action, target=option.target, why=reflection.goal.why.strip()[:100])
-    return Reflection(insights=insights, important=important, goal=goal)
-
-
-# ---------------------------------------------------------------- requêtes
+    questions = [q.strip()[:120] for q in reflection.questions if q.strip()][:3]
+    return Reflection(questions=questions, insights=insights, deep=deep, important=important, goal=goal)
 
 
 def _catalog_lines(catalog: list[Option]) -> str:
@@ -169,31 +181,45 @@ def build_plan_request(agent: Agent, now: int, day_label: str, fixed: list[str],
 
 
 def build_reflection_request(agent: Agent, now: int, events: list[str], catalog: list[Option],
-                             max_tokens: int, context: str = "", family: list[Agent] | None = None) -> LLMRequest:
+                             max_tokens: int, context: str = "", family: list[Agent] | None = None,
+                             previous: list[str] | None = None, reason: str = "soir") -> LLMRequest:
+    """Réflexion à la « Generative Agents » : les grandes questions, puis un constat sourcé par question."""
+    moment = ("C'est le soir : la personne repense à ce qu'elle a vécu" if reason == "soir"
+              else "Il vient de se passer beaucoup de choses : la personne prend un moment pour y repenser")
     system = (
-        "Tu incarnes un membre d'une famille québécoise dans une simulation. C'est le soir : "
-        "il repense à sa journée et en tire des constats personnels, honnêtes et concrets "
-        "(sur lui-même, les autres, l'argent, la maison). " + JSON_RULE
+        f"Tu incarnes un membre d'une famille québécoise dans une simulation. {moment} et en tire des "
+        "constats personnels, honnêtes et concrets sur elle-même, ses proches et ce qui compte pour elle. "
+        "Pas besoin de parler d'argent ou de bouffe si ce n'est pas ce qui a marqué. " + JSON_RULE
     )
     numbered = "\n".join(f"{n}. {e}" for n, e in enumerate(events, 1))
+    earlier = "\n".join(f"R{n}. {r}" for n, r in enumerate(previous or [], 1))
+    deep_rule = (
+        "ÉTAPE 3 (seulement si ça se dégage vraiment) : à partir de MES CONSTATS DES DERNIERS JOURS, une "
+        "conclusion de fond sur ma vie, plus large qu'un seul jour, avec les numéros R qui la fondent.\n"
+        if previous else "")
     prompt = (
         f"PERSONNAGE\n{persona_block(agent)}\n\n"
         + (f"FAMILLE\n{context}\n\n" if context else "")
         + f"DANS MA TÊTE\n{mind_block(agent, now, with_plan=True)}\n\n"
         + (f"MES RELATIONS\n{relations_block(agent, family)}\n\n" if family else "")
-        + f"MA JOURNÉE\n{numbered}\n\n"
-        f"OBJECTIFS POSSIBLES POUR DEMAIN\n{_catalog_lines(catalog)}\n\n"
-        f"Tire 1 ou {MAX_INSIGHTS} constats à la première personne, en français québécois "
-        "(25 mots max chacun), notés de 1 (banal) à 10 (bouleversant). Indique les numéros des "
-        "événements (3 max) qui t'ont le plus marqué. Choisis au besoin un objectif pour demain "
-        "parmi la liste (ou null).\n"
-        'Format exact : {"insights": [{"text": "<constat>", "importance": 5}], "important": [1], '
-        '"goal": {"action": "<action>", "target": "<target ou null>", "why": "<pourquoi>"}}'
+        + f"CE QUE J'AI VÉCU DERNIÈREMENT\n{numbered}\n\n"
+        + (f"MES CONSTATS DES DERNIERS JOURS\n{earlier}\n\n" if previous else "")
+        + f"OBJECTIFS POSSIBLES POUR DEMAIN\n{_catalog_lines(catalog)}\n\n"
+        "ÉTAPE 1 : en relisant ces souvenirs, quelles sont les 3 grandes questions que je me pose ?\n"
+        f"ÉTAPE 2 : pour chaque question, un constat de haut niveau à la première personne, en français "
+        f"québécois (25 mots max), noté de 1 (banal) à 10 (bouleversant), avec les numéros des souvenirs "
+        f"qui le prouvent ({MAX_SOURCES} max).\n" + deep_rule +
+        "Indique aussi les numéros des souvenirs (3 max) qui m'ont le plus marqué, et au besoin un objectif "
+        "pour demain parmi la liste (ou null).\n"
+        'Format exact : {"questions": ["<question>"], "insights": [{"text": "<constat>", "importance": 5, '
+        '"sources": [1, 2]}], "deep": {"text": "<conclusion de fond>", "importance": 8, "sources": [1]} ou null, '
+        '"important": [1], "goal": {"action": "<action>", "target": "<target ou null>", "why": "<pourquoi>"}}'
     )
     meta = {
         "agent_id": agent.id,
         "name": agent.name,
         "events": events,
+        "previous": previous or [],
         "catalog": [o.model_dump() for o in catalog],
     }
     return LLMRequest(kind="reflection", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)

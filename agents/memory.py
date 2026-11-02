@@ -22,10 +22,34 @@ STOPWORDS = {
 }
 
 
+# Familles de mots : « budget » et « paie » parlent du même thème ; un souvenir partage alors le thème
+# (#argent) avec la situation même sans mot identique. Racines sans accents, comparées au début du mot.
+WORD_FAMILIES = {
+    "argent": ("argent", "budget", "paie", "payer", "salaire", "pret", "dette", "factur", "banque", "piastre",
+               "dollar", "cout", "depens", "econom", "hypothe", "credit", "cheque", "rouge"),
+    "nourriture": ("epicer", "bouffe", "manger", "souper", "diner", "dejeun", "frigo", "garde", "portion",
+                   "repas", "cuisin", "lait", "pain", "legume", "viande", "collation"),
+    "maison": ("maison", "chantier", "chambre", "constru", "buche", "piece", "plancher", "toit", "tente",
+               "atelier", "entrepren", "bois"),
+    "travail": ("travail", "job", "emploi", "patron", "promotion", "bureau", "collegue", "ouvrage",
+                "chomage", "congedi", "embauch", "offre"),
+    "ecole": ("ecole", "devoir", "cours", "etude", "diplome", "moyenne", "examen", "cegep", "professeur"),
+    "amour": ("amour", "aime", "bisou", "couple", "chicane", "dispute", "pardon", "tendre", "blonde", "chum",
+              "calin", "promesse", "promis"),
+    "enfants": ("bebe", "enfant", "fils", "fille", "naissance", "enceinte", "garderie", "berceau"),
+    "sante": ("malade", "grippe", "hopital", "fatigu", "epuis", "sante", "medecin", "deuil"),
+    "loisirs": ("hockey", "film", "tele", "jouer", "console", "piano", "livre", "lire", "baignade", "kayak",
+                "chien", "feu", "veill", "fete"),
+}
+
+
 def keywords(text: str) -> set[str]:
-    """Mots porteurs de sens (4 lettres et plus, sans accents ni mots outils)."""
+    """Mots porteurs de sens (4 lettres et plus, sans accents ni mots outils) et leurs thèmes (#argent...)."""
     plain = unicodedata.normalize("NFKD", text.lower()).encode("ascii", "ignore").decode()
-    return {w for w in re.findall(r"[a-z]+", plain) if len(w) >= 4 and w not in STOPWORDS}
+    words = {w for w in re.findall(r"[a-z]+", plain) if len(w) >= 3 and w not in STOPWORDS}
+    themes = {f"#{family}" for family, roots in WORD_FAMILIES.items()
+              if any(w.startswith(root) for w in words for root in roots)}
+    return {w for w in words if len(w) >= 4} | themes
 
 
 class MemoryEvent(BaseModel):
@@ -64,6 +88,8 @@ class Memory(BaseModel):
     beliefs: list[Belief] = Field(default_factory=list)
     summaries: list[str] = Field(default_factory=list)
     since_summary: int = 0   # événements ajoutés depuis le dernier résumé
+    importance_since_reflection: int = 0   # importance accumulée depuis la dernière réflexion
+    last_reflection_minute: int = -1
 
     def add(self, minute: int, time: str, text: str, max_events: int = 30, importance: int = 3,
             kind: str = "event", keep_from: int = 6, long_term_size: int = 40) -> MemoryEvent:
@@ -79,7 +105,13 @@ class Memory(BaseModel):
                 del self.long_term[: len(self.long_term) - long_term_size]
                 self.long_term.sort(key=lambda e: e.minute)
         self.since_summary += 1
+        if kind != "reflection":
+            self.importance_since_reflection += importance
         return event
+
+    def all_events(self) -> list[MemoryEvent]:
+        """Mémoire longue et courte, dans l'ordre chronologique."""
+        return sorted(self.long_term + self.events, key=lambda e: e.minute)
 
     def recent(self, count: int = 5) -> list[str]:
         return [event.formatted() for event in self.events[-count:]] if count > 0 else []
