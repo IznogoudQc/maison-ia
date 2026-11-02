@@ -49,6 +49,7 @@ from sim.calendrier import Calendar
 from sim.career import Careers
 from sim.family import FamilyLife
 from sim.interview import Interviews
+from sim.visitors import Visitors
 from sim.portrait import Portraits
 from sim.credit import Credit
 from sim.garage import Garage
@@ -100,6 +101,7 @@ CAR_COMMUTE_SAVING = 30    # minutes gagnées au retour du travail en auto
 CAR_GROCERY_MINUTES = 60
 
 FLANER_RADIUS = 10         # flâner : une case pas trop loin (sur un grand terrain)
+VISITOR_FORBIDDEN = {"sieste", "douche", "devoirs", "poules", "abeilles", "jardiner", "sucres", "promener", "veiller", "foyer"}  # pas pour un invité
 WOOD_TARGET = 25           # bûches visées en réserve ; en dessous, couper devient pressant
 WOOD_MAX = 60              # au-delà, on arrête de couper (la corde est pleine)
 WOOD_YIELD = {"Érable": 6, "Sapin": 5, "Bouleau": 4}
@@ -152,6 +154,8 @@ class Engine:
         self.history = History(self.bus)  # conversations, actions, pensées, événements
         self.portraits = Portraits(self)
         self.interviews = Interviews(self)  # entrevue : questions du joueur et idées soufflées (touche T)
+        self.visitors = Visitors(self)      # voisins et parenté qui passent faire un tour
+        self.everyone: list[Agent] = list(self.agents)  # famille + visiteurs présents (mis à jour en place)
         self.last_recall: dict[str, list] = {}   # agent -> souvenirs retenus pour sa dernière demande à l'IA  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
@@ -166,7 +170,7 @@ class Engine:
         return bool(self.garage.at_home())
 
     def agent_by_id(self, agent_id: str) -> Agent | None:
-        return next((a for a in self.agents if a.id == agent_id), None)
+        return next((a for a in self.agents if a.id == agent_id), None) or self.visitors.get(agent_id)
 
     def room_of(self, agent: Agent) -> str:
         return self.house.room_at(agent.pos) or agent.last_room or "Couloir"
@@ -175,7 +179,7 @@ class Engine:
         self.bus.publish(Event(kind, self.clock.total_minutes, data))
 
     def _occupied(self, exclude: Agent) -> set[Pos]:
-        return {a.action.use_pos for a in self.agents
+        return {a.action.use_pos for a in self.everyone
                 if a is not exclude and not a.is_away and a.action and a.action.use_pos}
 
     def _free_spot(self, agent: Agent, obj: InteractiveObject) -> Pos | None:
@@ -378,7 +382,7 @@ class Engine:
                 continue
             if definition.name == "jaser":
                 base = score_action(definition, agent.needs, favorites)
-                for other in self.agents:
+                for other in self.everyone:
                     if other is agent or not other.is_available:
                         continue
                     bonus = 1.3 if self.room_of(other) == room else 1.0
@@ -386,6 +390,8 @@ class Engine:
                     options.append(Option(action="jaser", target=other.id,
                                           label=action_label("jaser", other.name),
                                           score=round(base * bonus, 2)))
+                continue
+            if agent.visitor and definition.name in VISITOR_FORBIDDEN:
                 continue
             if definition.object_kind and self._object_spot(agent, definition.object_kind) is None:
                 continue
@@ -398,6 +404,9 @@ class Engine:
             if definition.name == "flaner":
                 score = max(score, 0.5)
             options.append(Option(action=definition.name, label=definition.label, score=score))
+        if agent.visitor:  # un invité ne fait ni achats, ni travaux, ni soins
+            options.sort(key=lambda o: o.score, reverse=True)
+            return options
         options += self._economic_options(agent) + self._care_options(agent)
         if self.is_sick(agent):  # malade : on se repose, pas de gros travaux
             options = [o for o in options if o.action not in SICK_FORBIDDEN]
@@ -625,7 +634,7 @@ class Engine:
 
     def _should_ask_llm(self, agent: Agent, options: list[Option]) -> bool:
         cfg = self.config.llm
-        return (self.llm is not None and cfg.decisions_enabled and len(options) >= 2
+        return (self.llm is not None and cfg.decisions_enabled and len(options) >= 2 and not agent.visitor
                 and not options[0].urgent
                 and agent.needs.lowest()[1] >= URGENT_THRESHOLD
                 and self.clock.total_minutes - agent.last_decision_minute >= cfg.decision_cooldown_minutes)
@@ -722,6 +731,10 @@ class Engine:
             self.inventory.rehouse()   # avant le coucher : une place libre dans un vrai lit ne reste pas vide
         for agent in self.agents:
             self._update_agent(agent)
+        self.visitors.update()
+        for visitor in list(self.visitors.present):
+            self._update_visitor(visitor)
+        self.everyone[:] = [*self.agents, *self.visitors.present]
         self.social.update()
         self.architect.update()
         self.family.update()
@@ -785,6 +798,8 @@ class Engine:
         if career:
             lines.append(career)
         lines += [f"{a.name} est en deuil." for a in agents if a.grieving_until is not None]
+        if self.visitors.present:
+            lines.append(self.visitors.context_line())
         return "\n".join(lines)
 
     def family_context(self, agents: list[Agent]) -> str:
@@ -863,7 +878,7 @@ class Engine:
             return
         busy = self._talking_ids()
         by_room: dict[str, list[Agent]] = {}
-        for agent in self.agents:
+        for agent in self.everyone:
             room = self.house.room_at(agent.pos)
             if room is not None and agent.is_available and agent.id not in busy:
                 by_room.setdefault(room, []).append(agent)
@@ -1001,6 +1016,13 @@ class Engine:
         if agent.action is None and not agent.thinking:
             self._choose(agent)
         self._progress(agent, now)
+
+    def _update_visitor(self, agent: Agent) -> None:
+        """Un visiteur suit ses besoins : pas d'horaire, de santé, de plan ni de décision par l'IA."""
+        agent.needs.decay(self.clock.tick_minutes, "awake")
+        if agent.action is None:
+            self._choose(agent)
+        self._progress(agent, self.clock.total_minutes)
 
     def _progress(self, agent: Agent, now: int) -> None:
         action = agent.action
@@ -1411,6 +1433,7 @@ class Engine:
             "construction": self.architect.to_dict(),
             "family": self.family.to_dict(),
             "history": self.history.to_list(),
+            "visitors": self.visitors.to_dict(),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -1457,6 +1480,8 @@ class Engine:
         self.pending_stories.clear()
         self.social.clear()
         self.social.load_dict(data.get("social", {}))
+        self.visitors.load_dict(data.get("visitors"))
+        self.everyone[:] = list(self.agents)
         self.game_over = self.alive_count() == 0
         if self.llm is not None and "llm_stats" in data:
             for key, value in data["llm_stats"].items():

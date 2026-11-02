@@ -121,7 +121,7 @@ def main() -> None:
     screen = pygame.display.set_mode((map_w + config.display.hud_width, map_h))
     hud = Hud(pygame.Rect(map_w, 0, config.display.hud_width, map_h))
     hud.careers = engine.careers
-    dialogue_box = DialogueBox(renderer, agents, config.dialogue.line_display_s, config.dialogue.history_size)
+    dialogue_box = DialogueBox(renderer, engine.everyone, config.dialogue.line_display_s, config.dialogue.history_size)
     bus.subscribe("dialogue", dialogue_box.on_dialogue)
     bus.subscribe("replique", dialogue_box.on_line)
     for kind in NEWS_KINDS:
@@ -180,7 +180,7 @@ def main() -> None:
                     follow = not follow and selected_id is not None
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if event.pos[0] < map_w and not renderer.minimap_click(event.pos):
-                    clicked = renderer.agent_at(agents, event.pos)
+                    clicked = renderer.agent_at(engine.everyone, event.pos)
                     selected_id = clicked.id if clicked else None
                     follow = follow and selected_id is not None
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3 and event.pos[0] < map_w:
@@ -224,13 +224,13 @@ def main() -> None:
         renderer.sim_minute = clock.total_minutes
         renderer.vehicles_out = engine.garage.in_use()
         renderer.set_plan(engine.architect.plan, [t.rect[:2] for t in engine.architect.clearing_trees()])
-        renderer.update_display(agents, dt)
+        renderer.update_display(engine.everyone, dt)
         followed = engine.agent_by_id(selected_id) if follow and selected_id else None
         if followed is not None and not followed.is_away:
             renderer.center_on(*renderer.display_pos.get(followed.id, followed.pos))
         dialogue_box.update(0.0 if paused else dt)
         screen.fill(theme.BACKGROUND)
-        renderer.draw(screen, agents, selected_id, clock.minute_of_day)
+        renderer.draw(screen, engine.everyone, selected_id, clock.minute_of_day)
         dialogue_box.draw(screen)
         journal_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
         household_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
@@ -243,7 +243,7 @@ def main() -> None:
         selected = engine.agent_by_id(selected_id) if selected_id else None
         promises = [f"{p.text} ({engine.social.when_label(p.minute)})"
                     for p in engine.social.promises if p.status == "pending"]
-        extra = list(engine.family.hud_lines()) + engine.credit.hud_lines()
+        extra = list(engine.family.hud_lines()) + engine.credit.hud_lines() + engine.visitors.hud_lines()
         if house.layout.wild:
             extra.append(f"Bois : {engine.economy.household.wood} bûches   "
                          f"Arbres : {len(house.objects_of_kind('arbre'))}")

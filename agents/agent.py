@@ -70,6 +70,7 @@ class Agent(BaseModel):
     sick_until: int | None = None        # malade jusqu'à cette minute : on reste à la maison
     sick_paid: dict[str, int] = Field(default_factory=dict)  # année -> jours de maladie déjà payés
     career: Career | None = None         # emploi, études ou école (sim/career.py)
+    visitor: bool = False                # voisin ou parent en visite (sim/visitors.py), hors du ménage
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property

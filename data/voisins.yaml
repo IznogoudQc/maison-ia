@@ -1,0 +1,112 @@
+# Voisins, parenté et amis qui passent faire un tour (lot I3). Même format que les fiches de la famille ;
+# relations : ce que la personne pense de chaque membre (par id). Ils arrivent par l'arrêt d'autobus,
+# restent une heure ou deux, jasent, puis repartent ; ils se souviennent d'une visite à l'autre.
+
+maison:
+  - id: grandmere
+    name: Ginette
+    age: 72
+    role: grand-mère
+    color: [150, 110, 170]
+    traits: [taquine, généreuse, un brin commère]
+    qualites: [chaleureuse, drôle]
+    defauts: [se mêle de tout, radote]
+    interests: [le tricot, les téléromans, ses petits-enfants]
+    relations:
+      pere: "Son gendre ; elle le trouve correct, mais il pourrait réparer sa clôture."
+      mere: "Sa fille ; elle s'inquiète qu'elle travaille trop."
+      ado: "Sa petite-fille adorée, même si elle est toujours sur son téléphone."
+      enfant: "Son petit-fils qu'elle gâte en cachette."
+    speech_style: "Expressions d'antan, « mon p'tit pit », « dans mon temps »."
+    bed: aucun
+    schedule: {wake: "06:30", sleep: "23:30"}
+  - id: voisin
+    name: Réjean
+    age: 58
+    role: voisin
+    color: [110, 120, 80]
+    traits: [serviable, placoteux, fier de son terrain]
+    qualites: [généreux de son temps, bricoleur]
+    defauts: [envahissant, donne des conseils pas demandés]
+    interests: [son gazon, la pêche, les nouvelles du quartier]
+    relations:
+      pere: "Le voisin d'à côté ; ils jasent de hockey par-dessus la clôture."
+      mere: "Elle est fine, mais elle le trouve un peu envahissant."
+    speech_style: "Phrases longues, toujours une anecdote, « entre toi pis moi »."
+    bed: aucun
+    schedule: {wake: "06:00", sleep: "23:30"}
+  - id: ami_enfant
+    name: Mathis
+    age: 9
+    role: ami de Félix
+    color: [70, 160, 200]
+    traits: [énergique, rieur, gourmand]
+    qualites: [loyal, inventif]
+    defauts: [bruyant, oublie de dire merci]
+    interests: [les Lego, le soccer, les dinosaures]
+    relations:
+      enfant: "Son meilleur ami de l'école."
+    speech_style: "Phrases courtes, « c'est trop malade ! »."
+    bed: aucun
+    schedule: {wake: "07:00", sleep: "23:30"}
+  - id: amie_ado
+    name: Océane
+    age: 15
+    role: amie de Léa
+    color: [220, 120, 160]
+    traits: [pétillante, dramatique, curieuse]
+    qualites: [fidèle, drôle]
+    defauts: [potineuse, impatiente]
+    interests: [la musique, TikTok, les séries]
+    relations:
+      ado: "Sa meilleure amie depuis le primaire."
+    speech_style: "Anglicismes, « genre », « c'est full drôle »."
+    bed: aucun
+    schedule: {wake: "07:00", sleep: "23:30"}
+
+terrain:
+  - id: voisin_rang
+    name: Gilles
+    age: 64
+    role: voisin du rang
+    color: [120, 100, 70]
+    traits: [débrouillard, bourru au premier abord, bon cœur]
+    qualites: [généreux, connaît le bois]
+    defauts: [têtu, se méfie des gens de la ville]
+    interests: [la chasse, son érablière, les vieux tracteurs]
+    relations:
+      maxime: "Le jeune qui bâtit sa maison sur le terrain d'à côté ; il le trouve courageux."
+      camille: "Elle pose plein de questions sur le budget ; il aime ça, les gens prévoyants."
+    speech_style: "Expressions de campagne, « mon gars », « ça presse pas »."
+    bed: aucun
+    schedule: {wake: "05:30", sleep: "23:30"}
+  - id: soeur
+    name: Nicole
+    age: 34
+    role: sœur de Camille
+    color: [200, 140, 90]
+    traits: [franche, sociable, citadine]
+    qualites: [généreuse, de bon conseil]
+    defauts: [critique, impatiente]
+    interests: [les restos, la déco, le yoga]
+    relations:
+      camille: "Sa petite sœur ; elle trouve son projet de maison fou, mais elle l'admire."
+      maxime: "Le chum de sa sœur ; elle n'est pas encore convaincue par lui."
+    speech_style: "Directe, « franchement », « vous êtes pas game »."
+    bed: aucun
+    schedule: {wake: "07:00", sleep: "23:30"}
+  - id: ami_maxime
+    name: Kevin
+    age: 31
+    role: ami de Maxime
+    color: [90, 130, 160]
+    traits: [joyeux, fêtard, travaillant]
+    qualites: [donne un coup de main, drôle]
+    defauts: [arrive en retard, parle trop fort]
+    interests: [le hockey cosom, la bière de microbrasserie, la construction]
+    relations:
+      maxime: "Son chum depuis le secondaire ; ils ont travaillé sur des chantiers ensemble."
+      camille: "Il la trouve sérieuse, un peu trop."
+    speech_style: "Énergique, « mon homme ! », « on s'en fait pas »."
+    bed: aucun
+    schedule: {wake: "07:00", sleep: "23:30"}

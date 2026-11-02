@@ -31,7 +31,7 @@ MAX_WIDTH = 300
 
 def describe(engine: Engine, renderer: Renderer, mouse: tuple[int, int]) -> list[str]:
     """Lignes à afficher pour ce qui est sous la souris (vide : rien d'intéressant)."""
-    agent = renderer.agent_at(engine.agents, mouse)
+    agent = renderer.agent_at(engine.everyone, mouse)
     if agent is not None:
         lines = [f"{agent.name}, {agent.persona.age} ans ({agent.persona.role})", agent.status_label.capitalize(),
                  f"Humeur : {agent.mood}"]

@@ -34,7 +34,7 @@ class InterviewScreen:
         return self.engine.agent_by_id(self.agent_id) if self.agent_id else None
 
     def people(self) -> list[Agent]:
-        return [a for a in self.engine.agents if not a.dead and a.persona.stage != "bebe"]
+        return [a for a in self.engine.everyone if not a.dead and a.persona.stage != "bebe"]
 
     def show(self, agent_id: str | None, key_char: str = "t") -> None:
         if self.open:
