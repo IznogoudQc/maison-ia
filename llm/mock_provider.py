@@ -163,6 +163,8 @@ class MockProvider(LLMProvider):
                 text = self._party(request)
             elif request.kind == "rumor":
                 text = self._rumor(request)
+            elif request.kind == "project":
+                text = self._project(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -406,6 +408,18 @@ class MockProvider(LLMProvider):
         base = heard.rstrip(".")
         text = f"{base}, {twist}." if base.startswith("Paraît que") else f"Paraît que {base}, {twist}."
         return json.dumps({"text": text}, ensure_ascii=False)
+
+    def _project(self, request: LLMRequest) -> str:
+        """Projet tiré des actions permises : la première qui rappelle un intérêt, sinon au hasard."""
+        actions = request.meta.get("actions", [])
+        current = request.meta.get("current")
+        interests = " ".join(request.meta.get("interests", [])).lower()
+        action = next((a for a in actions if a[:4] in interests), None) or self.rng.choice(actions)
+        text = current or f"Devenir vraiment bon : {action}"
+        return json.dumps({"aspiration": text, "why": "ça me tient à cœur", "action": action,
+                           "month_goal": f"Pratiquer {action} plusieurs fois par semaine",
+                           "weeks": ["Commencer", "Pratiquer", "Se dépasser", "Montrer le résultat"]},
+                          ensure_ascii=False)
 
     def _portrait(self, request: LLMRequest) -> str:
         """Ressenti tiré des causes calculées par le moteur ; avis tirés de l'affection et de la tension."""

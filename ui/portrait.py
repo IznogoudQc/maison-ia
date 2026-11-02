@@ -50,6 +50,15 @@ def career_rows(engine: Engine, agent: Agent) -> list[Row]:
     return rows + [(line, NOTE if line.startswith("Jour ") else theme.TEXT_DIM) for line in lines[1:]]
 
 
+def project_rows(engine: Engine, agent: Agent) -> list[Row]:
+    """Projet de vie : aspiration, mois, semaine, geste du jour, étapes marquantes."""
+    if agent.persona.stage == "bebe":
+        return []
+    lines = engine.projects.lines(agent)
+    rows: list[Row] = [("", theme.TEXT), ("Projet de vie", HEADER), (lines[0], theme.ACCENT)]
+    return rows + [(line, NOTE if "réussi" in line or "accompli" in line else theme.TEXT_DIM) for line in lines[1:]]
+
+
 def mood_rows(engine: Engine, agent: Agent) -> list[Row]:
     rows: list[Row] = [(f"Humeur : {agent.mood}", HEADER)]
     portraits = engine.portraits
@@ -136,7 +145,8 @@ class PortraitScreen:
             return
         # Colonne de gauche : caractère puis humeur
         y = top
-        rows = character_rows(agent) + career_rows(self.engine, agent) + [("", theme.TEXT)] + mood_rows(self.engine, agent)
+        rows = (character_rows(agent) + career_rows(self.engine, agent) + project_rows(self.engine, agent)
+                + [("", theme.TEXT)] + mood_rows(self.engine, agent))
         for text, color in rows:
             for line in wrap_text(text, font, column) if text else [""]:
                 if y > panel.bottom - 44:

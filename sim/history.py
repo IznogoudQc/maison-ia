@@ -23,7 +23,8 @@ EVENT_KINDS = ("evenement", "achat", "achat_objet", "pret", "pret_retard", "nais
                "agrandissement", "projet_bebe", "factures", "frigo_vide", "fin", "conge", "malade",
                "embauche", "promotion", "perte_emploi", "offre_emploi", "etudes", "diplome", "visite", "fin_visite",
                "fete_prevue", "fete", "fin_fete", "rumeur", "rumeur_decouverte",
-               "neige", "froid", "fete_saison")
+               "neige", "froid", "fete_saison",
+               "projet", "projet_etape", "projet_mois", "projet_reussi")
 
 
 class HistoryEntry(BaseModel):

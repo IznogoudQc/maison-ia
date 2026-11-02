@@ -50,6 +50,7 @@ from sim.career import Careers
 from sim.family import FamilyLife
 from sim.interview import Interviews
 from sim.gossip import Gossip
+from sim.projects import Projects
 from sim.seasons import Seasons
 from sim.visitors import Visitors
 from sim.portrait import Portraits
@@ -160,6 +161,7 @@ class Engine:
         self.everyone: list[Agent] = list(self.agents)  # famille + visiteurs présents (mis à jour en place)
         self.gossip = Gossip(self)          # fêtes et rumeurs de bouche à oreille
         self.seasons = Seasons(self)        # neige, chauffage, sucres, Halloween, Noël
+        self.projects = Projects(self)      # projets de vie : mois, semaines, geste du jour
         self.last_recall: dict[str, list] = {}   # agent -> souvenirs retenus pour sa dernière demande à l'IA  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
@@ -421,6 +423,7 @@ class Engine:
         self.inventory.boost(agent, options)
         self.mind.boost(agent, options)
         self.seasons.boost(options)
+        self.projects.boost(agent, options)
         options.sort(key=lambda o: (o.urgent, o.score), reverse=True)
         return options
 
@@ -684,6 +687,7 @@ class Engine:
         self.portraits.poll()
         self.interviews.poll()
         self.gossip.poll()
+        self.projects.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -742,6 +746,7 @@ class Engine:
             self._update_agent(agent)
         self.visitors.update()
         self.gossip.update()
+        self.projects.update()
         for visitor in list(self.visitors.present):
             self._update_visitor(visitor)
         self.everyone[:] = [*self.agents, *self.visitors.present]
@@ -1081,6 +1086,8 @@ class Engine:
     def _on_done(self, agent: Agent, action: ActiveAction) -> None:
         """Effets de fin d'action sur le ménage (achat conclu, pelouse tondue)."""
         self.inventory.mark_used(action.use_pos)
+        if not agent.visitor:
+            self.projects.on_done(agent, action.name)
         if action.name == "acheter" and action.target:
             self._buy(agent, action.target)
         elif action.name == "couper" and action.target:

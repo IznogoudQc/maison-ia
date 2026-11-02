@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pydantic import BaseModel, ConfigDict, Field
 
 from agents.actions import action_label, away_phrase
+from agents.aspiration import Aspiration
 from agents.memory import Memory
 from agents.needs import Needs
 from agents.persona import Persona
@@ -70,6 +71,7 @@ class Agent(BaseModel):
     sick_until: int | None = None        # malade jusqu'à cette minute : on reste à la maison
     sick_paid: dict[str, int] = Field(default_factory=dict)  # année -> jours de maladie déjà payés
     career: Career | None = None         # emploi, études ou école (sim/career.py)
+    aspiration: Aspiration | None = None  # projet de vie (sim/projects.py)
     visitor: bool = False                # voisin ou parent en visite (sim/visitors.py), hors du ménage
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 

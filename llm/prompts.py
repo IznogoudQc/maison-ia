@@ -167,6 +167,10 @@ def mind_block(agent: Agent, now: int, with_plan: bool = True, beliefs: int = 3,
             steps = "; ".join(f"{i.hhmm} {i.action}{' ' + i.target if i.target else ''} ({marks[i.status]})"
                               for i in plan.items)
             lines.append(f"- Mon plan : {steps}")
+    aspiration = agent.aspiration
+    if aspiration is not None and not aspiration.done:
+        lines.append(f"- Mon projet de vie : {aspiration.text} ({aspiration.progress:.0f} %) ; ce mois-ci : "
+                     f"{aspiration.month_goal} ; cette semaine : {aspiration.week_step}")
     if with_goal and agent.goal is not None and now < agent.goal.until:
         lines.append(f"- Je me suis promis : {agent.goal.text}")
     return "\n".join(lines) if lines else "Rien de particulier en tête."

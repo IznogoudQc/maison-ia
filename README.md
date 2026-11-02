@@ -265,6 +265,14 @@ La partie suit le vrai calendrier (départ en juin) : l'hiver arrive en décembr
 Le panneau d'un personnage affiche son intention, son plan (vert = fait, rouge = manqué), son
 objectif et son dernier constat ; les plans et réflexions apparaissent aussi dans l'historique (H).
 
+- **Projets de vie** : dès le deuxième jour, chacun (dès 3 ans) se donne une aspiration à sa mesure
+  (« apprendre le piano », « me remettre en forme », « bâtir le plus gros château de Lego »...). L'IA
+  la découpe en objectif du mois et en quatre étapes hebdomadaires, liées à une action du jeu. Le
+  geste du jour attire la personne ; chaque fois qu'elle le fait, le mois avance (deux fois par jour
+  au plus). Étape de la semaine réussie ou en retard, mois atteint ou manqué : tout devient souvenir,
+  et l'IA planifie le mois suivant. Environ trois mois plus tard, le projet est accompli, et un
+  nouveau vient après quelques jours. La fiche (P) montre la progression.
+
 ## Conversations et relations
 
 - **Tour par tour** (`dialogue.mode: tour_par_tour`, par défaut) : chaque réplique est un appel LLM
