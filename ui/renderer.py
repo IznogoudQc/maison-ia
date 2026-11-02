@@ -16,6 +16,10 @@ WILD_GRASS = 55.0      # herbe d'un terrain sauvage (jamais tondu)
 MINIMAP_WIDTH = 180    # px à l'écran
 FIRE_HOURS = (17, 23)  # le feu de camp brûle en soirée (ou quand on cuisine / veille autour)
 WALL_SIDES = {"n": (0, -1), "s": (0, 1), "e": (1, 0), "o": (-1, 0)}
+FALL_SECONDS = 0.9        # chute d'un arbre abattu (secondes réelles)
+FLOAT_SECONDS = 1.6       # « +N bûches » qui monte puis s'efface
+STUMP_MINUTES = 3 * 24 * 60   # une souche reste trois jours de jeu
+STUMP_LIMIT = 300
 STYLE_COLORS = {"wood": (186, 138, 94), "ceramic": (230, 224, 206), "carpet": (150, 128, 170)}
 WALK_FPS = 8          # images de marche par seconde
 SPRITE_LIFT = 4       # le personnage déborde un peu sur la tuile du dessus (effet de profondeur)
@@ -52,6 +56,14 @@ class Renderer:
         self._props: tuple[int, list[tuple]] = (-1, [])   # (révision, [(objet, clé, bas)]) meubles lisses
         self._lit_props: dict[tuple, pygame.Surface] = {}
         self._steam: list[tuple[int, int]] = []
+        # Coupe d'arbres : arbres frappés, arbres qui tombent, « +N bûches », souches
+        self.sim_minute: int | None = None     # minute de jeu absolue (fournie par main) : âge des souches
+        self._chopping: set[str] = set()
+        self._trees: dict[str, tuple[tuple | None, tuple[int, int, int, int]]] | None = None
+        self._trees_revision = -1
+        self._wood_seen: int | None = None
+        self._falling: list[dict] = []
+        self._stumps: list[tuple[int, int, int | None]] = []
         self._light: tuple[int, set[str], float, float] = (0, set(), 0.0, 0.0)
         self._label_cache: dict[str, pygame.Surface] = {}
         indoor = {n: r for n, r in house.rooms.items() if n not in house.outdoor_rooms}
@@ -364,6 +376,7 @@ class Renderer:
         # Couche du dessus (pas éclairée) : animations des meubles, bulles, marqueur
         self.overlay.fill((0, 0, 0, 0), view)
         self._pawn_jobs = []
+        self._track_felled_trees(agents)
         for (x0, y0, x1, y1), _name, status, fraction, contractor in self.blueprint:
             if status == "chantier":
                 sprites.draw_construction(low, (x0, y0, x1, y1), fraction, contractor)
@@ -408,6 +421,7 @@ class Renderer:
         for x, y in self._steam:
             living.draw_steam(surface, self.to_screen(x, y), self.scale, t)
         surface.blit(pygame.transform.scale(self.overlay.subsurface(view), scaled.get_size()), (0, 0))
+        self._draw_log_gains(surface)
         self._draw_labels(surface)
         for agent in visible:
             if self._pose(agent) == "lying":
@@ -565,6 +579,31 @@ class Renderer:
         self._pawn_jobs.append((depth, "pion", agent, cx, feet - bob, direction, sitting, pose == "shower", tools))
         return agent, round(cx), top
 
+    def _track_felled_trees(self, agents: list[Agent]) -> None:
+        """Repère les arbres frappés, et ceux qui viennent de disparaître : ils tombent et laissent une souche."""
+        self._chopping = {a.action.target for a in agents
+                          if a.action is not None and a.action.name == "couper" and a.action.started and a.action.target}
+        gained = self.wood - self._wood_seen if self._wood_seen is not None else 0
+        self._wood_seen = self.wood
+        if self._trees_revision == self.house.revision:
+            return
+        self._trees_revision = self.house.revision
+        trees = {o.id: (props.prop_key(o), o.rect) for o in self.house.objects_of_kind("arbre")}
+        if self._trees is not None:
+            for tree_id in self._trees.keys() - trees.keys():
+                key, rect = self._trees[tree_id]
+                if key is None:
+                    continue
+                self._falling.append({"key": key, "rect": rect, "start": self.time,
+                                      "side": 1 if sum(map(ord, tree_id)) % 2 else -1, "logs": max(0, gained)})
+                gained = 0  # le gain de bûches ne s'affiche qu'une fois
+                self._stumps.append((rect[0], rect[1], self.sim_minute))
+        # Une souche disparaît sous une pièce bâtie ou un objet posé dessus
+        occupied = {tile for obj in self.house.objects.values() for tile in obj.tiles}
+        self._stumps = [s for s in self._stumps[-STUMP_LIMIT:]
+                        if self.house.is_outdoor(s[:2]) and s[:2] not in occupied]
+        self._trees = trees
+
     def _visible_props(self, view: pygame.Rect) -> list[tuple]:
         revision = self.house.revision
         if self._props[0] != revision:
@@ -579,6 +618,56 @@ class Renderer:
                 if area.colliderect(pygame.Rect(obj.rect[0] * TILE, obj.rect[1] * TILE,
                                                 obj.rect[2] * TILE, obj.rect[3] * TILE))]
 
+    def _felling_jobs(self, view: pygame.Rect) -> list[tuple]:
+        """Souches encore récentes et arbres en train de tomber, triés avec le reste."""
+        now = self.sim_minute
+        self._stumps = [s for s in self._stumps if now is None or s[2] is None or now - s[2] < STUMP_MINUTES]
+        self._falling = [f for f in self._falling if self.time - f["start"] < FALL_SECONDS + FLOAT_SECONDS]
+        area = view.inflate(4 * TILE, 4 * TILE)
+        jobs = [((y + 1) * TILE - 1, 0, "souche", x, y) for x, y, _born in self._stumps
+                if area.collidepoint(x * TILE, y * TILE)]
+        jobs += [((f["rect"][1] + f["rect"][3]) * TILE + 0.1, 0, "chute", f) for f in self._falling
+                 if area.collidepoint(f["rect"][0] * TILE, f["rect"][1] * TILE)]
+        return jobs
+
+    def _draw_falling(self, surface: pygame.Surface, fall: dict, dark: float, tint) -> None:
+        """L'arbre bascule autour de sa base et s'efface (le « +N bûches » vient après, par-dessus tout)."""
+        elapsed = self.time - fall["start"]
+        x, y, w, h = fall["rect"]
+        base = self.to_screen((x + w / 2) * TILE, (y + h) * TILE - 1)
+        if elapsed < FALL_SECONDS:
+            k = elapsed / FALL_SECONDS
+            image = pawns.lit(props.prop_image(fall["key"], self.scale), dark, tint)
+            x0, y0, _x1, _y1 = props.bounds(fall["key"])
+            pivot = pygame.math.Vector2((w * TILE / 2 - x0) * self.scale, (h * TILE - y0) * self.scale - 1)
+            angle = -fall["side"] * 88 * k * k                                      # accélère en tombant
+            center = pygame.math.Vector2(image.get_width() / 2, image.get_height() / 2)
+            rotated = pygame.transform.rotate(image, angle)
+            offset = (center - pivot).rotate(-angle)
+            if k > 0.7:
+                rotated.set_alpha(round(255 * (1 - k) / 0.3))
+            surface.blit(rotated, rotated.get_rect(center=(base[0] + offset.x, base[1] + offset.y)))
+
+    def _draw_log_gains(self, surface: pygame.Surface) -> None:
+        """« +N bûches » qui monte au-dessus de l'arbre abattu puis s'efface, lisible même sur les bulles."""
+        font = theme.font(max(14, round(6 * self.scale)), bold=True)
+        for fall in self._falling:
+            elapsed = self.time - fall["start"] - FALL_SECONDS * 0.6
+            if not fall["logs"] or not 0 <= elapsed < FLOAT_SECONDS:
+                continue
+            k = elapsed / FLOAT_SECONDS
+            x, y, w, _h = fall["rect"]
+            sx, sy = self.to_screen((x + w / 2) * TILE, y * TILE - 6 - 10 * k)
+            label = f"+{fall['logs']} bûches"
+            alpha = round(255 * min(1.0, (1 - k) * 2))
+            for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2), (2, 2)):
+                shadow = font.render(label, True, (40, 26, 16))
+                shadow.set_alpha(alpha)
+                surface.blit(shadow, shadow.get_rect(midbottom=(sx + dx, sy + dy)))
+            text = font.render(label, True, (255, 222, 150))
+            text.set_alpha(alpha)
+            surface.blit(text, text.get_rect(midbottom=(sx, sy)))
+
     def _draw_depth(self, surface: pygame.Surface, view: pygame.Rect) -> None:
         """Meubles, arbres et personnages lisses, du nord au sud, éclairés comme leur pièce."""
         alpha, lit_rooms, golden, dawn = self._light
@@ -588,6 +677,7 @@ class Renderer:
             return alpha / 255 * (LIT_ROOM_FACTOR if room in lit_rooms else 1.0)
 
         jobs = [(bottom, 0, "meuble", obj, key) for obj, key, bottom in self._visible_props(view)]
+        jobs += self._felling_jobs(view)
         jobs += [(job[0], 1) + job[1:] for job in self._pawn_jobs]
         if len(self._lit_props) > 3000:
             self._lit_props.clear()
@@ -603,7 +693,10 @@ class Renderer:
                 if image is None:
                     image = self._lit_props[cache] = pawns.lit(props.prop_image(key, self.scale), dark, tint)
                 x0, y0, _x1, _y1 = props.bounds(key)
-                surface.blit(image, self.to_screen(obj.rect[0] * TILE + x0, obj.rect[1] * TILE + y0))
+                sx, sy = self.to_screen(obj.rect[0] * TILE + x0, obj.rect[1] * TILE + y0)
+                if obj.id in self._chopping and living.chop_phase(self.time) >= living.IMPACT:
+                    sx += math.sin(self.time * 70) * 0.8 * self.scale              # l'arbre tremble au coup
+                surface.blit(image, (sx, sy))
             elif kind == "dormeur":
                 agent, hx, hy, bed = job[3:]
                 bed_key = props.prop_key(bed) if bed is not None else None
@@ -645,6 +738,12 @@ class Renderer:
                 x0, y0, _x1, _y1 = props.bounds(key)
                 image = pawns.lit(props.prop_image(key, self.scale), darkness(None), tint)
                 surface.blit(image, self.to_screen(pile.rect[0] * TILE + x0, pile.rect[1] * TILE + y0))
+            elif kind == "souche":
+                x, y = job[3], job[4]
+                living.draw_stump(surface, self.to_screen(x * TILE + TILE / 2, y * TILE + TILE / 2 + 2), self.scale,
+                                  (darkness(None), tint))
+            elif kind == "chute":
+                self._draw_falling(surface, job[3], darkness(None), tint)
             elif kind == "flammes":
                 x, y, _w, _h = job[3].rect
                 living.draw_flames(surface, self.to_screen(x * TILE + TILE / 2, y * TILE + TILE / 2 + 1), self.scale,

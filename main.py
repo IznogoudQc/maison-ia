@@ -211,6 +211,7 @@ def main() -> None:
 
         renderer.set_yard(engine.economy.household.lawn, engine.car_home(), engine.economy.household.wood)
         renderer.purchases = set(engine.economy.household.purchases)
+        renderer.sim_minute = clock.total_minutes
         renderer.vehicles_out = engine.garage.in_use()
         renderer.set_plan(engine.architect.plan, [t.rect[:2] for t in engine.architect.clearing_trees()])
         renderer.update_display(agents, dt)

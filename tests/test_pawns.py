@@ -92,3 +92,35 @@ def test_elements_animes():
     living.draw_steam(screen, (250, 150), 3.0, 0.4)
     living.draw_ribbon(screen, (250, 250), 3.0)
     assert screen.get_at((50, 46)) != screen.get_at((5, 5))   # le chien est bien dessiné
+
+
+def test_arbre_abattu_tombe_et_laisse_une_souche():
+    from ui import living
+    from world.terrain import build_house
+    pygame.init()
+    config = load_config("config.yaml", scenario="terrain")
+    config.events.frequency = 0.0
+    house = build_house("terrain", 120, 80, 42)
+    agents = [Agent(persona=p, pos=(0, 0)) for p in load_family(config.family_file)]
+    engine = Engine(config, house, agents, SimClock(1, "10:00"), random.Random(1))
+    engine.initialize()
+    renderer = Renderer(house, 2.0, (800, 600))
+    screen = pygame.Surface((800, 600))
+
+    def frame():
+        renderer.set_yard(0, False, engine.economy.household.wood)
+        renderer.sim_minute = engine.clock.total_minutes
+        renderer.update_display(agents, 1 / 60)
+        renderer.draw(screen, agents, None, engine.clock.minute_of_day)
+
+    frame()
+    tree = house.objects_of_kind("arbre")[0]
+    logs = engine.fell_tree(tree.id)
+    frame()
+    assert renderer._falling and renderer._falling[0]["logs"] == logs
+    assert (tree.rect[0], tree.rect[1]) in [s[:2] for s in renderer._stumps]
+    renderer.sim_minute += 4 * 24 * 60                       # trois jours plus tard, la souche est partie
+    renderer._felling_jobs(renderer.view_rect())
+    assert not renderer._stumps
+    assert 0 <= living.chop_phase(12.3) < 1
+    living.draw_stump(screen, (100, 100), 3.0)

@@ -153,22 +153,69 @@ def draw_tool(surface: pygame.Surface, name: str, pos: tuple[float, float], scal
         toile.segment((120, 84, 50), (cx, cy), tip, 0.8)
         toile.rect((90, 90, 96), tip[0] - 1.4, tip[1] - 1, 2.8, 2, radius=0.3)
     elif name == "hache":
-        if chainsaw:
-            jitter = 0.5 if int(t * 30) % 2 else 0
-            toile.rect((230, 120, 30), cx - 1, cy - 1 + jitter, 4.5, 3, radius=0.6)
-            toile.rect((190, 190, 196), cx + 3.5, cy + jitter, 5, 1.4, radius=0.6)
-        else:
-            swing = math.sin(t * 8)
-            tip = (cx + 4 * math.cos(swing), cy - 5 * math.sin(swing) - 1)
-            toile.segment((120, 84, 50), (cx, cy + 2), tip, 0.8)
-            toile.rect((180, 186, 196), tip[0] - 1.4, tip[1] - 1, 2.8, 2.2, radius=0.4)
-        for k in range(2):  # copeaux
-            a = t * 6 + k * 2.1
-            toile.circle((226, 196, 140), cx + 4 + math.cos(a) * 3, cy - 1 + math.sin(a) * 2, 0.5, outline=False)
+        _axe(surface, pos, scale, t, chainsaw)
+        return
     elif name == "tasse":
         toile.rect((240, 240, 236), cx - 1.5, cy - 1.5, 3, 3, radius=0.6)
         toile.circle((110, 70, 40), cx, cy, 0.8, outline=False)
     toile.blit(surface, (pos[0] - 8 * scale, pos[1] - 8 * scale))
+
+
+CHOPS_PER_SECOND = 1.4
+IMPACT = 0.82          # moment du coup dans la cadence (0 -> 1)
+
+
+def chop_phase(t: float) -> float:
+    """Cadence des coups de hache : 0 -> 1 ; le coup porte à partir d'IMPACT."""
+    return (t * CHOPS_PER_SECOND) % 1.0
+
+
+def _axe(surface: pygame.Surface, pos: tuple[float, float], scale: float, t: float, chainsaw: bool) -> None:
+    """Grosse hache levée puis abattue en cadence (ou scie à chaîne qui vibre), avec des copeaux au coup."""
+    toile = _Toile(28, 28, scale)
+    cx, cy = 14, 16
+    phase = chop_phase(t)
+    if chainsaw:
+        jitter = 0.6 if int(t * 30) % 2 else 0
+        toile.rect((230, 120, 30), cx - 2, cy - 2 + jitter, 6, 4.5, radius=1)
+        toile.rect((190, 190, 196), cx + 4, cy - 0.5 + jitter, 8, 2, radius=0.9)
+        chips, burst = True, (t * 3) % 1.0
+    else:
+        # Levée lente, coup sec : l'angle passe de 110° (levée) à -20° (sur le tronc)
+        if phase < IMPACT:
+            lift = phase / IMPACT
+        else:
+            lift = (1 - (phase - IMPACT) / (1 - IMPACT)) ** 3
+        angle = math.radians(-20 + 130 * lift)
+        tip = (cx + 9 * math.cos(angle), cy - 9 * math.sin(angle))
+        toile.segment(OUTLINE, (cx, cy), tip, 2.0)
+        toile.segment((150, 104, 62), (cx, cy), tip, 1.2)                     # le manche
+        ux, uy = math.cos(angle), -math.sin(angle)
+        head = [toile.p(tip[0] - uy * 2.6 + ux * 0.8, tip[1] + ux * 2.6 + uy * 0.8),
+                toile.p(tip[0] + uy * 2.6 + ux * 0.8, tip[1] - ux * 2.6 + uy * 0.8),
+                toile.p(tip[0] + uy * 1.6 - ux * 1.6, tip[1] - ux * 1.6 - uy * 1.6),
+                toile.p(tip[0] - uy * 1.6 - ux * 1.6, tip[1] + ux * 1.6 - uy * 1.6)]
+        pygame.draw.polygon(toile.c, OUTLINE, head, max(1, round(toile.line)))
+        pygame.draw.polygon(toile.c, (196, 202, 212), head)                    # le fer
+        chips, burst = phase >= IMPACT, (phase - IMPACT) / (1 - IMPACT)
+    if chips:  # copeaux projetés au coup
+        for k in range(5):
+            a = k * 1.3 + 0.4
+            d = 2 + burst * 7
+            toile.circle((226, 196, 140), cx + 8 + math.cos(a) * d, cy + 1 - math.sin(a) * d * 0.7 + burst * 2,
+                         0.7, outline=False)
+    toile.blit(surface, (pos[0] - 14 * scale, pos[1] - 16 * scale))
+
+
+def draw_stump(surface: pygame.Surface, pos: tuple[float, float], scale: float, light=None) -> None:
+    """Souche laissée par un arbre abattu ; pos = centre de la case."""
+    toile = _Toile(12, 10, scale)
+    u = toile.u
+    toile.translucent(lambda s: pygame.draw.ellipse(s, (20, 16, 18, 60), (2.5 * u, 4.5 * u, 9 * u, 4.5 * u)))
+    toile.ellipse((110, 76, 48), 2.5, 3, 7, 5)
+    toile.ellipse((206, 170, 118), 3.3, 3.5, 5.4, 3.4, outline=False)
+    toile.ellipse((176, 136, 90), 4.6, 4.3, 2.8, 1.8, outline=False)          # les cernes
+    toile.blit(surface, (pos[0] - 6 * scale, pos[1] - 6 * scale), light)
 
 
 def draw_flames(surface: pygame.Surface, center: tuple[float, float], scale: float, t: float) -> None:
