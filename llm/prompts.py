@@ -99,10 +99,10 @@ def family_roster(family: list[Agent] | None, exclude: Agent | None = None) -> s
             continue
         p = member.persona
         parts = [f"{p.name}, {p.age} ans ({p.role}) : {', '.join(p.traits)}"]
-        if p.qualites:
-            parts.append(f"qualités : {', '.join(p.qualites)}")
-        if p.defauts:
-            parts.append(f"défauts : {', '.join(p.defauts)}")
+        if member.qualites:
+            parts.append(f"qualités : {', '.join(member.qualites)}")
+        if member.defauts:
+            parts.append(f"défauts : {', '.join(member.defauts)}")
         if p.interests:
             parts.append(f"aime : {', '.join(p.interests[:3])}")
         lines.append("- " + " ; ".join(parts) + ".")
@@ -135,10 +135,11 @@ def persona_block(agent: Agent) -> str:
         f"Traits : {', '.join(p.traits)}.",
         f"Intérêts : {', '.join(p.interests)}.",
     ]
-    if p.qualites:
-        lines.append(f"Qualités : {', '.join(p.qualites)}.")
-    if p.defauts:
-        lines.append(f"Défauts (ils paraissent surtout quand ça va mal) : {', '.join(p.defauts)}.")
+    describe = agent.personality.describe
+    if agent.qualites:
+        lines.append(f"Qualités : {', '.join(map(describe, agent.qualites))}.")
+    if agent.defauts:
+        lines.append(f"Défauts (ils paraissent surtout quand ça va mal) : {', '.join(map(describe, agent.defauts))}.")
     if p.speech_style:
         lines.append(f"Façon de parler : {p.speech_style}")
     if p.routines:

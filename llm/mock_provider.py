@@ -165,6 +165,8 @@ class MockProvider(LLMProvider):
                 text = self._rumor(request)
             elif request.kind == "project":
                 text = self._project(request)
+            elif request.kind == "personality":
+                text = self._personality(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -420,6 +422,15 @@ class MockProvider(LLMProvider):
                            "month_goal": f"Pratiquer {action} plusieurs fois par semaine",
                            "weeks": ["Commencer", "Pratiquer", "Se dépasser", "Montrer le résultat"]},
                           ensure_ascii=False)
+
+    def _personality(self, request: LLMRequest) -> str:
+        """Renforce la première qualité, en citant la dernière conclusion de fond."""
+        qualites = request.meta.get("qualites", [])
+        evidence = request.meta.get("evidence", [""])
+        if not qualites:
+            return json.dumps({"change": "aucun", "kind": "qualite", "trait": "", "reason": ""})
+        return json.dumps({"change": "renforcer", "kind": "qualite", "trait": qualites[0],
+                           "reason": evidence[-1][:120]}, ensure_ascii=False)
 
     def _portrait(self, request: LLMRequest) -> str:
         """Ressenti tiré des causes calculées par le moteur ; avis tirés de l'affection et de la tension."""

@@ -50,6 +50,7 @@ from sim.career import Careers
 from sim.family import FamilyLife
 from sim.interview import Interviews
 from sim.gossip import Gossip
+from sim.personality import Personalities
 from sim.projects import Projects
 from sim.seasons import Seasons
 from sim.visitors import Visitors
@@ -162,6 +163,7 @@ class Engine:
         self.gossip = Gossip(self)          # fêtes et rumeurs de bouche à oreille
         self.seasons = Seasons(self)        # neige, chauffage, sucres, Halloween, Noël
         self.projects = Projects(self)      # projets de vie : mois, semaines, geste du jour
+        self.personalities = Personalities(self)  # qualités et défauts qui évoluent avec les réflexions
         self.last_recall: dict[str, list] = {}   # agent -> souvenirs retenus pour sa dernière demande à l'IA  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
@@ -688,6 +690,7 @@ class Engine:
         self.interviews.poll()
         self.gossip.poll()
         self.projects.poll()
+        self.personalities.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue

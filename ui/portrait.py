@@ -28,10 +28,11 @@ Row = tuple[str, tuple[int, int, int]]
 def character_rows(agent: Agent) -> list[Row]:
     p = agent.persona
     rows: list[Row] = [("Caractère", HEADER), ("Traits : " + ", ".join(p.traits), theme.TEXT)]
-    if p.qualites:
-        rows.append(("Qualités : " + ", ".join(p.qualites), GOOD))
-    if p.defauts:
-        rows.append(("Défauts : " + ", ".join(p.defauts), BAD))
+    describe = agent.personality.describe
+    if agent.qualites:
+        rows.append(("Qualités : " + ", ".join(map(describe, agent.qualites)), GOOD))
+    if agent.defauts:
+        rows.append(("Défauts : " + ", ".join(map(describe, agent.defauts)), BAD))
     if p.interests:
         rows.append(("Intérêts : " + ", ".join(p.interests), theme.TEXT_DIM))
     likes = [FOODS[f].label for f in p.aime if f in FOODS]
@@ -48,6 +49,14 @@ def career_rows(engine: Engine, agent: Agent) -> list[Row]:
         return []
     rows: list[Row] = [("", theme.TEXT), ("Travail et études", HEADER), (lines[0], theme.TEXT)]
     return rows + [(line, NOTE if line.startswith("Jour ") else theme.TEXT_DIM) for line in lines[1:]]
+
+
+def personality_rows(engine: Engine, agent: Agent) -> list[Row]:
+    """Évolution du caractère : les derniers traits gagnés, renforcés ou perdus, et pourquoi."""
+    lines = engine.personalities.lines(agent)
+    if not lines:
+        return []
+    return [("", theme.TEXT), ("Évolution du caractère", HEADER)] + [(line, NOTE) for line in lines]
 
 
 def project_rows(engine: Engine, agent: Agent) -> list[Row]:
@@ -145,7 +154,8 @@ class PortraitScreen:
             return
         # Colonne de gauche : caractère puis humeur
         y = top
-        rows = (character_rows(agent) + career_rows(self.engine, agent) + project_rows(self.engine, agent)
+        rows = (character_rows(agent) + personality_rows(self.engine, agent) + career_rows(self.engine, agent)
+                + project_rows(self.engine, agent)
                 + [("", theme.TEXT)] + mood_rows(self.engine, agent))
         for text, color in rows:
             for line in wrap_text(text, font, column) if text else [""]:

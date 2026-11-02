@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from sim.config import LLMConfig
 
 RequestKind = Literal["decision", "dialogue", "summary", "plan", "reflection", "line", "debrief", "house_plan", "baby_talk", "birth",
-                      "event_story", "portrait", "interview", "party", "rumor", "project"]
+                      "event_story", "portrait", "interview", "party", "rumor", "project", "personality"]
 
 
 class LLMRequest(BaseModel):

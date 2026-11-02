@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agents.actions import action_label, away_phrase
 from agents.aspiration import Aspiration
+from agents.personality import Personality
 from agents.memory import Memory
 from agents.needs import Needs
 from agents.persona import Persona
@@ -72,6 +73,7 @@ class Agent(BaseModel):
     sick_paid: dict[str, int] = Field(default_factory=dict)  # année -> jours de maladie déjà payés
     career: Career | None = None         # emploi, études ou école (sim/career.py)
     aspiration: Aspiration | None = None  # projet de vie (sim/projects.py)
+    personality: Personality = Field(default_factory=Personality)  # traits gagnés ou perdus (sim/personality.py)
     visitor: bool = False                # voisin ou parent en visite (sim/visitors.py), hors du ménage
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
@@ -82,6 +84,14 @@ class Agent(BaseModel):
     @property
     def name(self) -> str:
         return self.persona.name
+
+    @property
+    def qualites(self) -> list[str]:
+        return self.personality.effective(self.persona.qualites, "qualite")
+
+    @property
+    def defauts(self) -> list[str]:
+        return self.personality.effective(self.persona.defauts, "defaut")
 
     @property
     def bed_id(self) -> str:

@@ -273,6 +273,12 @@ objectif et son dernier constat ; les plans et réflexions apparaissent aussi da
   et l'IA planifie le mois suivant. Environ trois mois plus tard, le projet est accompli, et un
   nouveau vient après quelques jours. La fiche (P) montre la progression.
 
+- **Caractère qui évolue** : chaque conclusion de fond d'une réflexion est un indice. Après trois
+  indices (et au moins une semaine après le dernier changement), l'IA décide si une qualité ou un
+  défaut s'ajoute, se renforce (« patiente, de plus en plus ») ou s'efface, ou rien du tout. Le
+  changement devient un souvenir marquant, entre dans tous les prompts (la personne et la famille la
+  voient changer) et la fiche (P) en garde l'historique, avec la raison.
+
 ## Conversations et relations
 
 - **Tour par tour** (`dialogue.mode: tour_par_tour`, par défaut) : chaque réplique est un appel LLM
