@@ -267,6 +267,21 @@ objectif et son dernier constat ; les plans et réflexions apparaissent aussi da
   À l'heure dite, les personnes concernées y vont d'elles-mêmes (l'horaire et les urgences passent
   avant) ; si l'activité est réservée à l'autre, on va la faire à côté en jasant. Promesse tenue :
   affection en hausse. Promesse brisée : celui qui attendait s'en souvient et la tension monte.
+- **Visite** (`data/voisins.yaml`) : grand-mère, voisin, amis des enfants (maison), voisin du rang,
+  sœur, chum de Maxime (terrain). Certains jours (un sur quatre en semaine, un sur deux les fins de
+  semaine et fériés ; les jeunes seulement quand l'école est fermée), quelqu'un arrive par l'arrêt
+  d'autobus entre 10 h et 17 h, reste une heure ou deux, jase avec la famille, puis repart. Les
+  visiteurs ne font pas partie du ménage (ni achats, ni travaux, ni décision par l'IA), mais gardent
+  leurs souvenirs et leurs relations d'une visite à l'autre ; on peut aussi les interroger (T).
+- **Fêtes** : un mercredi ou un jeudi (ou à l'approche d'un férié), un adulte organise parfois une
+  fête pour le samedi : l'IA choisit le titre, l'heure et les invités parmi les voisins et la parenté.
+  Seul l'hôte le sait au départ ; l'invitation passe de bouche à oreille dans les conversations. Le
+  jour venu, les invités arrivent, ceux qui n'étaient pas au courant ont la surprise, et tout le
+  monde s'en souvient.
+- **Rumeurs** : après une conversation, quelqu'un répète parfois un souvenir marquant sur une personne
+  absente. La rumeur passe de conversation en conversation (jamais devant la personne visée) et l'IA
+  la déforme à l'occasion, comme au téléphone arabe. La personne visée finit parfois par l'apprendre
+  et en veut à qui l'a répandue. Tout est noté dans le journal.
 
 Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, la limite
 `llm.max_calls_per_minute` ralentit les conversations au lieu de dépenser plus.

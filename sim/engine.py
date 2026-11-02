@@ -49,6 +49,7 @@ from sim.calendrier import Calendar
 from sim.career import Careers
 from sim.family import FamilyLife
 from sim.interview import Interviews
+from sim.gossip import Gossip
 from sim.visitors import Visitors
 from sim.portrait import Portraits
 from sim.credit import Credit
@@ -156,6 +157,7 @@ class Engine:
         self.interviews = Interviews(self)  # entrevue : questions du joueur et idées soufflées (touche T)
         self.visitors = Visitors(self)      # voisins et parenté qui passent faire un tour
         self.everyone: list[Agent] = list(self.agents)  # famille + visiteurs présents (mis à jour en place)
+        self.gossip = Gossip(self)          # fêtes et rumeurs de bouche à oreille
         self.last_recall: dict[str, list] = {}   # agent -> souvenirs retenus pour sa dernière demande à l'IA  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
@@ -676,6 +678,7 @@ class Engine:
         self.family.poll()
         self.portraits.poll()
         self.interviews.poll()
+        self.gossip.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -732,6 +735,7 @@ class Engine:
         for agent in self.agents:
             self._update_agent(agent)
         self.visitors.update()
+        self.gossip.update()
         for visitor in list(self.visitors.present):
             self._update_visitor(visitor)
         self.everyone[:] = [*self.agents, *self.visitors.present]
@@ -800,6 +804,7 @@ class Engine:
         lines += [f"{a.name} est en deuil." for a in agents if a.grieving_until is not None]
         if self.visitors.present:
             lines.append(self.visitors.context_line())
+        lines += self.gossip.context_lines(agents)
         return "\n".join(lines)
 
     def family_context(self, agents: list[Agent]) -> str:
@@ -1434,6 +1439,7 @@ class Engine:
             "family": self.family.to_dict(),
             "history": self.history.to_list(),
             "visitors": self.visitors.to_dict(),
+            "gossip": self.gossip.to_dict(),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -1481,6 +1487,7 @@ class Engine:
         self.social.clear()
         self.social.load_dict(data.get("social", {}))
         self.visitors.load_dict(data.get("visitors"))
+        self.gossip.load_dict(data.get("gossip"))
         self.everyone[:] = list(self.agents)
         self.game_over = self.alive_count() == 0
         if self.llm is not None and "llm_stats" in data:

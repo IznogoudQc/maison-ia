@@ -244,6 +244,7 @@ def main() -> None:
         promises = [f"{p.text} ({engine.social.when_label(p.minute)})"
                     for p in engine.social.promises if p.status == "pending"]
         extra = list(engine.family.hud_lines()) + engine.credit.hud_lines() + engine.visitors.hud_lines()
+        extra += engine.gossip.hud_lines()
         if house.layout.wild:
             extra.append(f"Bois : {engine.economy.household.wood} bûches   "
                          f"Arbres : {len(house.objects_of_kind('arbre'))}")

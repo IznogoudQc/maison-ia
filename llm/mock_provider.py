@@ -159,6 +159,10 @@ class MockProvider(LLMProvider):
                 text = self._portrait(request)
             elif request.kind == "interview":
                 text = self._interview(request)
+            elif request.kind == "party":
+                text = self._party(request)
+            elif request.kind == "rumor":
+                text = self._rumor(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -385,6 +389,23 @@ class MockProvider(LLMProvider):
             answer = (f"Bonne question. Dernièrement, je repense à ça : {memories[-1]}" if memories
                       else "Bonne question… je sais pas trop quoi te dire.")
         return json.dumps({"answer": answer}, ensure_ascii=False)
+
+    def _party(self, request: LLMRequest) -> str:
+        """Fête simple : un titre selon l'occasion, deux invités au plus."""
+        occasion = request.meta.get("occasion", "")
+        title = f"Party de {occasion}" if occasion else self.rng.choice(["BBQ des voisins", "Soirée jeux de société",
+                                                                         "Souper canadien"])
+        return json.dumps({"title": title, "reason": "ça fait longtemps qu'on a vu du monde",
+                           "hour": self.rng.choice([13, 15, 17]), "guests": request.meta.get("guests", [])[:2]},
+                          ensure_ascii=False)
+
+    def _rumor(self, request: LLMRequest) -> str:
+        """Téléphone arabe : la rumeur gagne un « paraît que » et une exagération."""
+        heard = request.meta.get("heard", "")
+        twist = self.rng.choice(["pis c'est pas la première fois", "en tout cas c'est ce qu'on dit", "devant tout le monde"])
+        base = heard.rstrip(".")
+        text = f"{base}, {twist}." if base.startswith("Paraît que") else f"Paraît que {base}, {twist}."
+        return json.dumps({"text": text}, ensure_ascii=False)
 
     def _portrait(self, request: LLMRequest) -> str:
         """Ressenti tiré des causes calculées par le moteur ; avis tirés de l'affection et de la tension."""
