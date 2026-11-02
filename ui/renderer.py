@@ -7,7 +7,7 @@ import math
 import pygame
 
 from agents.agent import Agent
-from ui import pawns, props, sprites, theme
+from ui import living, pawns, props, sprites, theme
 from ui.sprites import TILE
 from world.house import House
 
@@ -51,6 +51,7 @@ class Renderer:
         self._pawn_jobs: list[tuple] = []   # (profondeur, genre, ...) : personnages et dormeurs lisses
         self._props: tuple[int, list[tuple]] = (-1, [])   # (révision, [(objet, clé, bas)]) meubles lisses
         self._lit_props: dict[tuple, pygame.Surface] = {}
+        self._steam: list[tuple[int, int]] = []
         self._light: tuple[int, set[str], float, float] = (0, set(), 0.0, 0.0)
         self._label_cache: dict[str, pygame.Surface] = {}
         indoor = {n: r for n, r in house.rooms.items() if n not in house.outdoor_rooms}
@@ -360,6 +361,9 @@ class Renderer:
         view = self.view_rect()
         low.set_clip(view)
         low.blit(self.background, view.topleft, view)
+        # Couche du dessus (pas éclairée) : animations des meubles, bulles, marqueur
+        self.overlay.fill((0, 0, 0, 0), view)
+        self._pawn_jobs = []
         for (x0, y0, x1, y1), _name, status, fraction, contractor in self.blueprint:
             if status == "chantier":
                 sprites.draw_construction(low, (x0, y0, x1, y1), fraction, contractor)
@@ -367,31 +371,23 @@ class Renderer:
                 sprites.draw_stake_line(low, pygame.Rect(x0 * TILE + 3, y0 * TILE + 3, (x1 - x0 + 1) * TILE - 6,
                                                          (y1 - y0 + 1) * TILE - 6), status == "pret")
         for x, y in self.marked_trees:
-            sprites.draw_tree_ribbon(low, x, y)
+            self._pawn_jobs.append(((y + 1) * TILE + 0.2, "ruban", x, y))
         pile = self.house.objects.get("corde_bois")
-        if pile is not None:
-            sprites.draw_woodpile(low, pile, self.wood)
-        for vehicle in self.house.objects_of_kind("vehicule"):
-            if vehicle.id not in self.vehicles_out:  # parti avec quelqu'un : l'entrée est vide
-                sprites.draw_vehicle(low, vehicle)
+        if pile is not None and self.wood:
+            self._pawn_jobs.append(((pile.rect[1] + pile.rect[3]) * TILE, "bois", pile))
         if "piscine" in self.house.objects:
-            sprites.draw_pool_shimmer(low, self.house.objects["piscine"], t)
-        self._draw_dogs(low, agents, t)
+            sprites.draw_pool_shimmer(self.overlay, self.house.objects["piscine"], t)
+        self._draw_dogs(agents, t)
         self._draw_windows(low, hour)
         self._draw_memorials(low, agents)
         visible = [a for a in agents if not a.is_away and not a.dead]
-        # Couche du dessus (pas éclairée) : animations des meubles, accessoires, vapeur, bulles
-        self.overlay.fill((0, 0, 0, 0), view)
-        steam_points = self._draw_object_states(self.overlay, visible)
+        self._steam = self._draw_object_states(self.overlay, visible)
 
         # Personnages du haut vers le bas pour que ceux du bas passent devant
-        self._pawn_jobs = []
         overlays: list[tuple[Agent, int, int]] = []  # (agent, centre x, haut de la tête) en basse résolution
         for agent in sorted(visible, key=lambda a: self.display_pos.get(a.id, a.pos)[1]):
             overlays.append(self._draw_agent(low, agent))
 
-        for x, y in steam_points:
-            sprites.draw_steam(self.overlay, x, y, t)
         self._draw_lighting(low, hour, visible, view)
 
         # Après l'éclairage, pour rester lisibles la nuit
@@ -409,6 +405,8 @@ class Renderer:
         surface.fill((20, 22, 26), map_area)
         surface.blit(scaled, (0, 0))
         self._draw_depth(surface, view)
+        for x, y in self._steam:
+            living.draw_steam(surface, self.to_screen(x, y), self.scale, t)
         surface.blit(pygame.transform.scale(self.overlay.subsurface(view), scaled.get_size()), (0, 0))
         self._draw_labels(surface)
         for agent in visible:
@@ -466,7 +464,9 @@ class Renderer:
                 sprites.draw_food(low, plate, dinner=meal == "souper")
         fire = objects.get("feu")
         if fire is not None and self._fire_burning(agents):
-            steam.append(sprites.draw_flames(low, fire, self.time))
+            x, y, _w, _h = fire.rect
+            self._pawn_jobs.append(((y + 1) * TILE + 0.2, "flammes", fire))
+            steam.append((x * TILE + TILE // 2, y * TILE))
         if any(self._active(a, "bbq") for a in agents) and "bbq" in objects:
             x, y, _w, _h = objects["bbq"].rect
             steam.append((x * TILE + TILE // 2, y * TILE + 4))
@@ -487,7 +487,7 @@ class Renderer:
         hour = self.time_of_day
         return FIRE_HOURS[0] <= hour < FIRE_HOURS[1] or any(self._active(a, "cuisiner", "veiller") for a in agents)
 
-    def _draw_dogs(self, low: pygame.Surface, agents: list[Agent], t: float) -> None:
+    def _draw_dogs(self, agents: list[Agent], t: float) -> None:
         """Le chien trotte autour de qui le promène ou le flatte, sinon il flâne devant sa niche."""
         for niche in self.house.objects_of_kind("chien"):
             friend = next((a for a in agents if a.action is not None and a.action.started and not a.is_away
@@ -497,25 +497,29 @@ class Renderer:
                 fx, fy = self.display_pos.get(friend.id, friend.pos)
                 radius = 9 if friend.action.name == "promener" else 5
                 angle = t * (2.5 if friend.action.name == "promener" else 1.0)
-                cx = round(fx * TILE + TILE / 2 + radius * math.cos(angle))
-                cy = round(fy * TILE + TILE - 3 + radius * 0.5 * math.sin(angle))
+                cx = fx * TILE + TILE / 2 + radius * math.cos(angle)
+                cy = fy * TILE + TILE - 1 + radius * 0.5 * math.sin(angle)
                 facing = -1 if math.sin(angle) > 0 else 1
             else:
                 x, y, w, h = niche.rect
                 drift = math.sin(t * 0.7)
-                cx = round((x + w) * TILE + 4 + 3 * drift)
-                cy = round((y + h) * TILE - 4)
+                cx = (x + w) * TILE + 4 + 3 * drift
+                cy = (y + h) * TILE - 1
                 facing = 1 if math.cos(t * 0.7) > 0 else -1
-            sprites.draw_dog(low, (cx, cy), t, facing)
+            self._pawn_jobs.append((cy, "chien", niche, cx, cy, facing))
 
     def _draw_agent(self, low: pygame.Surface, agent: Agent) -> tuple[Agent, int, int]:
         pose = self._pose(agent)
         if agent.persona.stage == "bebe":
             crib = self.house.objects.get(agent.bed_id)
-            cx, cy = ((crib.rect[0] * TILE + TILE // 2, crib.rect[1] * TILE + TILE // 2) if crib is not None
-                      else (round(agent.pos[0] * TILE + TILE / 2), round(agent.pos[1] * TILE + TILE / 2)))
-            sprites.draw_baby(low, agent.persona, (cx, cy), agent.is_sleeping)
-            return agent, cx, cy - 6
+            if crib is not None:
+                x, y, w, h = crib.rect
+                cx, cy, depth = (x + w / 2) * TILE, (y + h / 2) * TILE, (y + h) * TILE + 0.5
+            else:
+                cx, cy = agent.pos[0] * TILE + TILE / 2, agent.pos[1] * TILE + TILE / 2
+                depth = cy + 8
+            self._pawn_jobs.append((depth, "bebe", agent, cx, cy))
+            return agent, round(cx), round(cy) - 6
         if pose == "lying" and agent.bed_id == "tente":
             hx, hy = self._head_low_pos(agent)
             return agent, round(hx), round(hy) - 6  # dans la tente : on ne voit que les « z z »
@@ -527,7 +531,8 @@ class Renderer:
             return agent, round(hx), round(hy) - 5
         if pose == "swimming":
             center = self._swim_spot(agent)
-            sprites.draw_swimmer(low, agent.persona, center, self.time)
+            pool = self.house.objects["piscine"]
+            self._pawn_jobs.append(((pool.rect[1] + pool.rect[3]) * TILE + 0.5, "nageur", agent, center))
             return agent, center[0], center[1] - 6
 
         # Personnage lisse dessiné plus tard en haute résolution (_draw_pawns) ; ici l'ombre et les accessoires
@@ -554,11 +559,10 @@ class Renderer:
         used = self._shower_of(agent) if pose == "shower" else self._used_object(agent)
         if used is not None and (pose == "shower" or (agent.action.started and props.prop_key(used) is not None)):
             depth = max(feet, (used.rect[1] + used.rect[3]) * TILE + 0.5)  # assis ou debout devant : par-dessus
-        self._pawn_jobs.append((depth, "pion", agent, cx, feet - bob, direction, sitting, pose == "shower"))
         top = round(feet - height)
-        if pose != "shower":
-            # Les accessoires gardent le repère de l'ancien sprite de 16 px de large
-            self._draw_accessory(self.overlay, agent, direction, round(cx) - 8, top + 4)
+        # Les accessoires gardent le repère de l'ancien sprite de 16 px de large
+        tools = [] if pose == "shower" else self._accessories(agent, direction, cx - 8, top + 4)
+        self._pawn_jobs.append((depth, "pion", agent, cx, feet - bob, direction, sitting, pose == "shower", tools))
         return agent, round(cx), top
 
     def _visible_props(self, view: pygame.Rect) -> list[tuple]:
@@ -591,6 +595,8 @@ class Renderer:
             kind = job[2]
             if kind == "meuble":
                 obj, key = job[3], job[4]
+                if obj.id in self.vehicles_out:
+                    continue  # parti avec quelqu'un : l'entrée est vide
                 dark = darkness(obj.room)
                 cache = (key, self.scale, round(dark * 24), tint)
                 image = self._lit_props.get(cache)
@@ -607,14 +613,42 @@ class Renderer:
                                   darkness(self.house.room_at(agent.pos)), tint)
                 sx, sy = self.to_screen(hx, hy)
                 surface.blit(image, (round(sx - image.get_width() / 2), round(sy - 4.5 * self.scale)))
-            else:
-                agent, cx, feet, direction, sitting, shower = job[3:]
+            elif kind == "pion":
+                agent, cx, feet, direction, sitting, shower, tools = job[3:]
                 height = round(pawns.pawn_height(agent.persona) * TILE * self.scale)
                 image = pawns.pawn_image(agent.persona, direction, sitting, height)
                 image = pawns.lit(image, darkness(self.house.room_at(agent.pos)), tint)
                 surface.blit(image, image.get_rect(midbottom=self.to_screen(cx, feet)))
                 if shower:
                     self._draw_shower_glass(surface, self._shower_of(agent))
+                for name, tx, ty in tools:
+                    living.draw_tool(surface, name, self.to_screen(tx, ty), self.scale, self.time,
+                                     chainsaw="scie" in self.purchases)
+            elif kind == "bebe":
+                agent, cx, cy = job[3:]
+                living.draw_baby(surface, agent.persona, self.to_screen(cx, cy), self.scale, agent.is_sleeping,
+                                 (darkness(self.house.room_at(agent.pos)), tint))
+            elif kind == "nageur":
+                agent, (cx, cy) = job[3], job[4]
+                living.draw_swimmer(surface, agent.persona, self.to_screen(cx, cy), self.scale, self.time,
+                                    (darkness(None), tint))
+            elif kind == "chien":
+                niche, cx, cy, facing = job[3:]
+                living.draw_dog(surface, self.to_screen(cx, cy), self.scale, self.time, facing,
+                                (darkness(niche.room), tint))
+            elif kind == "ruban":
+                x, y = job[3], job[4]
+                living.draw_ribbon(surface, self.to_screen(x * TILE + TILE / 2, y * TILE + TILE - 4), self.scale)
+            elif kind == "bois":
+                pile = job[3]
+                key = ("bois", pile.rect[2], pile.rect[3], min(50, self.wood))
+                x0, y0, _x1, _y1 = props.bounds(key)
+                image = pawns.lit(props.prop_image(key, self.scale), darkness(None), tint)
+                surface.blit(image, self.to_screen(pile.rect[0] * TILE + x0, pile.rect[1] * TILE + y0))
+            elif kind == "flammes":
+                x, y, _w, _h = job[3].rect
+                living.draw_flames(surface, self.to_screen(x * TILE + TILE / 2, y * TILE + TILE / 2 + 1), self.scale,
+                                   self.time)
 
     def _draw_shower_glass(self, surface: pygame.Surface, shower) -> None:
         """Vitre embuée devant la personne dans la douche (en haute résolution)."""
@@ -641,28 +675,29 @@ class Renderer:
             obj = self.house.object_at_spot(agent.action.use_pos)
         return obj if obj is not None and obj.kind == "douche" and obj.id != "baril" else None
 
-    def _draw_accessory(self, low: pygame.Surface, agent: Agent, direction: str, left: int, top: int) -> None:
-        """Objet tenu ou posé selon l'action en cours (coordonnées du sprite 16 px de large)."""
-        hand_x = {"down": left + 11, "left": left + 5, "right": left + 8, "up": left + 11}[direction]
+    def _accessories(self, agent: Agent, direction: str, left: float, top: float) -> list[tuple[str, float, float]]:
+        """Objets tenus ou posés selon l'action en cours : (nom, x, y) en px de base."""
+        hand_x = left + {"down": 11, "left": 5, "right": 8, "up": 11}[direction]
         hand_y = top + 10
         if self._active(agent, "telephone") and direction != "up":
-            sprites.draw_phone(low, hand_x, hand_y, self.time)
-        elif self._active(agent, "lire") and direction != "up":
-            sprites.draw_book(low, left + 5 if direction == "down" else hand_x - 2, hand_y + 1)
-        elif self._active(agent, "jouer"):
-            sprites.draw_lego(low, left + 8, top + 14)
-        elif self._active(agent, "tondre"):
-            sprites.draw_mower(low, left + (12 if direction != "left" else -2), top + 12)
-        elif self._active(agent, "construire"):
-            sprites.draw_hammer(low, hand_x, hand_y, self.time)
-        elif self._active(agent, "couper"):
-            sprites.draw_axe(low, hand_x, hand_y, self.time, chainsaw="scie" in self.purchases)
-        elif self._active(agent, "dejeuner") and agent.persona.age >= 18 and "table" in self.house.objects:
+            return [("telephone", hand_x + 1, hand_y + 2)]
+        if self._active(agent, "lire") and direction != "up":
+            return [("livre", left + 8.5 if direction == "down" else hand_x + 1.5, hand_y + 2)]
+        if self._active(agent, "jouer"):
+            return [("lego", left + 8, top + 14)]
+        if self._active(agent, "tondre"):
+            return [("tondeuse", left + (14 if direction != "left" else 0), top + 14)]
+        if self._active(agent, "construire"):
+            return [("marteau", hand_x, hand_y)]
+        if self._active(agent, "couper"):
+            return [("hache", hand_x, hand_y)]
+        if self._active(agent, "dejeuner") and agent.persona.age >= 18 and "table" in self.house.objects:
             # Café du matin posé sur la table, entre l'adulte et le centre de la table
             x, y, w, h = self.house.objects["table"].rect
             tcx, tcy = (x + w / 2) * TILE, (y + h / 2) * TILE
             px, py = left + 8, top + 12
-            sprites.draw_mug(low, round(px + (tcx - px) * 0.35), round(py + (tcy - py) * 0.35))
+            return [("tasse", px + (tcx - px) * 0.35, py + (tcy - py) * 0.35)]
+        return []
 
     # ------------------------------------------------------------------ éclairage
 

@@ -1,6 +1,8 @@
-"""Pixel art généré dans le code : sols, murs, meubles et personnages (aucun fichier externe).
+"""Décor de fond dessiné dans le code : sols, murs, fenêtres, ombres, icônes (aucun fichier externe).
 
-Tout est dessiné en basse résolution (TILE px par tuile) puis agrandi par le renderer.
+Tout est dessiné en basse résolution (TILE px par tuile) puis agrandi par le renderer. Les personnages,
+meubles, arbres et éléments animés sont dessinés en haute résolution (ui/pawns.py, ui/props.py,
+ui/living.py) ; les dessins d'objets d'ici servent de repli pour un objet inconnu et pour les ombres.
 """
 
 from __future__ import annotations
@@ -504,82 +506,6 @@ def _bbq(surf: pygame.Surface, r: pygame.Rect) -> None:
     pygame.draw.line(surf, (90, 90, 96), (r.centerx, r.centery - 4), (r.centerx, r.centery + 4))
 
 
-def draw_car(surf: pygame.Surface, car: InteractiveObject) -> None:
-    """Auto vue de dessus, garée dans l'entrée."""
-    x, y, w, h = car.rect
-    body = pygame.Rect(x * TILE + 3, y * TILE + 2, w * TILE - 6, h * TILE - 4)
-    for wx in (body.x - 1, body.right - 2):
-        for wy in (body.y + 6, body.bottom - 10):
-            pygame.draw.rect(surf, (24, 24, 28), (wx, wy, 3, 6))
-    pygame.draw.rect(surf, (178, 40, 44), body, border_radius=5)
-    pygame.draw.rect(surf, (110, 20, 24), body, 1, border_radius=5)
-    windshield = pygame.Rect(body.x + 3, body.y + 8, body.width - 6, 6)
-    pygame.draw.rect(surf, (150, 196, 226), windshield, border_radius=2)
-    rear = pygame.Rect(body.x + 3, body.bottom - 12, body.width - 6, 5)
-    pygame.draw.rect(surf, (130, 176, 206), rear, border_radius=2)
-    for lx in (body.x + 2, body.right - 4):
-        pygame.draw.rect(surf, (252, 240, 180), (lx, body.y + 1, 2, 2))
-
-
-VEHICLE_COLORS = {"compacte": (200, 60, 50), "vus": (40, 70, 110), "pickup": (90, 110, 70), "moto": (30, 30, 34),
-                  "vtt": (200, 120, 30), "velo": (40, 140, 200)}
-
-
-def draw_vehicle(surf: pygame.Surface, obj: InteractiveObject) -> None:
-    """Véhicule garé, vu de dessus ; le type est dans l'id (vehicule_<type>_<n>)."""
-    kind = obj.id.split("_")[1] if obj.id.count("_") >= 2 else "compacte"
-    x, y, w, h = obj.rect
-    r = pygame.Rect(x * TILE, y * TILE, w * TILE, h * TILE)
-    color = VEHICLE_COLORS.get(kind, (200, 60, 50))
-    draw_shadow(surf, r.inflate(-3, -2), alpha=80)
-    if kind == "velo":
-        pygame.draw.circle(surf, (30, 30, 30), (r.centerx, r.y + 3), 3, 1)
-        pygame.draw.circle(surf, (30, 30, 30), (r.centerx, r.bottom - 4), 3, 1)
-        pygame.draw.line(surf, color, (r.centerx, r.y + 3), (r.centerx, r.bottom - 4), 2)
-        return
-    if kind in ("moto", "vtt"):
-        body = r.inflate(-6 if kind == "moto" else -2, -4)
-        pygame.draw.rect(surf, (25, 25, 25), (body.x - 1, body.y + 1, body.width + 2, 4))       # roue avant
-        pygame.draw.rect(surf, (25, 25, 25), (body.x - 1, body.bottom - 5, body.width + 2, 4))  # roue arrière
-        box(surf, body.inflate(0, -6), color)
-        pygame.draw.line(surf, (200, 200, 205), (body.x - 2, body.y + 6), (body.right + 1, body.y + 6))  # guidon
-        return
-    if kind == "compacte":
-        draw_car(surf, obj)
-        return
-    body = r.inflate(-3, -2)
-    box(surf, body, color)
-    pygame.draw.rect(surf, (170, 200, 220), (body.x + 2, body.y + 4, body.width - 4, 6))  # pare-brise
-    if kind == "pickup":
-        pygame.draw.rect(surf, (60, 70, 50), (body.x + 2, body.centery + 2, body.width - 4, body.height // 2 - 4))
-        for i in range(3):  # des planches dans la boîte
-            pygame.draw.line(surf, (214, 178, 120), (body.x + 3, body.centery + 5 + i * 3),
-                             (body.right - 4, body.centery + 5 + i * 3))
-    else:
-        pygame.draw.rect(surf, (170, 200, 220), (body.x + 2, body.bottom - 9, body.width - 4, 5))
-    for wx in (body.x - 1, body.right - 1):
-        for wy in (body.y + 3, body.bottom - 7):
-            pygame.draw.rect(surf, (20, 20, 20), (wx, wy, 2, 5))
-
-
-def draw_mower(surf: pygame.Surface, x: int, y: int) -> None:
-    pygame.draw.rect(surf, (200, 40, 40), (x, y, 6, 5))
-    pygame.draw.rect(surf, (30, 30, 30), (x, y, 6, 5), 1)
-    pygame.draw.line(surf, (60, 60, 60), (x + 1, y), (x - 2, y - 5))
-
-
-def draw_swimmer(surf: pygame.Surface, persona: Persona, center: tuple[int, int], t: float) -> None:
-    """Tête qui dépasse de l'eau, avec des ronds dans l'eau."""
-    head = character_frames(persona)[("down", 0)].subsurface((0, 0, 16, 9))
-    cx, cy = center
-    bob = round(math.sin(t * 3) * 1)
-    ripple = pygame.Rect(0, 0, 14, 6)
-    ripple.center = (cx, cy + 4)
-    pygame.draw.ellipse(surf, (150, 206, 240), ripple, 1)
-    surf.blit(head, (cx - 8, cy - 6 + bob))
-
-
-
 # ---------------------------------------------------------------------- terrain (scénario « terrain »)
 
 TREE_COLORS = {
@@ -635,17 +561,6 @@ def _campfire(surf: pygame.Surface, r: pygame.Rect) -> None:
         pygame.draw.circle(surf, (128, 124, 120), (r.centerx + round(math.cos(a) * 6), r.centery + round(math.sin(a) * 5)), 2)
     pygame.draw.line(surf, (110, 70, 40), (r.centerx - 4, r.centery + 2), (r.centerx + 4, r.centery - 2), 2)
     pygame.draw.line(surf, (96, 60, 36), (r.centerx - 4, r.centery - 2), (r.centerx + 4, r.centery + 2), 2)
-
-
-def draw_flames(surf: pygame.Surface, fire: InteractiveObject, t: float) -> tuple[int, int]:
-    """Flammes animées du feu de camp ; renvoie le point d'où monte la fumée."""
-    x, y, _w, _h = fire.rect
-    cx, cy = x * TILE + TILE // 2, y * TILE + TILE // 2
-    for i, (color, height) in enumerate((((236, 96, 40), 6), ((250, 170, 50), 4), ((255, 236, 140), 2))):
-        flicker = math.sin(t * 9 + i * 1.7) * 1.5
-        top = cy - 4 - height - round(flicker)
-        pygame.draw.polygon(surf, color, [(cx - 4 + i, cy + 1), (cx + 4 - i, cy + 1), (cx, top)])
-    return cx, cy - 8
 
 
 def _cooler(surf: pygame.Surface, r: pygame.Rect) -> None:
@@ -719,48 +634,6 @@ def draw_construction(surf: pygame.Surface, outer: tuple[int, int, int, int], fr
         pygame.draw.line(surf, (40, 40, 40), (sign.x + 2, sign.centery), (sign.right - 3, sign.centery))
 
 
-def draw_hammer(surf: pygame.Surface, x: int, y: int, t: float) -> None:
-    swing = abs(math.sin(t * 7))
-    tip = (x + 3, y - 1 - round(swing * 4))
-    pygame.draw.line(surf, (120, 84, 50), (x, y + 2), tip, 1)
-    pygame.draw.rect(surf, (90, 90, 96), (tip[0] - 1, tip[1] - 1, 3, 2))
-
-
-def draw_tree_ribbon(surf: pygame.Surface, x: int, y: int) -> None:
-    """Ruban rouge sur le tronc : cet arbre est sur l'emplacement de la maison."""
-    surf.fill((220, 40, 40), (x * TILE + TILE // 2 - 2, y * TILE + TILE - 5, 5, 2))
-
-
-def draw_woodpile(surf: pygame.Surface, pile: InteractiveObject, logs: int) -> None:
-    """Corde de bois : une rangée de bûches par tranche de 10, jusqu'à 5 rangées."""
-    x, y, w, _h = pile.rect
-    base_x, base_y = x * TILE, y * TILE + TILE - 2
-    rows = min(5, (logs + 9) // 10)
-    for row in range(rows):
-        count = min(10, logs - row * 10)
-        for i in range(min(count, w * TILE // 3)):
-            cx = base_x + 2 + i * 3 + (row % 2)
-            cy = base_y - row * 3
-            pygame.draw.circle(surf, (150, 104, 62), (cx, cy), 2)
-            surf.set_at((cx, cy), (206, 170, 118))  # cerne du bois
-
-
-def draw_axe(surf: pygame.Surface, x: int, y: int, t: float, chainsaw: bool = False) -> None:
-    """Hache qui monte et descend (ou scie à chaîne qui vibre), et des copeaux."""
-    if chainsaw:
-        jitter = int(t * 30) % 2
-        pygame.draw.rect(surf, (230, 120, 30), (x - 1, y - 1 + jitter, 5, 3))
-        pygame.draw.line(surf, (190, 190, 196), (x + 4, y + jitter), (x + 9, y + jitter), 2)
-    else:
-        swing = math.sin(t * 8)
-        tip = (x + round(4 * math.cos(swing)), y - round(5 * math.sin(swing)) - 1)
-        pygame.draw.line(surf, (120, 84, 50), (x, y + 2), tip, 1)
-        pygame.draw.rect(surf, (180, 186, 196), (tip[0] - 1, tip[1] - 1, 3, 2))
-    rng = random.Random(int(t * 6))
-    for _ in range(2):
-        surf.set_at((x + rng.randint(2, 9), y + rng.randint(-4, 2)), (226, 196, 140))
-
-
 def _outhouse(surf: pygame.Surface, r: pygame.Rect) -> None:
     body = r.inflate(-2, 0)
     box(surf, body, (138, 98, 60))
@@ -791,23 +664,6 @@ def _crib(surf: pygame.Surface, r: pygame.Rect) -> None:
     pygame.draw.rect(surf, (250, 248, 240), r.inflate(-5, -5))
     for x in range(r.x + 3, r.right - 2, 3):
         pygame.draw.line(surf, (170, 140, 100), (x, r.y + 1), (x, r.y + 3))  # barreaux
-
-
-def draw_baby(surf: pygame.Surface, persona: Persona, center: tuple[int, int], sleeping: bool) -> None:
-    """Bébé emmailloté dans son berceau : couverture à la couleur de sa fiche, petite tête."""
-    cx, cy = center
-    blanket = pygame.Rect(cx - 4, cy - 1, 8, 6)
-    pygame.draw.ellipse(surf, tuple(persona.color), blanket)
-    pygame.draw.ellipse(surf, shade(tuple(persona.color), -50), blanket, 1)
-    pygame.draw.circle(surf, SKIN, (cx, cy - 3), 3)
-    hair = persona.look.get("hair", (90, 64, 44))
-    pygame.draw.line(surf, tuple(hair), (cx - 2, cy - 6), (cx + 2, cy - 6))
-    if sleeping:
-        pygame.draw.line(surf, (60, 40, 40), (cx - 2, cy - 3), (cx - 1, cy - 3))
-        pygame.draw.line(surf, (60, 40, 40), (cx + 1, cy - 3), (cx + 2, cy - 3))
-    else:
-        surf.set_at((cx - 1, cy - 3), (40, 30, 44))
-        surf.set_at((cx + 1, cy - 3), (40, 30, 44))
 
 
 def _console(surf: pygame.Surface, r: pygame.Rect) -> None:
@@ -979,20 +835,6 @@ def _doghouse(surf: pygame.Surface, r: pygame.Rect) -> None:
     pygame.draw.ellipse(surf, (40, 30, 24), (body.centerx - 3, body.bottom - 6, 6, 6))
 
 
-def draw_dog(surf: pygame.Surface, center: tuple[int, int], t: float, facing: int = 1) -> None:
-    """Petit chien brun vu de côté, la queue qui bat."""
-    cx, cy = center
-    body = (150, 100, 56)
-    draw_shadow(surf, pygame.Rect(cx - 5, cy + 1, 10, 4), ellipse=True, offset=(1, 1))
-    pygame.draw.ellipse(surf, body, (cx - 4, cy - 2, 8, 4))
-    pygame.draw.circle(surf, body, (cx + 4 * facing, cy - 3), 2)
-    surf.set_at((cx + 5 * facing, cy - 3), (30, 24, 20))
-    for dx in (-3, 2):
-        pygame.draw.line(surf, shade(body, -40), (cx + dx, cy + 1), (cx + dx, cy + 3))
-    wag = 1 if int(t * 8) % 2 else -1
-    pygame.draw.line(surf, body, (cx - 4 * facing, cy - 1), (cx - 6 * facing, cy - 3 + wag))
-
-
 KIND_DRAWERS.update({"cafe": _espresso, "foyer": _fire_pit, "exercice": _exercise_bike, "etude": _desk,
                      "billard": _pool_table, "babyfoot": _foosball, "pingpong": _ping_pong,
                      "cinema": _home_theater, "aquarium": _aquarium, "ruche": _beehive,
@@ -1049,45 +891,7 @@ def draw_object(surf: pygame.Surface, obj: InteractiveObject, body: bool = True)
 
 
 # ====================================================================== personnages
-# Grilles 16 colonnes : H cheveux, S peau, E yeux, T chandail, P pantalon, B chaussures
-
-HEADS = {
-    "down": ["................", ".....HHHHHH.....", "....HHHHHHHH....", "....HSSSSSSH....",
-             "....SSESSESS....", "....SSSSSSSS....", ".....SSSSSS....."],
-    "up": ["................", ".....HHHHHH.....", "....HHHHHHHH....", "....HHHHHHHH....",
-           "....HHHHHHHH....", "....SHHHHHHS....", ".....SSSSSS....."],
-    "left": ["................", ".....HHHHHH.....", "....HHHHHHHH....", "....SSSSHHHH....",
-             "....SESSSHHH....", "....SSSSSSHH....", ".....SSSSSS....."],
-}
-TORSOS = {
-    "down": ["....TTTTTTTT....", "...TTTTTTTTTT...", "...STTTTTTTTS...", "...STTTTTTTTS...",
-             "....TTTTTTTT...."],
-    "left": [".....TTTTTT.....", ".....TTTTTT.....", ".....TTTTTT.....", ".....TSTTTT.....",
-             ".....TTTTTT....."],
-}
-TORSOS["up"] = TORSOS["down"]
-LEGS = {
-    "down": [
-        ["....PPPPPPPP....", "....PPP..PPP....", "....PPP..PPP....", "....BBB..BBB...."],
-        ["....PPPPPPPP....", "....PPP..PPP....", "....BBB..PPP....", ".........BBB...."],
-        ["....PPPPPPPP....", "....PPP..PPP....", "....PPP..BBB....", "....BBB........."],
-    ],
-    "left": [
-        [".....PPPPPP.....", ".....PPPPPP.....", "......PPPP......", ".....BBBBB......"],
-        [".....PPPPPP.....", "....PPP..PPP....", "...PPP....PPP...", "..BBB......BBB.."],
-        [".....PPPPPP.....", ".....PPPPPP.....", ".....PPPPP......", "....BBBBB......."],
-    ],
-}
-LEGS["up"] = LEGS["down"]
-# Assis : cuisses repliées (vues de face) ou allongées devant soi (de profil)
-SIT_LEGS = {
-    "down": ["....PPPPPPPP....", "....BBB..BBB...."],
-    "up": ["....PPPPPPPP...."],
-    "left": ["...PPPPPPPP.....", "...BB..........."],
-}
-SIT_FRAME = 3   # index de l'image « assis » dans character_frames
-EMPTY_ROW = "." * 16
-SPRITE_ROWS = 16  # hauteur utile ; une rangée vide est ajoutée pour le contour
+# Couleurs des personnages (dessinés en haute résolution par ui/pawns.py)
 
 # Apparence par persona ; les personas ajoutés ont un style par défaut
 STYLES: dict[str, dict] = {
@@ -1098,39 +902,6 @@ STYLES: dict[str, dict] = {
 }
 DEFAULT_STYLE = {"hair": (84, 64, 48), "pants": (62, 62, 82), "long_hair": False}
 SKIN: Color = (242, 204, 170)
-
-
-def _set(rows: list[str], y: int, cols: range | tuple[int, ...], char: str) -> None:
-    row = list(rows[y])
-    for x in cols:
-        row[x] = char
-    rows[y] = "".join(row)
-
-
-def _long_hair(rows: list[str], direction: str) -> None:
-    if direction == "down":
-        for y in range(3, 8):
-            _set(rows, y, (4, 11), "H")
-    elif direction == "up":
-        rows[5] = rows[6] = "....HHHHHHHH...."
-        _set(rows, 7, range(5, 11), "H")
-    else:
-        for y in range(3, 7):
-            _set(rows, y, range(9, 12), "H")
-        _set(rows, 7, (9, 10), "H")
-
-
-def _body_rows(direction: str, legs: list[str], long_hair: bool, child: bool) -> list[str]:
-    rows = list(HEADS[direction] + TORSOS[direction] + legs)
-    if long_hair:
-        _long_hair(rows, direction)
-    if child:
-        # Enfant : un rang de torse (et de jambes debout) en moins, grosse tête conservée
-        dropped = (8, 13) if len(legs) == 4 else (8,)
-        rows = [r for i, r in enumerate(rows) if i not in dropped]
-    # Pieds alignés en bas : un personnage assis ou un enfant est plus bas
-    rows = [EMPTY_ROW] * (SPRITE_ROWS - len(rows)) + rows
-    return rows + [EMPTY_ROW]  # place pour le contour sous les pieds
 
 
 def _palette(persona: Persona) -> tuple[dict[str, Color], dict]:
@@ -1149,71 +920,6 @@ def sprite_from_rows(rows: list[str], palette: dict[str, Color]) -> pygame.Surfa
             if char != ".":
                 surf.set_at((x, y), palette[char])
     return surf
-
-
-def add_outline(surf: pygame.Surface, color: Color = OUTLINE) -> pygame.Surface:
-    width, height = surf.get_size()
-    out = surf.copy()
-    for y in range(height):
-        for x in range(width):
-            if surf.get_at((x, y)).a:
-                continue
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                nx, ny = x + dx, y + dy
-                if 0 <= nx < width and 0 <= ny < height and surf.get_at((nx, ny)).a:
-                    out.set_at((x, y), color)
-                    break
-    return out
-
-
-# Caches par id de persona (les modèles pydantic ne sont pas hashables)
-_FRAMES: dict[tuple[str, bool], dict[tuple[str, int], pygame.Surface]] = {}
-_HEADS: dict[str, pygame.Surface] = {}
-
-
-def character_frames(persona: Persona) -> dict[tuple[str, int], pygame.Surface]:
-    """Images (direction, image) : direction parmi down/up/left/right.
-
-    Image 0 = immobile, 1 et 2 = marche, SIT_FRAME = assis.
-    """
-    key = (persona.id, persona.age < 13)  # le corps grandit à 13 ans : nouvelles images
-    if key not in _FRAMES:
-        palette, style = _palette(persona)
-        child = persona.age < 13
-        frames: dict[tuple[str, int], pygame.Surface] = {}
-        for direction in ("down", "up", "left"):
-            poses = LEGS[direction] + [SIT_LEGS[direction]]
-            for frame, legs in enumerate(poses):
-                rows = _body_rows(direction, legs, style["long_hair"], child)
-                frames[(direction, frame)] = add_outline(sprite_from_rows(rows, palette))
-        for frame in range(SIT_FRAME + 1):
-            frames[("right", frame)] = pygame.transform.flip(frames[("left", frame)], True, False)
-        _FRAMES[key] = frames
-    return _FRAMES[key]
-
-
-def sleeping_head(persona: Persona) -> pygame.Surface:
-    """Tête aux yeux fermés, posée sur l'oreiller."""
-    if persona.id not in _HEADS:
-        palette, style = _palette(persona)
-        rows = list(HEADS["down"])
-        if style["long_hair"]:
-            for y in range(3, 7):
-                _set(rows, y, (4, 11), "H")
-        rows[4] = rows[4].replace("E", "e")  # yeux fermés
-        palette = {**palette, "e": shade(SKIN, -70)}
-        _HEADS[persona.id] = add_outline(sprite_from_rows(rows, palette))
-    return _HEADS[persona.id]
-
-
-def draw_blanket_bump(surf: pygame.Surface, bed_id: str, head_center: tuple[float, float], child: bool) -> None:
-    """Bosse du corps sous la douillette, sous la tête du dormeur."""
-    color = BLANKETS.get(bed_id, (110, 132, 190))
-    hx, hy = head_center
-    body = pygame.Rect(0, 0, 10, 12 if child else 17)
-    body.midtop = (round(hx), round(hy) + 3)
-    pygame.draw.ellipse(surf, shade(color, 16), body)
-    pygame.draw.ellipse(surf, shade(color, -35), body, 1)
 
 
 # ====================================================================== icônes d'humeur
@@ -1269,22 +975,6 @@ def draw_mood_bubble(surf: pygame.Surface, name: str, center_x: int, bottom: int
 
 # ====================================================================== accessoires et effets
 
-_PUFF: pygame.Surface | None = None
-
-
-def draw_steam(surf: pygame.Surface, x: int, y: int, t: float, count: int = 3, height: int = 10) -> None:
-    """Bouffées de vapeur qui montent en ondulant puis s'estompent."""
-    global _PUFF
-    if _PUFF is None:
-        _PUFF = pygame.Surface((5, 5), pygame.SRCALPHA)
-        pygame.draw.circle(_PUFF, (245, 245, 250, 210), (2, 2), 2)
-    for i in range(count):
-        phase = (t * 0.7 + i / count) % 1.0
-        px = x + round(math.sin(phase * 6.3 + i) * 2)
-        py = y - round(phase * height)
-        _PUFF.set_alpha(round(255 * (1 - phase)))
-        surf.blit(_PUFF, (px - 2, py - 2))
-
 
 def draw_floating(surf: pygame.Surface, name: str, x: int, y: int, t: float, period: float = 1.6) -> None:
     """Icône (cœur, étoile) qui s'élève au-dessus d'un personnage et disparaît."""
@@ -1293,33 +983,6 @@ def draw_floating(surf: pygame.Surface, name: str, x: int, y: int, t: float, per
     image.set_alpha(round(255 * (1 - phase)))
     surf.blit(image, (x - image.get_width() // 2, y - round(phase * 8) - image.get_height()))
     image.set_alpha(255)
-
-
-def draw_phone(surf: pygame.Surface, x: int, y: int, t: float) -> None:
-    pygame.draw.rect(surf, (30, 30, 36), (x, y, 3, 4))
-    glow = (120, 200, 255) if int(t * 3) % 4 else (200, 240, 255)
-    pygame.draw.rect(surf, glow, (x + 1, y + 1, 1, 2))
-
-
-def draw_book(surf: pygame.Surface, x: int, y: int) -> None:
-    pygame.draw.rect(surf, (246, 244, 236), (x, y, 7, 4))
-    pygame.draw.rect(surf, (150, 60, 50), (x, y, 7, 4), 1)
-    pygame.draw.line(surf, (150, 60, 50), (x + 3, y), (x + 3, y + 3))
-
-
-LEGO_COLORS: list[Color] = [(230, 60, 60), (60, 120, 230), (250, 210, 50), (70, 180, 90), (240, 240, 240)]
-
-
-def draw_lego(surf: pygame.Surface, cx: int, cy: int) -> None:
-    """Briques éparpillées autour de l'enfant (disposition fixe)."""
-    for i, (dx, dy) in enumerate(((-9, 3), (7, 5), (-5, 7), (10, -1), (2, 8), (-11, -2))):
-        pygame.draw.rect(surf, LEGO_COLORS[i % len(LEGO_COLORS)], (cx + dx, cy + dy, 3, 2))
-
-
-def draw_mug(surf: pygame.Surface, x: int, y: int) -> None:
-    pygame.draw.rect(surf, (240, 240, 236), (x, y, 3, 3))
-    surf.set_at((x + 1, y + 1), (110, 70, 40))
-    surf.set_at((x + 3, y + 1), (240, 240, 236))
 
 
 def draw_food(surf: pygame.Surface, plate: tuple[int, int], dinner: bool) -> None:

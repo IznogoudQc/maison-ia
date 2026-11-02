@@ -14,7 +14,7 @@ from sim.engine import Engine
 from sim.events import EventBus
 from sim.food import FOODS
 from sim.inventory import load_catalogue
-from ui import sprites
+from ui import living, sprites
 from world.house import House, InteractiveObject
 
 
@@ -52,7 +52,7 @@ def test_les_nouveaux_objets_se_dessinent():
         label = item.label.removeprefix("un ").removeprefix("une ").removeprefix("des ").capitalize()
         w, h = item.taille
         sprites.draw_object(surf, InteractiveObject(item.id, item.type, label, "Salon", (1, 1, w, h), [], 1.0))
-    sprites.draw_dog(surf, (50, 50), 1.3, -1)
+    living.draw_dog(surf, (50, 50), 3.0, 1.3, -1)
 
 
 def test_babyfoot_ouvre_une_activite(engine):

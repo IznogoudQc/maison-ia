@@ -5,7 +5,7 @@ et les horaires sont du code déterministe ; un LLM choisit certaines activités
 quand des membres de la famille se croisent, et résume leur mémoire. Inspiré du papier
 « Generative Agents » (Stanford, 2023), en version simplifiée.
 
-![Le campement](docs/captures/terrain_campement.png)
+![Le campement, le soir autour du feu](docs/captures/terrain_campement.png)
 
 ## Télécharger et jouer (Windows)
 
@@ -22,8 +22,8 @@ Les sauvegardes, journaux, réglages et le catalogue d'objets modifiable sont da
 
 | | |
 |---|---|
-| ![Le plan dessiné par l'IA, puis la maison bâtie](docs/captures/c3_maison_soir.png) | ![La famille grandit](docs/captures/c5_famille.png) |
-| ![Objets achetés](docs/captures/e1_objets.png) | ![Journal de la famille](docs/captures/f2_journal.png) |
+| ![Le plan dessiné par l'IA, puis la maison bâtie](docs/captures/c3_maison_soir.png) | ![Le souper en famille](docs/captures/c5_famille.png) |
+| ![La cour : objets achetés, piscine et chien](docs/captures/e1_objets.png) | ![Journal de la famille](docs/captures/f2_journal.png) |
 
 **Ta clé reste à toi** : `.env` est ignoré par git, et `scripts/verifier_secrets.py` (crochet
 pre-commit et GitHub Actions) bloque tout commit qui contiendrait une clé.
@@ -353,7 +353,8 @@ llm/                 interface + factory, Claude, Ollama, mock, prompts (décisi
 sim/                 horloge, moteur, vie intérieure (mind.py), conversations (social.py), architecte (architect.py),
                      famille (family.py), économie,
                      événements aléatoires, bus, journal, config
-ui/                  rendu pixel art (sprites générés dans sprites.py), bulles et historique, HUD
+ui/                  rendu vu de dessus, tout dessiné dans le code : sols et murs (sprites.py), personnages
+                     (pawns.py), meubles et arbres (props.py), éléments animés (living.py), écrans, HUD
 data/family.yaml     les personas
 ```
 
