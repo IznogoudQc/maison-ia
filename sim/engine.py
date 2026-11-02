@@ -753,6 +753,35 @@ class Engine:
                 self.pending_stories.remove(item)
                 self._news(base, event.good, event.id)  # le récit tarde : on n'attend pas
 
+    def dialogue_context(self, agents: list[Agent]) -> str:
+        """Contexte léger pour jaser : la date, l'essentiel du ménage, sans l'inventaire du garde-manger.
+
+        Les décisions reçoivent family_context (tout le détail) ; ici, trop de chiffres font parler
+        d'épicerie et de budget à chaque conversation.
+        """
+        lines = self.calendar_lines(agents)
+        if self.economy.enabled:
+            money = self.economy.household.money
+            if money < 0:
+                lines.append("La famille est dans le rouge.")
+            elif money < self.economy.reserve(self.alive_count()):
+                lines.append("L'argent est serré ces temps-ci.")
+            if self.economy.pantry_days(self.alive_count()) < 2:
+                lines.append("Il ne reste presque plus rien à manger.")
+            plan = self.architect.plan
+            if self.house.layout.wild and not self.has_roof():
+                lines.append("On vit encore sous la tente.")
+            if plan is not None and plan.rooms:  # sans les coûts : les chiffres font parler de budget
+                states = {"bati": "bâtie", "chantier": "en chantier"}
+                lines.append("La maison : " + ", ".join(f"{r.name.lower()} ({states.get(r.status, 'à bâtir')})"
+                                                        for r in plan.rooms) + ".")
+        lines += self.family.context_lines()
+        career = self.careers.context_line(agents)
+        if career:
+            lines.append(career)
+        lines += [f"{a.name} est en deuil." for a in agents if a.grieving_until is not None]
+        return "\n".join(lines)
+
     def family_context(self, agents: list[Agent]) -> str:
         """Situation de la famille pour les prompts : argent, santé, chômage, deuils, dernière nouvelle."""
         now = self.clock.total_minutes
@@ -862,12 +891,14 @@ class Engine:
             self._mark_talk(group)
             return True
         memories, summaries = {}, {}
+        topic = self.social.topic_idea(group, self.clock.total_minutes)
         for agent in group:
-            about = [room, *(a.name for a in group if a is not agent)]
+            about = [room, *(a.name for a in group if a is not agent), topic]
             memories[agent.id], summaries[agent.id] = self.memories_for(agent, about)
         request = build_dialogue_request(group, room, self.clock.label(), memories, summaries,
-                                         self.config.llm.max_tokens, self.family_context(group),
-                                         self._prompt_meta(), now=self.clock.total_minutes)
+                                         self.config.llm.max_tokens, self.dialogue_context(group),
+                                         self._prompt_meta(), now=self.clock.total_minutes,
+                                         recent=self.social.recent_topics(group), topic=topic)
         names = {a.id: a.name for a in group}
         future = self.llm.try_submit(request, Dialogue, None, lambda d: validate_dialogue(d, names))
         if future is None:

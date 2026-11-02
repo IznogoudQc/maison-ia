@@ -85,6 +85,20 @@ def validate_dialogue(dialogue: Dialogue, participants: dict[str, str], max_line
 
 # ---------------------------------------------------------------- blocs de contexte
 
+VARIETY = ("Varie les sujets d'une conversation à l'autre : la journée, le travail ou l'école, les intérêts de chacun, les projets, les enfants, une anecdote, une blague, un souvenir. L'argent et la bouffe reviennent seulement quand il se passe quelque chose de nouveau. ")
+
+
+def topics_block(recent: list[str] | None, topic: str | None) -> str:
+    """Sujets déjà jasés entre ces personnes (à ne pas reprendre) et une idée pour lancer la conversation."""
+    text = ""
+    if recent:
+        text += ("\n\nDÉJÀ JASÉ RÉCEMMENT ENSEMBLE (n'y revenez pas sans élément nouveau) :\n"
+                 + "\n".join(f"- {r}" for r in recent))
+    if topic:
+        text += f"\n\nIDÉE DE SUJET (si rien de plus pressant) : {topic}."
+    return text
+
+
 
 def persona_block(agent: Agent) -> str:
     p = agent.persona
@@ -113,8 +127,8 @@ def memory_block(memories: list[str], summary: str | None = None) -> str:
     return "\n".join(parts) if parts else "Aucun souvenir particulier pour l'instant."
 
 
-def mind_block(agent: Agent, now: int, with_plan: bool = True, beliefs: int = 3) -> str:
-    """Constats des réflexions, intention et plan du jour, objectif en cours."""
+def mind_block(agent: Agent, now: int, with_plan: bool = True, beliefs: int = 3, with_goal: bool = True) -> str:
+    """Constats des réflexions, intention et plan du jour, objectif en cours (with_goal : pas pour jaser)."""
     lines = [f"- Je pense : {b.text}" for b in agent.memory.beliefs[-beliefs:]]
     plan = agent.plan
     if plan is not None and plan.day == now // (24 * 60):
@@ -125,7 +139,7 @@ def mind_block(agent: Agent, now: int, with_plan: bool = True, beliefs: int = 3)
             steps = "; ".join(f"{i.hhmm} {i.action}{' ' + i.target if i.target else ''} ({marks[i.status]})"
                               for i in plan.items)
             lines.append(f"- Mon plan : {steps}")
-    if agent.goal is not None and now < agent.goal.until:
+    if with_goal and agent.goal is not None and now < agent.goal.until:
         lines.append(f"- Je me suis promis : {agent.goal.text}")
     return "\n".join(lines) if lines else "Rien de particulier en tête."
 
@@ -184,13 +198,13 @@ def build_decision_request(agent: Agent, room: str, time_label: str, options: li
 def build_dialogue_request(participants: list[Agent], room: str, time_label: str,
                            memories: dict[str, list[str]], summaries: dict[str, str | None],
                            max_tokens: int, context: str = "", extra_meta: dict | None = None,
-                           now: int = 0) -> LLMRequest:
+                           now: int = 0, recent: list[str] | None = None, topic: str | None = None) -> LLMRequest:
     system = (
         "Tu écris des dialogues pour une simulation de la vie d'une famille de Québec. "
         "Les répliques sont en français québécois naturel et familier (expressions d'ici, pas de France), "
         "courtes, crédibles, cohérentes avec chaque personnalité, l'heure, la pièce, l'humeur "
-        "et les souvenirs récents. La situation de la famille (argent, épicerie, chômage, santé, deuil) "
-        "teinte naturellement les échanges quand c'est pertinent, avec tact pour les deuils. "
+        "et les souvenirs récents. La situation de la famille peut teinter un échange, avec tact pour les "
+        "deuils, sans devenir le sujet de chaque conversation. " + VARIETY +
         "Pas de narration, seulement des répliques. " + JSON_RULE
     )
     blocks = []
@@ -201,7 +215,7 @@ def build_dialogue_request(participants: list[Agent], room: str, time_label: str
             f"Fait présentement : {action}. Humeur : {agent.mood}.\n"
             f"Besoins : {agent.needs.describe()}.\n"
             f"Relations :\n{relations_block(agent, participants, with_profile=True)}\n"
-            f"En tête :\n{mind_block(agent, now, with_plan=False, beliefs=2)}\n"
+            f"En tête :\n{mind_block(agent, now, with_plan=False, beliefs=2, with_goal=False)}\n"
             f"{memory_block(memories.get(agent.id, []), summaries.get(agent.id))}"
         )
     names = ", ".join(a.name for a in participants)
@@ -209,6 +223,7 @@ def build_dialogue_request(participants: list[Agent], room: str, time_label: str
         f"Moment : {time_label}. Pièce : {room}. Personnes présentes : {names}.\n\n"
         + (f"SITUATION DE LA FAMILLE\n{context}\n\n" if context else "")
         + "\n\n".join(blocks)
+        + topics_block(recent, topic)
         + "\n\nÉcris une courte conversation spontanée (2 à 6 répliques) entre ces personnes. "
         "Chaque réplique fait au plus 25 mots. Le champ speaker contient exactement un des prénoms. "
         'Format exact :\n{"lines": [{"speaker": "<prénom>", "text": "<réplique>"}]}'

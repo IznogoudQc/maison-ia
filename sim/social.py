@@ -7,6 +7,7 @@ de l'échange et les promesses faites ; le moteur fait arriver les promesses ou 
 
 from __future__ import annotations
 
+import random
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -72,6 +73,7 @@ class Social:
         self.promises: list[Promise] = []
         self.next_id = 1
         self.last_drift_day = -1
+        self.topics: dict[str, list[str]] = {}   # duo ou groupe -> résumés des dernières conversations
 
     @property
     def config(self):
@@ -126,12 +128,15 @@ class Social:
         listeners = [a for a in (engine.agent_by_id(i) for i in conv.participant_ids) if a and a is not speaker]
         if speaker is None or not listeners:
             return False
-        about = [conv.room, *(a.name for a in listeners), *(text for _, text in conv.lines[-2:])]
+        people = [speaker, *listeners]
+        topic = self.topic_idea(people, conv.id) if not conv.lines else None
+        about = [conv.room, *(a.name for a in listeners), *(text for _, text in conv.lines[-2:]), topic or ""]
         memories, summary = engine.memories_for(speaker, about)
         request = build_line_request(speaker, listeners, conv.room, engine.clock.label(), conv.lines,
                                      memories, summary, engine.config.llm.max_tokens,
                                      engine.clock.total_minutes, len(conv.lines), self.config.max_turns,
-                                     engine.family_context([speaker, *listeners]), engine._prompt_meta())
+                                     engine.dialogue_context(people), engine._prompt_meta(),
+                                     recent=self.recent_topics(people), topic=topic)
         names = {a.id: a.name for a in listeners}
         future = engine.llm.try_submit(request, Line, None, lambda line: validate_line(line, speaker.name, names))
         if future is None:
@@ -254,6 +259,7 @@ class Social:
         people = {a.id: a for a in (engine.agent_by_id(i) for i in pending.participant_ids) if a and not a.dead}
         transcript = " / ".join(f"{s} : « {t} »" for s, t in pending.lines)
         content = debrief.summary.strip() or transcript
+        self.remember_topic(list(people), content)
         for agent in people.values():
             others = ", ".join(a.name for a in people.values() if a is not agent)
             text = f"Jasé avec {others} ({pending.room}) : {content}"
@@ -473,12 +479,55 @@ class Social:
 
     def to_dict(self) -> dict:
         return {"promises": [p.model_dump(mode="json") for p in self.promises],
-                "next_id": self.next_id, "last_drift_day": self.last_drift_day}
+                "next_id": self.next_id, "last_drift_day": self.last_drift_day, "topics": self.topics}
 
     def load_dict(self, data: dict) -> None:
         self.promises = [Promise.model_validate(p) for p in data.get("promises", [])]
         self.next_id = data.get("next_id", 1)
         self.last_drift_day = data.get("last_drift_day", -1)
+        self.topics = {k: list(v) for k, v in data.get("topics", {}).items()}
+
+    # ------------------------------------------------------------------ variété des sujets
+
+    @staticmethod
+    def _group_key(people) -> str:
+        return "|".join(sorted(p if isinstance(p, str) else p.id for p in people))
+
+    def recent_topics(self, people) -> list[str]:
+        return self.topics.get(self._group_key(people), [])
+
+    def remember_topic(self, people, summary: str) -> None:
+        """Garde le résumé des dernières conversations de ce groupe : les suivantes changent de sujet."""
+        recent = self.topics.setdefault(self._group_key(people), [])
+        recent.append(summary.strip()[:160])
+        del recent[:-TOPIC_MEMORY]
+
+    def topic_idea(self, people: list, seed: int) -> str:
+        """Une idée de sujet pour lancer la conversation, qui change d'une fois à l'autre."""
+        engine = self.engine
+        ideas = list(SMALL_TALK)
+        for person in people:
+            ideas += [f"{person.name} et {interest}" for interest in person.persona.interests]
+            career = person.career
+            if career is not None and career.job is not None:
+                ideas.append(f"la journée de travail de {person.name}")
+            elif career is not None and career.grade is not None:
+                ideas.append(f"l'école de {person.name}")
+        holiday = engine.calendar.holiday(engine.clock.day)
+        coming = engine.calendar.upcoming(engine.clock.day)
+        if holiday:
+            ideas += [f"le {holiday}, aujourd'hui"] * 3
+        elif coming:
+            ideas.append(f"le {coming[0][1]} qui s'en vient")
+        recent = " ".join(self.recent_topics(people)).lower()
+        fresh = [i for i in ideas if not any(word in recent for word in i.lower().split() if len(word) > 4)]
+        return random.Random(f"sujet:{seed}:{engine.clock.day}").choice(fresh or ideas)
+
+
+TOPIC_MEMORY = 2   # conversations récentes d'un même groupe rappelées pour ne pas tourner en rond
+SMALL_TALK = ("une anecdote de la journée", "un souvenir drôle", "un projet pour la fin de semaine", "la météo",
+              "une nouvelle du coin", "une série ou un film", "un rêve de vacances", "une blague", "le voisinage",
+              "ce qu'on aimerait faire ensemble bientôt")
 
 
 def _clamp(value: float) -> float:

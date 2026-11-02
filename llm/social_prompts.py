@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from llm.prompts import JSON_RULE, memory_block, mind_block, persona_block, relations_block
+from llm.prompts import VARIETY, topics_block, JSON_RULE, memory_block, mind_block, persona_block, relations_block
 from llm.provider import LLMRequest
 
 if TYPE_CHECKING:
@@ -85,12 +85,14 @@ def _transcript(lines: list[tuple[str, str]]) -> str:
 def build_line_request(speaker: Agent, listeners: list[Agent], room: str, time_label: str,
                        lines: list[tuple[str, str]], memories: list[str], summary: str | None,
                        max_tokens: int, now: int, turn: int, max_turns: int, context: str = "",
-                       extra_meta: dict | None = None) -> LLMRequest:
+                       extra_meta: dict | None = None, recent: list[str] | None = None,
+                       topic: str | None = None) -> LLMRequest:
     system = (
         f"Tu incarnes {speaker.name}, membre d'une famille québécoise, dans une conversation en cours. "
         "Tu dis UNE seule réplique, de son point de vue uniquement : tu ne sais que ce qu'il ou elle sait "
         "et tu ne vois des autres que leur air et ce qu'ils disent. Selon sa personnalité et ses relations, "
         "tu peux être sincère, taquin, bougon, éviter un sujet, mal comprendre ou cacher quelque chose. "
+        + VARIETY + "Ce que tu as en tête n'a pas à devenir le sujet de chaque conversation. "
         "Français québécois naturel et familier, pas de narration. " + JSON_RULE
     )
     others = "\n".join(
@@ -106,9 +108,10 @@ def build_line_request(speaker: Agent, listeners: list[Agent], room: str, time_l
         f"SITUATION\nMoment : {time_label}. Pièce : {room}.\nAvec toi :\n{others}\n\n"
         + (f"FAMILLE\n{context}\n\n" if context else "")
         + f"CE QUE TU RESSENS POUR EUX\n{relations_block(speaker, listeners, with_profile=True)}\n\n"
-        f"DANS TA TÊTE\n{mind_block(speaker, now, beliefs=3)}\n\n"
+        f"DANS TA TÊTE\n{mind_block(speaker, now, beliefs=3, with_goal=False)}\n\n"
         f"TA MÉMOIRE\n{memory_block(memories, summary)}\n\n"
-        f"CONVERSATION JUSQU'ICI\n{history}\n\n"
+        f"CONVERSATION JUSQU'ICI\n{history}"
+        + topics_block(recent, topic if not lines else None) + "\n\n"
         f"Réplique {turn + 1} sur {max_turns} au plus, 25 mots max. {closing} "
         "Si tu proposes ou acceptes de faire une activité ensemble à un moment précis, dis-le clairement. "
         "thought = ce que tu penses vraiment sans le dire (15 mots max). affection et tension = comment "
