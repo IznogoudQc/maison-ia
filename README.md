@@ -284,6 +284,11 @@ Le compteur d'appels et de tokens est affiché en haut du panneau, avec le solde
 et les derniers mouvements d'argent. Chaque dialogue, décision LLM, départ, retour, résumé, paie,
 facture, épicerie, événement et décès est écrit dans `logs/sim_<date>.jsonl`.
 
+**Coût de la partie** : avec Claude, le panneau affiche aussi ce que la partie a coûté depuis le début (tokens × tarifs
+`llm.claude_price_in` / `claude_price_out`, en $ US par million de tokens ; 0,10 $ / 0,50 $ pour Claude
+Haiku 5.5). Les compteurs sont gardés dans la sauvegarde ; l'onglet Dépenses de l'écran Maison (touche I)
+les reprend. En mode simulé ou avec Ollama, c'est gratuit. La facture exacte reste celle de la console Anthropic.
+
 ## Ajouter un persona
 
 Ajouter une entrée sous `family:` dans `data/family.yaml` :

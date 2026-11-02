@@ -95,6 +95,10 @@ class LLMStats:
             self.input_tokens += input_tokens
             self.output_tokens += output_tokens
 
+    def cost(self, price_in: float, price_out: float) -> float:
+        """Coût en $ selon les tarifs par million de tokens."""
+        return (self.input_tokens * price_in + self.output_tokens * price_out) / 1_000_000
+
     def record_failure(self) -> None:
         with self._lock:
             self.failures += 1
@@ -107,11 +111,17 @@ class LLMStats:
 class LLMService:
     MAX_ATTEMPTS = 2  # un essai + un retry, puis repli
 
-    def __init__(self, provider: LLMProvider, max_calls_per_minute: int = 12, max_workers: int = 3) -> None:
+    def __init__(self, provider: LLMProvider, max_calls_per_minute: int = 12, max_workers: int = 3,
+                 prices: tuple[float, float] = (0.0, 0.0)) -> None:
         self.provider = provider
+        self.prices = prices  # $ US par million de tokens (entrée, sortie) ; 0 : gratuit (simulé, Ollama)
         self.limiter = RateLimiter(max_calls_per_minute)
         self.stats = LLMStats()
         self.executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="llm")
+
+    def cost(self) -> float:
+        """Coût de la partie en $ US (depuis le début, compteurs gardés dans la sauvegarde)."""
+        return self.stats.cost(*self.prices)
 
     def try_submit(self, request: LLMRequest, schema: type[T], fallback: T | None = None,
                    validate: Callable[[T], T] | None = None) -> Future[StructuredResult[T]] | None:

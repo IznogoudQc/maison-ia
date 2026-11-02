@@ -89,7 +89,8 @@ def main() -> None:
         print(f"[LLM] {exc} -> repli sur le mode mock")
         provider = MockProvider(config.llm.mock_latency_s, config.llm.mock_invalid_rate)
         llm_label = "mock (repli : config LLM invalide)"
-    llm = LLMService(provider, config.llm.max_calls_per_minute, config.llm.max_workers)
+    prices = (config.llm.claude_price_in, config.llm.claude_price_out) if config.llm.provider == "claude" else (0.0, 0.0)
+    llm = LLMService(provider, config.llm.max_calls_per_minute, config.llm.max_workers, prices)
 
     terrain = config.world.terrain
     seed = terrain.seed if terrain.seed is not None else config.sim.seed

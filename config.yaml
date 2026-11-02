@@ -18,6 +18,8 @@ llm:
   provider: mock              # mock | claude | ollama
   claude_model: claude-haiku-5-5
   claude_effort: low          # low | medium | high
+  claude_price_in: 0.10       # $ US par million de tokens en entree (Claude Haiku 5.5)
+  claude_price_out: 0.50      # $ US par million de tokens en sortie
   ollama_url: http://localhost:11434
   ollama_model: llama3.1:8b
   timeout_s: 30

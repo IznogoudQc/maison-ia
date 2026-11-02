@@ -14,6 +14,7 @@ from sim.food import FOODS
 from sim.inventory import RESALE
 from ui import theme
 from ui.dialogue_box import wrap_text
+from ui.hud import format_cost
 
 if TYPE_CHECKING:
     from sim.engine import Engine
@@ -135,6 +136,10 @@ def expense_rows(engine: Engine) -> list[Row]:
         rows.append((f"Paiements de prêts : {loans:+.0f} $", None))
     rows.append((f"Épicerie (environ) : {food:+.0f} $", None))
     rows.append((f"Coussin conseillé en banque : {_money(eco.reserve(alive))}", theme.TEXT_DIM))
+    llm = engine.llm
+    if llm is not None and any(llm.prices):
+        rows.append((f"Coût réel de l'IA (Claude) depuis le début : {format_cost(llm.cost())} "
+                     f"({llm.stats.calls} appels)", HEADER))
     return rows
 
 

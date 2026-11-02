@@ -29,6 +29,8 @@ class LLMConfig(BaseModel):
     provider: Literal["mock", "claude", "ollama"] = "mock"
     claude_model: str = "claude-haiku-5-5"
     claude_effort: Literal["low", "medium", "high"] = "low"
+    claude_price_in: float = 0.10       # $ US par million de tokens en entrée (Claude Haiku 5.5)
+    claude_price_out: float = 0.50      # $ US par million de tokens en sortie
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
     timeout_s: float = 30.0

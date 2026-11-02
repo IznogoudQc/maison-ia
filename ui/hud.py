@@ -28,6 +28,12 @@ CONTROLS = [
 ]
 
 
+
+def format_cost(dollars: float) -> str:
+    """« 0,013 $ US » : trois décimales sous 10 $ (une partie coûte souvent quelques cents)."""
+    return f"{dollars:.3f} $ US".replace(".", ",") if dollars < 10 else f"{dollars:.2f} $ US".replace(".", ",")
+
+
 class Hud:
     def __init__(self, rect: pygame.Rect) -> None:
         self.rect = rect
@@ -85,6 +91,7 @@ class Hud:
             f"LLM : {label}",
             f"Appels : {stats.calls}  ({llm.limiter.used()}/{llm.limiter.max_per_minute} cette minute)",
             f"Tokens : {stats.input_tokens:,} entrée / {stats.output_tokens:,} sortie".replace(",", " "),
+            f"Coût de la partie : {format_cost(llm.cost())}" if any(llm.prices) else "Coût : gratuit (pas de Claude)",
             f"Échecs : {stats.failures}  —  replis : {stats.fallbacks}",
         ]
         for line in lines:
