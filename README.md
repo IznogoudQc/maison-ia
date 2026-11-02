@@ -279,6 +279,12 @@ objectif et son dernier constat ; les plans et réflexions apparaissent aussi da
   changement devient un souvenir marquant, entre dans tous les prompts (la personne et la famille la
   voient changer) et la fiche (P) en garde l'historique, avec la raison.
 
+- **Chronique illustrée** : pendant la semaine, le jeu photographie la carte aux moments marquants
+  (fête, visite, bordée de neige, projet réussi, naissance...) et en fin de journée (6 captures au
+  plus). Le lundi matin, l'IA raconte la semaine écoulée comme une chronique de journal de quartier,
+  chaque paragraphe illustré au besoin. La page est écrite dans le dossier `chroniques` à côté de la
+  sauvegarde, avec un sommaire (`index.html`) ; la touche K ouvre la dernière.
+
 ## Conversations et relations
 
 - **Tour par tour** (`dialogue.mode: tour_par_tour`, par défaut) : chaque réplique est un appel LLM
@@ -325,6 +331,7 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | 1 à 4 | vitesse (multiplicateurs `sim.speed_multipliers`) |
 | Clic sur un agent | besoins, action, humeur et mémoire dans le panneau ; clic dans le vide : vue famille |
 | H | historique des dialogues (molette pour défiler) |
+| K | ouvre dans le navigateur la dernière chronique illustrée de la semaine |
 | J | journal complet : conversations, actions (avec la raison de l'IA), pensées (plans, réflexions, promesses), événements ; Tab : onglet, P : personne, / : rechercher, E : exporter la chronique en HTML (`chronique.html` à côté de la sauvegarde) ; gardé avec la sauvegarde |
 | I | écran Maison : objets (prix, frais, effets), véhicules, garde-manger détaillé (péremption, plats préférés), prêts et dépenses de la semaine ; Tab : onglet |
 | P | fiche de la personne sélectionnée : qualités et défauts, humeur et ses causes (besoins, deuil, argent, chicanes, souvenirs marquants), ce qu'elle pense de chacun (affection, tension, dernière impression) ; l'IA y met des mots à la première personne ; Tab : personne suivante |

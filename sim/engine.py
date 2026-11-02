@@ -49,6 +49,7 @@ from sim.calendrier import Calendar
 from sim.career import Careers
 from sim.family import FamilyLife
 from sim.interview import Interviews
+from sim.chronicle import Chronicle
 from sim.gossip import Gossip
 from sim.personality import Personalities
 from sim.projects import Projects
@@ -164,6 +165,7 @@ class Engine:
         self.seasons = Seasons(self)        # neige, chauffage, sucres, Halloween, Noël
         self.projects = Projects(self)      # projets de vie : mois, semaines, geste du jour
         self.personalities = Personalities(self)  # qualités et défauts qui évoluent avec les réflexions
+        self.chronicle = Chronicle(self)    # chronique illustrée de la semaine (page HTML)
         self.last_recall: dict[str, list] = {}   # agent -> souvenirs retenus pour sa dernière demande à l'IA  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
@@ -691,6 +693,7 @@ class Engine:
         self.gossip.poll()
         self.projects.poll()
         self.personalities.poll()
+        self.chronicle.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue
@@ -750,6 +753,7 @@ class Engine:
         self.visitors.update()
         self.gossip.update()
         self.projects.update()
+        self.chronicle.update()
         for visitor in list(self.visitors.present):
             self._update_visitor(visitor)
         self.everyone[:] = [*self.agents, *self.visitors.present]
@@ -1461,6 +1465,7 @@ class Engine:
             "visitors": self.visitors.to_dict(),
             "gossip": self.gossip.to_dict(),
             "seasons": self.seasons.to_dict(),
+            "chronicle": self.chronicle.to_dict(),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -1510,6 +1515,7 @@ class Engine:
         self.visitors.load_dict(data.get("visitors"))
         self.gossip.load_dict(data.get("gossip"))
         self.seasons.load_dict(data.get("seasons"))
+        self.chronicle.load_dict(data.get("chronicle"))
         self.everyone[:] = list(self.agents)
         self.game_over = self.alive_count() == 0
         if self.llm is not None and "llm_stats" in data:

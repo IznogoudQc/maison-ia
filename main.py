@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import random
+import webbrowser
 from pathlib import Path
 
 import pygame
@@ -62,6 +63,21 @@ def fit_view(house: House, hud_width: int, wanted: float | str) -> tuple[float, 
     return SCROLL_SCALE, (max_w, max_h)
 
 
+def take_snapshot(screen: pygame.Surface, area: pygame.Rect, chronicle, caption: str) -> None:
+    """Photo de la carte pour la chronique de la semaine (960 px de large au plus)."""
+    width = min(960, area.width)
+    shot = pygame.transform.smoothscale(screen.subsurface(area), (width, round(area.height * width / area.width)))
+    name = chronicle.next_shot_name()
+    try:
+        chronicle.out_dir.mkdir(parents=True, exist_ok=True)
+        pygame.image.save(shot, str(chronicle.out_dir / name))
+    except (pygame.error, OSError) as exc:
+        print(f"[Chronique] capture impossible : {exc}")
+        chronicle.wanted = None
+        return
+    chronicle.add_snapshot(name, caption)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Simulation Maison IA")
     parser.add_argument("--nouveau", action="store_true", help="ignorer save.json et repartir de zéro")
@@ -103,6 +119,7 @@ def main() -> None:
     engine = Engine(config, house, agents, clock, rng, bus, llm)
     engine.initialize()
     save_path = Path(config.save_file)
+    engine.chronicle.out_dir = save_path.parent / "chroniques"   # pages HTML et captures de la semaine
     if save_path.exists() and not args.nouveau:
         try:
             engine.load_state(save_path)
@@ -172,6 +189,10 @@ def main() -> None:
                     household_screen.toggle()
                 elif event.key == pygame.K_p:
                     portrait_screen.show(selected_id)
+                elif event.key == pygame.K_k:
+                    page = engine.chronicle.latest()
+                    if page is not None and page.exists():
+                        webbrowser.open(page.resolve().as_uri())
                 elif event.key == pygame.K_t:
                     interview_screen.show(selected_id, event.unicode.lower() or "t")
                 elif event.key in SPEED_KEYS:
@@ -233,6 +254,9 @@ def main() -> None:
         screen.fill(theme.BACKGROUND)
         renderer.draw(screen, engine.everyone, selected_id, clock.minute_of_day)
         dialogue_box.draw(screen)
+        caption = engine.chronicle.snapshot_request()
+        if caption is not None:
+            take_snapshot(screen, pygame.Rect(0, 0, map_w, map_h), engine.chronicle, caption)
         journal_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
         household_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))
         portrait_screen.draw(screen, pygame.Rect(0, 0, map_w, map_h))

@@ -18,7 +18,7 @@ NEWS_KINDS = ("evenement", "deces", "hopital", "factures", "frigo_vide", "achat"
               "promesse", "promesse_tenue", "promesse_brisee", "plan_maison", "emplacement_pret", "piece_batie",
               "chantier_debut", "entrepreneur", "projet_bebe", "grossesse", "naissance", "anniversaire",
               "agrandissement", "achat_objet", "pret", "pret_retard", "visite", "fin_visite",
-              "fete_prevue", "fete", "fin_fete", "rumeur_decouverte", "neige", "froid", "fete_saison", "projet_mois", "projet_reussi", "personnalite")
+              "fete_prevue", "fete", "fin_fete", "rumeur_decouverte", "neige", "froid", "fete_saison", "projet_mois", "projet_reussi", "personnalite", "chronique")
 MIND_KINDS = ("plan", "reflexion")
 THOUGHT = (180, 170, 230)
 TOAST_SECONDS = 6.0
@@ -114,7 +114,7 @@ class DialogueBox:
             text, color = data["text"], BAD
         elif event.kind == "neige":
             text, color = data["text"], NEUTRAL
-        elif event.kind in ("fete_saison", "projet_mois", "projet_reussi"):
+        elif event.kind in ("fete_saison", "projet_mois", "projet_reussi", "chronique"):
             text, color = data["text"], GOOD
         elif event.kind == "personnalite":
             text, color = data["text"], NEUTRAL

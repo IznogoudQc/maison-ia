@@ -24,7 +24,7 @@ CONTROLS = [
     "Clic : sélectionner un agent (clic vide : famille)",
     "Flèches / clic droit glissé : vue   molette : zoom",
     "F : suivre   P : fiche   T : parler   J : journal   I : maison",
-    "H : dialogues",
+    "H : dialogues   K : chronique de la semaine",
     "Échap : sauvegarder et quitter",
 ]
 

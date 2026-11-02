@@ -167,6 +167,8 @@ class MockProvider(LLMProvider):
                 text = self._project(request)
             elif request.kind == "personality":
                 text = self._personality(request)
+            elif request.kind == "chronicle":
+                text = self._chronicle(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -431,6 +433,18 @@ class MockProvider(LLMProvider):
             return json.dumps({"change": "aucun", "kind": "qualite", "trait": "", "reason": ""})
         return json.dumps({"change": "renforcer", "kind": "qualite", "trait": qualites[0],
                            "reason": evidence[-1][:120]}, ensure_ascii=False)
+
+    def _chronicle(self, request: LLMRequest) -> str:
+        """Chronique simple : un paragraphe par groupe de faits, une capture par paragraphe."""
+        events = request.meta.get("events", []) or ["Une semaine tranquille."]
+        shots = len(request.meta.get("captions", []))
+        chunks = [events[i:i + 4] for i in range(0, min(len(events), 16), 4)] or [events]
+        while len(chunks) < 2:
+            chunks.append(["La vie suit son cours à la maison."])
+        paragraphs = [{"text": "Cette semaine : " + " ; ".join(chunk) + ".", "image": i + 1 if i < shots else None}
+                      for i, chunk in enumerate(chunks)]
+        return json.dumps({"title": f"Chez nous, {request.meta.get('week', 'cette semaine')}",
+                           "paragraphs": paragraphs}, ensure_ascii=False)
 
     def _portrait(self, request: LLMRequest) -> str:
         """Ressenti tiré des causes calculées par le moteur ; avis tirés de l'affection et de la tension."""
