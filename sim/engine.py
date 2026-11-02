@@ -48,6 +48,7 @@ from sim.architect import Architect
 from sim.calendrier import Calendar
 from sim.career import Careers
 from sim.family import FamilyLife
+from sim.interview import Interviews
 from sim.portrait import Portraits
 from sim.credit import Credit
 from sim.garage import Garage
@@ -150,6 +151,7 @@ class Engine:
         self.credit = Credit(self)
         self.history = History(self.bus)  # conversations, actions, pensées, événements
         self.portraits = Portraits(self)
+        self.interviews = Interviews(self)  # entrevue : questions du joueur et idées soufflées (touche T)
         self.last_recall: dict[str, list] = {}   # agent -> souvenirs retenus pour sa dernière demande à l'IA  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
@@ -664,6 +666,7 @@ class Engine:
         self.architect.poll()
         self.family.poll()
         self.portraits.poll()
+        self.interviews.poll()
         for agent_id, pending in list(self.pending_decisions.items()):
             if not pending.future.done():
                 continue

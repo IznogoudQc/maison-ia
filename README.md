@@ -282,6 +282,7 @@ Compter environ 1,5 fois plus d'appels qu'en mode scène ; à vitesse élevée, 
 | J | journal complet : conversations, actions (avec la raison de l'IA), pensées (plans, réflexions, promesses), événements ; Tab : onglet, P : personne, / : rechercher, E : exporter la chronique en HTML (`chronique.html` à côté de la sauvegarde) ; gardé avec la sauvegarde |
 | I | écran Maison : objets (prix, frais, effets), véhicules, garde-manger détaillé (péremption, plats préférés), prêts et dépenses de la semaine ; Tab : onglet |
 | P | fiche de la personne sélectionnée : qualités et défauts, humeur et ses causes (besoins, deuil, argent, chicanes, souvenirs marquants), ce qu'elle pense de chacun (affection, tension, dernière impression) ; l'IA y met des mots à la première personne ; Tab : personne suivante |
+| T | entrevue avec la personne sélectionnée : pose-lui une question, elle répond avec ses vrais souvenirs, ses constats et son caractère (une question ne laisse pas de souvenir) ; Tab : souffler une idée à la place (elle reste en tête comme un souvenir marquant, la personne revoit son plan et décide si elle y donne suite) ; noté dans le journal |
 | Flèches ou WASD, clic droit glissé | déplacer la vue (grande carte) |
 | Molette | zoom (dans l'historique : défiler) |
 | Clic sur la mini-carte | centrer la vue à cet endroit |

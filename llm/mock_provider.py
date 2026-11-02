@@ -157,6 +157,8 @@ class MockProvider(LLMProvider):
                 text = self._event_story(request)
             elif request.kind == "portrait":
                 text = self._portrait(request)
+            elif request.kind == "interview":
+                text = self._interview(request)
             else:
                 text = self._summary(request)
         if delay:
@@ -370,6 +372,19 @@ class MockProvider(LLMProvider):
         intro = self.rng.choice(["Ça parle de ça au souper : ", "Nouvelle du jour : ", "Imaginez-vous donc : "]
                                 if good else ["Pas de chance : ", "Ouch : ", "Comme si c'était pas assez : "])
         return json.dumps({"text": intro + request.meta.get("base", "")}, ensure_ascii=False)
+
+    def _interview(self, request: LLMRequest) -> str:
+        """Réponse d'entrevue tirée du souvenir le plus pertinent (sans l'horodatage)."""
+        text = request.meta.get("text", "")
+        if request.meta.get("whisper"):
+            answer = self.rng.choice([f"Hmm… « {text} ». Pourquoi pas, j'y penserai.",
+                                      f"« {text} » ? Bof, pas sûr que ce soit pour moi.",
+                                      f"Tiens, « {text} »… ça pourrait être le fun."])
+        else:
+            memories = [m.split("] ", 1)[-1] for m in request.meta.get("memories", [])]
+            answer = (f"Bonne question. Dernièrement, je repense à ça : {memories[-1]}" if memories
+                      else "Bonne question… je sais pas trop quoi te dire.")
+        return json.dumps({"answer": answer}, ensure_ascii=False)
 
     def _portrait(self, request: LLMRequest) -> str:
         """Ressenti tiré des causes calculées par le moteur ; avis tirés de l'affection et de la tension."""

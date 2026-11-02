@@ -45,7 +45,7 @@ class HistoryEntry(BaseModel):
 class History:
     def __init__(self, bus: EventBus) -> None:
         self.entries: list[HistoryEntry] = []
-        for kind in ("dialogue", "decision", "action", "plan", "reflexion", "promesse", "promesse_tenue",
+        for kind in ("dialogue", "decision", "action", "plan", "reflexion", "promesse", "promesse_tenue", "entrevue", "souffle",
                      "promesse_brisee", *EVENT_KINDS):
             bus.subscribe(kind, self.on_event)
 
@@ -78,6 +78,13 @@ class History:
             what = "refait son plan" if d.get("replan") else "plan du jour"
             return HistoryEntry(minute=minute, category="pensee", who=[d.get("name", "")],
                                 title=f"{d.get('name', '')}, {what} : {d.get('intention', '')}", lines=steps)
+        if kind in ("entrevue", "souffle"):
+            name = d.get("name", "")
+            if kind == "entrevue":
+                return HistoryEntry(minute=minute, category="conversation", who=[name], title=f"Entrevue avec {name}",
+                                    lines=[f"Toi : {d.get('text', '')}", f"{name} : {d.get('answer', '')}"])
+            return HistoryEntry(minute=minute, category="pensee", who=[name], title=f"Idée soufflée à {name}",
+                                lines=[f"« {d.get('text', '')} »", f"{name} se dit : {d.get('answer', '')}"])
         if kind == "reflexion":
             lines = [f"Question : {q}" for q in d.get("questions", [])]
             evidence = d.get("evidence") or []
