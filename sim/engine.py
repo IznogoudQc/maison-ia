@@ -1394,10 +1394,10 @@ class Engine:
         self.clock.total_minutes = data["total_minutes"]
         for obj_id in world.get("removed", []):
             self.house.remove_object(obj_id)
+        if "household" in data:  # avant les pièces : leurs meubles évitent les objets achetés
+            self.economy.household = Household.model_validate(data["household"])
         self.architect.load_dict(data.get("construction"))
         self.pair_last_talk = dict(data.get("pair_last_talk", {}))
-        if "household" in data:
-            self.economy.household = Household.model_validate(data["household"])
         for item_id in self.economy.household.purchases:
             if item_id in self.house.purchase_objects:
                 self.house.add_object(self.house.purchase_objects[item_id])

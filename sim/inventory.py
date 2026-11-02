@@ -194,6 +194,9 @@ class Inventory:
         if not beds:
             return
         living = [a for a in engine.agents if not a.dead]
+        for agent in living:
+            if agent.bed is not None and agent.bed not in objects:
+                agent.bed = None  # lit disparu (revendu, pièce remeublée) : on lui trouve une autre place
 
         def comfort(agent: Agent) -> float:
             bed = objects.get(agent.bed_id)

@@ -345,7 +345,9 @@ class Renderer:
 
     def _head_low_pos(self, agent: Agent) -> tuple[float, float]:
         """Centre de la tête d'un dormeur, sur l'oreiller de sa place dans le lit."""
-        bed = self.house.objects.get(agent.bed_id) or self.house.objects[agent.persona.bed]
+        bed = self.house.objects.get(agent.bed_id) or self.house.objects.get(agent.persona.bed)
+        if bed is None:  # plus de lit (tente revendue, lit retiré) : la tête là où la personne se trouve
+            return agent.pos[0] * TILE + TILE / 2, agent.pos[1] * TILE + 7
         slot = 0
         if agent.action is not None and agent.action.use_pos in bed.use_positions:
             slot = bed.use_positions.index(agent.action.use_pos)

@@ -343,26 +343,35 @@ def trees_in(house: House, room: PlannedRoom) -> list[InteractiveObject]:
     return [house.objects[f"arbre_{x}_{y}"] for x, y in outer if f"arbre_{x}_{y}" in house.objects]
 
 
-def build_room(house: House, plan: HousePlan, room: PlannedRoom) -> list[InteractiveObject]:
-    """Monte les murs, le plancher, les portes et les fenêtres de la pièce, puis la meuble."""
+def build_room(house: House, plan: HousePlan, room: PlannedRoom,
+               occupied: set[Pos] = frozenset()) -> list[InteractiveObject]:
+    """Monte les murs, le plancher, les portes et les fenêtres de la pièce, puis la meuble.
+
+    occupied : cases déjà prises par des objets achetés qui seront remis en place (rechargement).
+    """
     for tree in trees_in(house, room):
         house.remove_object(tree.id)
     doors = plan.all_doors()
     house.add_room(room.name, room.rect, [t for t in room.wall_tiles() if t not in doors],
                    [t for t in room.wall_tiles() if t in doors], ROOM_TYPES[room.type].floor)
     room.status = "bati"
-    furniture = furnish(house, room, doors)
+    furniture = furnish(house, room, doors, occupied)
     for obj in furniture:
         house.add_object(obj)
     house.windows = compute_windows(house, plan)
     return furniture
 
 
-def furnish(house: House, room: PlannedRoom, doors: set[Pos]) -> list[InteractiveObject]:
-    """Meubles le long des murs ; un meuble dont la place d'usage serait inaccessible est laissé de côté."""
+def furnish(house: House, room: PlannedRoom, doors: set[Pos],
+            occupied: set[Pos] = frozenset()) -> list[InteractiveObject]:
+    """Meubles le long des murs ; un meuble dont la place d'usage serait inaccessible est laissé de côté.
+
+    Les cases d'objets déjà posés dans la pièce (ou qui le seront : occupied) restent libres.
+    """
     x0, y0, x1, y1 = room.rect
     door_inside = {_inside_of(d, room) for d in doors} - {None}
-    blocked: set[Pos] = set()
+    inside = {(x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)}
+    blocked: set[Pos] = (set(occupied) | {t for o in house.objects.values() for t in o.tiles}) & inside
     placed: list[InteractiveObject] = []
     rtype = ROOM_TYPES[room.type]
 

@@ -405,6 +405,10 @@ class Architect:
         self.plan = HousePlan.model_validate(data) if data else None
         if self.plan is None:
             return
+        # Les objets achetés reviendront à leur place : les meubles de la pièce les évitent
+        items = self.engine.economy.household.items
         for room in self.plan.rooms:
             if room.status == "bati":
-                build_room(self.engine.house, self.plan, room)
+                occupied = {(x + dx, y + dy) for o in items if o.room == room.name
+                            for x, y, w, h in [o.rect] for dx in range(w) for dy in range(h)}
+                build_room(self.engine.house, self.plan, room, occupied)
