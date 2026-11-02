@@ -221,6 +221,7 @@ def main() -> None:
 
         renderer.set_yard(engine.economy.household.lawn, engine.car_home(), engine.economy.household.wood)
         renderer.purchases = set(engine.economy.household.purchases)
+        renderer.set_season(engine.seasons.foliage, engine.seasons.snow, engine.seasons.driveway)
         renderer.sim_minute = clock.total_minutes
         renderer.vehicles_out = engine.garage.in_use()
         renderer.set_plan(engine.architect.plan, [t.rect[:2] for t in engine.architect.clearing_trees()])
@@ -244,7 +245,7 @@ def main() -> None:
         promises = [f"{p.text} ({engine.social.when_label(p.minute)})"
                     for p in engine.social.promises if p.status == "pending"]
         extra = list(engine.family.hud_lines()) + engine.credit.hud_lines() + engine.visitors.hud_lines()
-        extra += engine.gossip.hud_lines()
+        extra += engine.gossip.hud_lines() + [engine.seasons.hud_line()]
         if house.layout.wild:
             extra.append(f"Bois : {engine.economy.household.wood} bûches   "
                          f"Arbres : {len(house.objects_of_kind('arbre'))}")

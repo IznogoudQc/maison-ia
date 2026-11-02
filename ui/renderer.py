@@ -46,7 +46,10 @@ class Renderer:
         self.lawn = 20.0
         self.car_home = False
         self.wood = 0
-        self._built_key: tuple[int, int] | None = None
+        self.foliage = "ete"     # saison des arbres (sim/seasons.py) : ete, automne, nu, printemps
+        self.snow = 0.0          # cm de neige au sol
+        self.driveway_snow = 0.0  # cm dans l'entrée
+        self._built_key: tuple | None = None
         self.background = self._build_background()
         self.low = pygame.Surface(self.low_size)
         self.night = pygame.Surface(self.low_size, pygame.SRCALPHA)
@@ -90,6 +93,18 @@ class Renderer:
         self.lawn = lawn
         self.car_home = car_home
         self.wood = wood
+
+    def set_season(self, foliage: str, snow: float, driveway: float) -> None:
+        self.foliage, self.snow, self.driveway_snow = foliage, snow, driveway
+
+    @staticmethod
+    def _snow_level(cm: float) -> int:
+        return 0 if cm < 3 else 1 if cm < 12 else 2 if cm < 30 else 3
+
+    def _bg_key(self) -> tuple:
+        """Le décor est reconstruit quand le gazon, la neige ou les pièces changent."""
+        return (self.house.revision, self._lawn_bucket(), self._snow_level(self.snow),
+                self._snow_level(self.driveway_snow))
 
     def set_plan(self, plan, marked_trees: list[tuple[int, int]]) -> None:
         """Pièces prévues pas encore bâties (piquets au sol) et arbres marqués à couper."""
@@ -187,7 +202,10 @@ class Renderer:
             sprites.draw_water(surf, x, y)
         elif house.is_outdoor(pos):
             surface = house.surface_at(pos)
-            if surface:
+            snow = self._snow_level(self.driveway_snow if surface else self.snow)
+            if snow:
+                sprites.draw_snow(surf, x, y, snow)
+            elif surface:
                 sprites.draw_surface(surf, x, y, surface)
             else:
                 sprites.draw_grass(surf, x, y, lawn)
@@ -208,7 +226,7 @@ class Renderer:
             sprites.draw_wall(surf, x, y, floor_below=(x, y + 1) in house.floor, open_sides=sides)
 
     def _build_background(self) -> pygame.Surface:
-        self._built_key = (self.house.revision, self._lawn_bucket())
+        self._built_key = self._bg_key()
         self.house.dirty.clear()
         lawn = self._grass_height()
         surf = pygame.Surface(self.low_size)
@@ -239,7 +257,7 @@ class Renderer:
                 and o.rect[1] <= y1 and o.rect[1] + max(1, o.rect[3]) - 1 >= y0]
         for obj in sorted(near, key=lambda o: o.rect[1]):
             sprites.draw_object(self.background, obj, body=props.prop_key(obj) is None)
-        self._built_key = (house.revision, self._lawn_bucket())
+        self._built_key = self._bg_key()
 
     def _draw_labels(self, surface: pygame.Surface) -> None:
         """Noms des pièces en haute résolution, pour rester lisibles après agrandissement."""
@@ -364,10 +382,11 @@ class Renderer:
         t = self.time
         hour = minute_of_day / 60.0
         built = self._built_key
-        if built != (self.house.revision, self._lawn_bucket()):
-            lawn_changed = built is not None and built[1] != self._lawn_bucket() and not self.house.layout.wild
-            if lawn_changed:
-                self.background = self._build_background()  # le gazon a poussé
+        key = self._bg_key()
+        if built != key:
+            yard_changed = built is not None and built[1:] != key[1:]
+            if yard_changed:
+                self.background = self._build_background()  # le gazon a poussé, la neige est tombée
             else:
                 self._refresh_background()                  # achat, arbre coupé
         if self._rooms_count != len(self.house.rooms):
@@ -687,6 +706,9 @@ class Renderer:
             kind = job[2]
             if kind == "meuble":
                 obj, key = job[3], job[4]
+                if key[0] == "arbre":
+                    key = (*key[:4], self.foliage, self._snow_level(self.snow) > 0,   # feuillage de la saison
+                           (obj.rect[0] * 7 + obj.rect[1] * 3) % 3 if self.foliage == "automne" else 0)
                 if obj.id in self.vehicles_out:
                     continue  # parti avec quelqu'un : l'entrée est vide
                 dark = darkness(obj.room)
@@ -905,7 +927,7 @@ class Renderer:
     def _build_minimap(self) -> pygame.Surface:
         house = self.house
         surf = pygame.Surface((house.width, house.height))
-        surf.fill((86, 140, 70))
+        surf.fill((228, 232, 240) if self._snow_level(self.snow) else (86, 140, 70))
         colors = {"dirt": (150, 120, 80), "concrete": (186, 184, 178), "asphalt": (90, 90, 96),
                   "pavers": (170, 146, 120)}
         for pos, kind in house.layout.surfaces.items():
@@ -921,9 +943,10 @@ class Renderer:
         return surf
 
     def _draw_minimap(self, surface: pygame.Surface, agents: list[Agent]) -> None:
-        if self._minimap is None or self._minimap_revision != self.house.revision:
+        revision = (self.house.revision, self._snow_level(self.snow) > 0)
+        if self._minimap is None or self._minimap_revision != revision:
             self._minimap = self._build_minimap()
-            self._minimap_revision = self.house.revision
+            self._minimap_revision = revision
         rect = self.minimap_rect()
         surface.blit(pygame.transform.scale(self._minimap, rect.size), rect.topleft)
         pygame.draw.rect(surface, (240, 236, 220), rect, 1)

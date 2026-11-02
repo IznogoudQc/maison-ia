@@ -164,6 +164,24 @@ def draw_grass(surf: pygame.Surface, x: int, y: int, lawn: float) -> None:
         surf.set_at((x * t + rng.randrange(2, t - 2), y * t + rng.randrange(2, t - 2)), (250, 220, 60))
 
 
+SNOW: Color = (234, 238, 245)
+
+
+def draw_snow(surf: pygame.Surface, x: int, y: int, level: int) -> None:
+    """Neige : 1 = mince (le sol perce par endroits), 2 et 3 = couche épaisse, bancs bleutés."""
+    t = TILE
+    rng = random.Random(x * 7919 + y * 104729)
+    drift = round(_smooth_noise(x, y, 6, 9) * 8)
+    base = shade(SNOW, drift - (6 if level == 1 else 0))
+    pygame.draw.rect(surf, base, (x * t, y * t, t, t))
+    if level == 1:
+        for _ in range(6):  # brins d'herbe et terre qui percent
+            surf.set_at((x * t + rng.randrange(t), y * t + rng.randrange(t)), shade(GRASS, -10))
+    for _ in range(4 + level * 2):  # ombres bleutées et reflets
+        px, py = x * t + rng.randrange(t), y * t + rng.randrange(t)
+        surf.set_at((px, py), (206, 216, 232) if rng.random() < 0.6 else (252, 252, 255))
+
+
 def draw_surface(surf: pygame.Surface, x: int, y: int, kind: str) -> None:
     """Revêtements extérieurs : asphalte (entrée, rue), béton (trottoir), pavés (allée)."""
     t = TILE

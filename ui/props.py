@@ -126,7 +126,39 @@ class _Pen:
 
 # ---------------------------------------------------------------------- dessins (W, H en px de base)
 
-def _tree(pen: _Pen, W: float, H: float, species: str) -> None:
+AUTUMN = (((170, 60, 30), (206, 88, 36), (236, 140, 52)), ((196, 120, 30), (226, 160, 40), (246, 200, 80)),
+          ((150, 40, 40), (186, 58, 46), (220, 96, 60)))
+SPRING = ((80, 130, 60), (110, 160, 74), (150, 196, 100))
+BARK = (92, 66, 46)
+SNOW_CAP = (240, 244, 250)
+
+
+def _leaves(species: str, foliage: str, seed: int) -> tuple[Color, Color, Color]:
+    if foliage == "automne":
+        return ((170, 150, 60), (200, 180, 70), (230, 210, 100)) if species == "Bouleau" else AUTUMN[seed % 3]
+    if foliage == "printemps":
+        return SPRING
+    return TREE_COLORS.get(species, TREE_COLORS["Érable"])
+
+
+def _bare(pen: _Pen, cx: float, bottom: float, spread: float, height: float, trunk: Color, snow: bool) -> None:
+    """Arbre sans feuilles : le tronc et quelques branches (de la neige dessus, l'hiver)."""
+    top = bottom - height
+    pen.rect(trunk, cx - spread / 6, bottom - height * 0.45, spread / 3, height * 0.45, radius=1)
+    branches = [(-0.9, 0.55), (0.9, 0.5), (-0.5, 0.95), (0.55, 0.9), (0.0, 1.0), (-1.0, 0.8), (1.0, 0.75)]
+    for dx, dy in branches:
+        end = pen.p(cx + dx * spread, bottom - height * dy)
+        start = pen.p(cx + dx * spread * 0.2, bottom - height * 0.45)
+        pygame.draw.line(pen.c, OUTLINE, start, end, max(1, round(pen.u * 1.1)))
+        pygame.draw.line(pen.c, BARK, start, end, max(1, round(pen.u * 0.7)))
+        if snow:
+            pygame.draw.circle(pen.c, SNOW_CAP, end, max(1, round(pen.u * 0.9)))
+    if snow:
+        pen.circle(SNOW_CAP, cx, top + 1, 1.2, outline=False)
+
+
+def _tree(pen: _Pen, W: float, H: float, species: str, foliage: str = "ete", snow: bool = False,
+          seed: int = 0) -> None:
     cx, bottom = W / 2, H
     if species == "Sapin":
         pen.rect((96, 66, 42), cx - 1.5, bottom - 5, 3, 5, radius=0.5)
@@ -135,12 +167,18 @@ def _tree(pen: _Pen, W: float, H: float, species: str) -> None:
             outline = [pen.p(cx - half - 1, top + 7.6), pen.p(cx + half + 1, top + 7.6), pen.p(cx, top - 5.4)]
             pygame.draw.polygon(pen.c, OUTLINE, outline)
             pygame.draw.polygon(pen.c, color, [pen.p(cx - half, top + 7), pen.p(cx + half, top + 7), pen.p(cx, top - 4)])
+            if snow:  # neige posée sur chaque étage
+                pygame.draw.polygon(pen.c, SNOW_CAP, [pen.p(cx - half * 0.5, top + 1.5), pen.p(cx + half * 0.5, top + 1.5),
+                                                      pen.p(cx, top - 4)])
         return
     trunk = (226, 222, 210) if species == "Bouleau" else (104, 72, 46)
+    if foliage == "nu":
+        _bare(pen, cx, bottom, 6.5, 19, trunk, snow)
+        return
     pen.rect(trunk, cx - 1.6, bottom - 7, 3.2, 7, radius=1)
     if species == "Bouleau":
         pen.hline((50, 50, 50), cx - 1, cx + 0.5, bottom - 4, 0.7)
-    dark, mid, light = TREE_COLORS.get(species, TREE_COLORS["Érable"])
+    dark, mid, light = _leaves(species, foliage, seed)
     blobs = [(cx - 4, bottom - 11, 6), (cx + 4, bottom - 11, 6), (cx, bottom - 15, 7.5)]
     for x, y, rad in blobs:  # contour commun, puis les masses de feuillage
         pen.circle(OUTLINE, x, y, rad + 0.1)
@@ -151,10 +189,13 @@ def _tree(pen: _Pen, W: float, H: float, species: str) -> None:
     pen.circle(light, cx - 3, bottom - 17.5, 2.2, outline=False)
 
 
-def _big_tree(pen: _Pen, W: float, H: float) -> None:
+def _big_tree(pen: _Pen, W: float, H: float, foliage: str = "ete", snow: bool = False) -> None:
     cx, cy = W / 2, H / 2
+    if foliage == "nu":
+        _bare(pen, cx, H - 1, 12, H - 4, (104, 72, 46), snow)
+        return
     pen.rect((104, 72, 46), cx - 2, H - 9, 4, 8, radius=1)
-    dark, mid, light = TREE_COLORS["Érable"]
+    dark, mid, light = _leaves("Érable", foliage, 1)
     blobs = [(cx - 6, cy - 1, 9), (cx + 6, cy, 8.5), (cx, cy - 7, 10.5)]
     for x, y, rad in blobs:
         pen.circle(OUTLINE, x, y, rad + 0.1)
@@ -287,10 +328,11 @@ def prop_image(key: tuple, scale: float) -> pygame.Surface:
     canvas = pygame.Surface((size[0] * SUPERSAMPLE, size[1] * SUPERSAMPLE), pygame.SRCALPHA)
     pen = _Pen(canvas, scale * SUPERSAMPLE, -x0, -y0)
     if kind == "arbre":
+        foliage, snow, variant = key[4:7] if len(key) > 6 else ("ete", False, 0)
         if key[3] == "gros":
-            _big_tree(pen, W, H)
+            _big_tree(pen, W, H, foliage, snow)
         else:
-            _tree(pen, W, H, key[3])
+            _tree(pen, W, H, key[3], foliage, snow, variant)
     elif kind == "lit":
         _bed(pen, W, H, key[3], key[4], key[5])
     elif kind == "canape":

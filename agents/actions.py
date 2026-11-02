@@ -56,6 +56,7 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("epicerie", "va faire l'épicerie", "porte", 0, {}, selectable=False),
     ActionDef("heures_sup", "part faire des heures supplémentaires", "porte", 0, {}, selectable=False),
     ActionDef("acheter", "commande {target}", None, 10, {"fun": 10}, selectable=False),
+    ActionDef("pelleter", "pellette l'entrée", None, 40, {"fun": -5, "energy": -8}, selectable=False),
     ActionDef("tondre", "tond la pelouse", None, 60, {"fun": -5, "energy": -4}, selectable=False),
     ActionDef("couper", "coupe un {target}", "arbre", 60, {"energy": -12, "fun": -4, "hygiene": -8},
               selectable=False, daytime_only=True),

@@ -50,6 +50,7 @@ from sim.career import Careers
 from sim.family import FamilyLife
 from sim.interview import Interviews
 from sim.gossip import Gossip
+from sim.seasons import Seasons
 from sim.visitors import Visitors
 from sim.portrait import Portraits
 from sim.credit import Credit
@@ -109,7 +110,7 @@ WOOD_YIELD = {"Érable": 6, "Sapin": 5, "Bouleau": 4}
 SAW_FACTOR = 0.45          # avec la scie à chaîne, un arbre prend 45 % du temps
 NO_ROOF_FUN_PER_HOUR = 1.0  # vivre sans toit use le moral, petit à petit
 CUT_HOURS = (8 * 60, 19 * 60)
-SICK_FORBIDDEN = {"couper", "construire", "tondre", "heures_sup", "engager"}  # trop dur quand on est malade
+SICK_FORBIDDEN = {"couper", "construire", "tondre", "heures_sup", "engager", "pelleter"}  # trop dur quand on est malade
 STORY_WAIT_SECONDS = 10.0  # secondes réelles : au-delà, la nouvelle paraît avec son texte fixe
 BUILD_HOURS = (8 * 60, 20 * 60)   # on peut cogner jusqu'à 20 h (après le souper, l'été)
 EVENING = 17 * 60
@@ -158,6 +159,7 @@ class Engine:
         self.visitors = Visitors(self)      # voisins et parenté qui passent faire un tour
         self.everyone: list[Agent] = list(self.agents)  # famille + visiteurs présents (mis à jour en place)
         self.gossip = Gossip(self)          # fêtes et rumeurs de bouche à oreille
+        self.seasons = Seasons(self)        # neige, chauffage, sucres, Halloween, Noël
         self.last_recall: dict[str, list] = {}   # agent -> souvenirs retenus pour sa dernière demande à l'IA  # fiche personnage : humeur et avis, avec la voix de l'IA
         # Événements tirés dont le LLM écrit le récit : (événement, texte fixe, future, envoi en temps réel)
         self.pending_stories: list[tuple] = []
@@ -258,6 +260,8 @@ class Engine:
             target_name = f"{item.label} ({item.price:,.0f} $)".replace(",", " ")
         elif name == "tondre":
             use_pos = self.rng.choice(self.house.lawn_tiles())
+        elif name == "pelleter":
+            use_pos = self.seasons.shovel_spot()
         elif name == "carriere":
             target_name = self.careers.target_name(target)
             if target_name is None:
@@ -409,13 +413,14 @@ class Engine:
         if agent.visitor:  # un invité ne fait ni achats, ni travaux, ni soins
             options.sort(key=lambda o: o.score, reverse=True)
             return options
-        options += self._economic_options(agent) + self._care_options(agent)
+        options += self._economic_options(agent) + self._care_options(agent) + self.seasons.options_for(agent)
         if self.is_sick(agent):  # malade : on se repose, pas de gros travaux
             options = [o for o in options if o.action not in SICK_FORBIDDEN]
             if self._object_spot(agent, "lit") is not None:
                 options.append(Option(action="sieste", label="se repose au lit (malade)", score=30.0))
         self.inventory.boost(agent, options)
         self.mind.boost(agent, options)
+        self.seasons.boost(options)
         options.sort(key=lambda o: (o.urgent, o.score), reverse=True)
         return options
 
@@ -729,6 +734,7 @@ class Engine:
         if self.clock.minute_of_day >= 5 * 60 and self._calendar_day != self.clock.day:
             self._calendar_day = self.clock.day
             self._daily_calendar()
+        self.seasons.update()
         if self.clock.minute_of_day >= 19 * 60 and self._rehouse_day != self.clock.day:
             self._rehouse_day = self.clock.day
             self.inventory.rehouse()   # avant le coucher : une place libre dans un vrai lit ne reste pas vide
@@ -1109,6 +1115,8 @@ class Engine:
         elif action.name == "tondre":
             self.economy.household.lawn = 0.0
             self.remember(agent, "J'ai tondu la pelouse. Ça sent l'été.", 2)
+        elif action.name == "pelleter":
+            self.seasons.shoveled(agent)
 
     def _buy(self, agent: Agent, item_id: str) -> None:
         item = self.economy.buy(self.clock.total_minutes, item_id, agent.name)
@@ -1128,7 +1136,8 @@ class Engine:
         """Chaque matin, le gazon pousse ; trop long, le voisin tond (payant) ou la ville donne une amende."""
         household = self.economy.household
         household.last_lawn_day = self.clock.day
-        household.lawn = min(100.0, household.lawn + LAWN_GROWTH_PER_DAY)
+        if self.seasons.lawn_grows():   # l'hiver, le gazon dort sous la neige
+            household.lawn = min(100.0, household.lawn + LAWN_GROWTH_PER_DAY)
         now = self.clock.total_minutes
         if household.lawn >= LAWN_NEIGHBOR_AT and not self.economy.owns("tondeuse") \
                 and household.money >= NEIGHBOR_MOW_PRICE:
@@ -1272,6 +1281,7 @@ class Engine:
         coming = [f"{name} ({self.calendar.label(d)})" for d, name in self.calendar.upcoming(day)]
         if coming:
             lines.append("Bientôt : " + ", ".join(coming) + ".")
+        lines.append(self.seasons.context_line())
         return lines
 
     def _daily_calendar(self) -> None:
@@ -1440,6 +1450,7 @@ class Engine:
             "history": self.history.to_list(),
             "visitors": self.visitors.to_dict(),
             "gossip": self.gossip.to_dict(),
+            "seasons": self.seasons.to_dict(),
         }
         if self.llm is not None:
             stats = self.llm.stats
@@ -1488,6 +1499,7 @@ class Engine:
         self.social.load_dict(data.get("social", {}))
         self.visitors.load_dict(data.get("visitors"))
         self.gossip.load_dict(data.get("gossip"))
+        self.seasons.load_dict(data.get("seasons"))
         self.everyone[:] = list(self.agents)
         self.game_over = self.alive_count() == 0
         if self.llm is not None and "llm_stats" in data:

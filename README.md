@@ -222,6 +222,23 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
 Les prompts du LLM reçoivent l'état du ménage (argent, garde-manger, achats, chômage, santé,
 deuils, dernière nouvelle) : les dialogues en parlent naturellement.
 
+## Saisons
+
+La partie suit le vrai calendrier (départ en juin) : l'hiver arrive en décembre.
+
+- **Rendu** : feuilles orange, rouges et jaunes à l'automne, arbres nus de novembre à avril (les
+  sapins restent verts), terrain blanc sous la neige, vert tendre au printemps.
+- **Neige** : de fin novembre à fin mars, il neige certains matins (bordée annoncée à partir de
+  15 cm). La neige s'accumule au sol et dans l'entrée ; dès 13 ans, on va pelleter. Le gazon ne
+  pousse plus l'hiver.
+- **Chauffage** : à la maison, le chauffage électrique coûte chaque jour de novembre à avril. Sur
+  le terrain, le poêle brûle des bûches ; sans bûches, ou encore sous la tente en plein hiver, on
+  gèle : le moral et l'énergie baissent.
+- **Fêtes de saison** : Halloween (bonbons pour les jeunes), réveillon de Noël (cadeaux), sortie à
+  la cabane à sucre une fin de semaine du temps des sucres (ou la cabane du terrain qui coule).
+- **Février** : le mois est long, le moral baisse un peu plus vite. Les personnages en parlent :
+  la saison, la neige et les fêtes qui s'en viennent sont dans le contexte de leurs conversations.
+
 ## Vie intérieure des personnages
 
 - **Plan du matin** : au réveil, chaque personnage demande au LLM son plan de la journée
