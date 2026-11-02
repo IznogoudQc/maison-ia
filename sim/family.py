@@ -164,6 +164,7 @@ class FamilyLife:
                 engine.remember(other, f"Fête de {agent.name} : {age} an{'s' if age > 1 else ''} !", 5)
         if agent.id in self.births:
             agent.persona.schedule = schedule_for(age)
+            engine.careers.apply(agent)  # adulte : l'horaire suit ses études ou son emploi
             agent.fired.clear()
         if before == "bebe" and agent.persona.stage != "bebe":
             self._first_bed(agent)

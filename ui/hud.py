@@ -148,9 +148,12 @@ class Hud:
         title = f"{persona.name}, {persona.age} ans ({persona.role})"
         surface.blit(theme.font(17, bold=True).render(title, True, theme.TEXT), (x + 24, y))
         y += 28
+        careers = getattr(self, "careers", None)  # sim.career.Careers, branché par main.py
+        work = careers.describe(agent, short=True) if careers is not None else ""
         for line in (f"Action : {agent.status_label}",
                      f"Humeur : {agent.mood}",
-                     f"Pièce : {agent.last_room or '-'}" if not agent.is_away else "Pièce : dehors"):
+                     f"Pièce : {agent.last_room or '-'}" if not agent.is_away else "Pièce : dehors",
+                     *([f"Travail : {work}" if agent.persona.is_adult else f"École : {work}"] if work else [])):
             surface.blit(theme.font(13).render(_clip(line, 48), True, theme.TEXT), (x, y))
             y += 19
         if agent.action is not None and agent.action.reason:

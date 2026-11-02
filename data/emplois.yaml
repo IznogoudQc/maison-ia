@@ -1,0 +1,68 @@
+# Emplois et formations (lot Carrière). Les intitulés sont épicènes : on décrit le domaine, pas la personne.
+#
+# Emplois :
+#   echelons : [intitulé, salaire net par jour de travail] ; une promotion fait passer à l'échelon suivant
+#   formation : formation exigée (plus bas) ; absente = aucun diplôme requis
+#   employeurs : noms fictifs, tirés au hasard à l'embauche
+# Formations :
+#   jours : jours de cours (en semaine, hors fériés) ; frais : $ payés au début ; emploi : métier visé
+
+emplois:
+  - id: commerce
+    domaine: commerce de détail
+    echelons: [["Service à la clientèle", 120], ["Responsable de rayon", 145], ["Gérance adjointe", 175]]
+    employeurs: [Épicerie du Coin, Quincaillerie Boréale, Pharmacie des Érables]
+  - id: manoeuvre
+    domaine: construction
+    echelons: [["Manœuvre en construction", 140], ["Opération de machinerie", 170]]
+    employeurs: [Constructions Laurentides, Béton Saint-Laurent]
+  - id: telecom
+    domaine: télécommunications
+    formation: dep_telecom
+    echelons: [["Technique en télécommunications", 200], ["Technique senior", 230], ["Supervision d'équipe", 260]]
+    employeurs: [Télécom Boréal, Réseau Fleuve, Câblo-Nord]
+  - id: admin
+    domaine: administration
+    formation: dep_secretariat
+    echelons: [["Soutien administratif", 165], ["Coordination administrative", 195], ["Gestion de bureau", 225]]
+    employeurs: [Clinique des Pins, Cabinet Tremblay et associés, Ville de Sainte-Rose]
+  - id: charpenterie
+    domaine: construction
+    formation: dep_charpenterie
+    echelons: [["Charpenterie-menuiserie", 190], ["Supervision de chantier", 225]]
+    employeurs: [Constructions Laurentides, Maisons Bois-Franc]
+  - id: comptabilite
+    domaine: finance
+    formation: dec_compta
+    echelons: [["Technique comptable", 175], ["Comptabilité principale", 205], ["Contrôle financier", 245]]
+    employeurs: [Caisse du Village, Cabinet Tremblay et associés]
+  - id: soins
+    domaine: santé
+    formation: dec_soins
+    echelons: [["Soins infirmiers", 230], ["Coordination des soins", 265]]
+    employeurs: [Hôpital régional, CLSC des Rivières]
+  - id: informatique
+    domaine: informatique
+    formation: dec_info
+    echelons: [["Programmation", 240], ["Développement senior", 280], ["Direction technique", 330]]
+    employeurs: [Pixel Nord, Logiciels Fleurdelys]
+  - id: enseignement
+    domaine: éducation
+    formation: bac_enseignement
+    echelons: [["Enseignement au primaire", 245], ["Direction adjointe d'école", 290]]
+    employeurs: [École des Monts, École Sainte-Marie]
+  - id: genie
+    domaine: génie
+    formation: bac_genie
+    echelons: [["Génie civil", 290], ["Gestion de projets", 340]]
+    employeurs: [Génivert, Ponts et Chaussées du Nord]
+
+formations:
+  - {id: dep_telecom, nom: "DEP en télécommunications", diplome: DEP, jours: 20, frais: 300, emploi: telecom}
+  - {id: dep_secretariat, nom: "DEP en secrétariat", diplome: DEP, jours: 18, frais: 300, emploi: admin}
+  - {id: dep_charpenterie, nom: "DEP en charpenterie-menuiserie", diplome: DEP, jours: 22, frais: 350, emploi: charpenterie}
+  - {id: dec_compta, nom: "DEC en comptabilité et gestion", diplome: DEC, jours: 30, frais: 600, emploi: comptabilite}
+  - {id: dec_soins, nom: "DEC en soins infirmiers", diplome: DEC, jours: 35, frais: 700, emploi: soins}
+  - {id: dec_info, nom: "DEC en techniques de l'informatique", diplome: DEC, jours: 30, frais: 700, emploi: informatique}
+  - {id: bac_enseignement, nom: "Bac en enseignement primaire", diplome: BAC, jours: 45, frais: 1500, emploi: enseignement}
+  - {id: bac_genie, nom: "Bac en génie civil", diplome: BAC, jours: 50, frais: 1800, emploi: genie}

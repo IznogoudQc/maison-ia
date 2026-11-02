@@ -22,6 +22,8 @@ family:
     aime: [tourtiere, steak]
     favorite_actions: [jardin, lire]
     salary_per_day: 190
+    emploi: charpenterie
+    employeur: Constructions Laurentides
     schedule:
       wake: "06:00"
       sleep: "22:30"
@@ -51,6 +53,8 @@ family:
     aime: [legumes, oeufs]
     favorite_actions: [lire, telephone]
     salary_per_day: 175
+    emploi: comptabilite
+    employeur: Caisse du Village
     schedule:
       wake: "06:15"
       sleep: "22:00"

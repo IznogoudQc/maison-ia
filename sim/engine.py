@@ -46,6 +46,7 @@ from sim.events import Event, EventBus
 from sim.food import FOODS
 from sim.architect import Architect
 from sim.calendrier import Calendar
+from sim.career import Careers
 from sim.family import FamilyLife
 from sim.portrait import Portraits
 from sim.credit import Credit
@@ -128,6 +129,7 @@ class Engine:
         self.calendar = Calendar(date.fromisoformat(config.world.date_depart), config.world.vacances_semaines)
         clock.calendar = self.calendar
         self.scheduler = Scheduler(self.calendar)
+        self.careers = Careers(self)  # emploi, promotions, études, école (sim/career.py)
         self._calendar_day = -1   # dernier jour où le calendrier a été appliqué (maladie, paie des congés)
         self.pending_decisions: dict[str, PendingDecision] = {}
         self.pending_dialogues: list[PendingDialogue] = []
@@ -209,6 +211,7 @@ class Engine:
                     agent.action = action
             agent.last_room = self.house.room_at(agent.pos)
         self.family.initialize()
+        self.careers.setup()
 
     # ------------------------------------------------------------------ actions
 
@@ -245,6 +248,10 @@ class Engine:
             target_name = f"{item.label} ({item.price:,.0f} $)".replace(",", " ")
         elif name == "tondre":
             use_pos = self.rng.choice(self.house.lawn_tiles())
+        elif name == "carriere":
+            target_name = self.careers.target_name(target)
+            if target_name is None:
+                return None
         elif name in ("acheter_objet", "revendre"):
             if name == "acheter_objet":
                 item = self.inventory.catalogue.get((target or "").split("|")[0])
@@ -410,7 +417,7 @@ class Engine:
         if not agent.persona.is_adult:
             return options
         options += self._purchase_options(agent) + self.inventory.options_for(agent) + self.garage.options_for(agent)
-        options += self.credit.options_for(agent)
+        options += self.credit.options_for(agent) + self.careers.options_for(agent)
         return options + self._money_options(agent)
 
     def _yard_options(self, agent: Agent) -> list[Option]:
@@ -762,7 +769,8 @@ class Engine:
                     lines.append(project)
         lines += self.calendar_lines(agents)
         lines += self.family.context_lines()
-        for line in (self.inventory.context_line(), self.garage.context_line(), self.credit.context_line()):
+        for line in (self.careers.context_line(agents), self.inventory.context_line(), self.garage.context_line(),
+                     self.credit.context_line()):
             if line:
                 lines.append(line)
         departed = [a for a in self.agents if a.dead]
@@ -1018,6 +1026,12 @@ class Engine:
             self.inventory.buy(agent, action.target)
         elif action.name == "revendre":
             self.inventory.sell(agent, action.target)
+        elif action.name == "carriere":
+            self.careers.decide(agent, action.target)
+        elif action.name == "devoirs":
+            self.careers.homework(agent)
+        elif action.name == "lire":
+            self.careers.homework(agent, 0.4)
         elif action.name == "promener":
             self.inventory.walked(agent)
         elif action.name == "soigner":
@@ -1218,6 +1232,7 @@ class Engine:
             self._pay_day_off(agent, day)
         if holiday:
             self.publish("conge", name=holiday, text=f"{holiday} : congé pour tout le monde")
+        self.careers.daily(day)
 
     def _pay_day_off(self, agent: Agent, day: int) -> None:
         """Férié et vacances sont payés ; la maladie l'est quelques jours par année, ensuite non."""
@@ -1390,6 +1405,7 @@ class Engine:
                 # Remplacement en place : le moteur, le rendu et les bulles partagent cette liste
                 self.agents[index] = Agent.model_validate({**saved[agent.id], "persona": agent.persona})
         self.family.after_load()
+        self.careers.setup()   # carrières sauvegardées : salaire et horaire de la fiche ; sinon, celles de départ
         self.inventory.restore()
         self.garage.restore()
         self.pending_decisions.clear()

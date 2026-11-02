@@ -20,7 +20,8 @@ CATEGORIES = {"conversation": "Conversations", "action": "Actions", "pensee": "P
 ROUTINE = {"dormir", "flaner", "partir", "dejeuner", "souper", "cuisiner", "collation", "douche"}
 EVENT_KINDS = ("evenement", "achat", "achat_objet", "pret", "pret_retard", "naissance", "deces", "hopital",
                "grossesse", "anniversaire", "plan_maison", "piece_batie", "chantier_debut", "entrepreneur",
-               "agrandissement", "projet_bebe", "factures", "frigo_vide", "fin")
+               "agrandissement", "projet_bebe", "factures", "frigo_vide", "fin", "conge", "malade",
+               "embauche", "promotion", "perte_emploi", "offre_emploi", "etudes", "diplome")
 
 
 class HistoryEntry(BaseModel):

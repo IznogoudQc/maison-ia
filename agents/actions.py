@@ -95,6 +95,7 @@ ACTIONS: dict[str, ActionDef] = {a.name: a for a in [
     ActionDef("promener", "promène le chien", "chien", 30, {"fun": 25, "social": 8, "energy": -4},
               daytime_only=True, excluded=("bebe",)),
     ActionDef("flatter", "flatte le chien", "chien", 10, {"fun": 15, "social": 12}, excluded=("bebe",)),
+    ActionDef("carriere", "{target}", None, 20, {"fun": 5}, selectable=False),
     ActionDef("acheter_objet", "commande {target}", None, 10, {"fun": 8}, selectable=False),
     ActionDef("revendre", "revend {target}", None, 10, {"fun": -5}, selectable=False),
     ActionDef("acheter_vehicule", "achète {target}", None, 15, {"fun": 12}, selectable=False),

@@ -119,6 +119,7 @@ def main() -> None:
     map_w, map_h = renderer.size
     screen = pygame.display.set_mode((map_w + config.display.hud_width, map_h))
     hud = Hud(pygame.Rect(map_w, 0, config.display.hud_width, map_h))
+    hud.careers = engine.careers
     dialogue_box = DialogueBox(renderer, agents, config.dialogue.line_display_s, config.dialogue.history_size)
     bus.subscribe("dialogue", dialogue_box.on_dialogue)
     bus.subscribe("replique", dialogue_box.on_line)

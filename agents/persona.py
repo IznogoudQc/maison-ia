@@ -50,6 +50,9 @@ class Persona(BaseModel):
     bed: str
     favorite_actions: list[str] = Field(default_factory=list)
     salary_per_day: float = 0.0   # paie nette par journée de travail (0 = pas d'emploi)
+    emploi: str | None = None     # emploi de départ (data/emplois.yaml) ; sinon le plus proche du salaire
+    employeur: str = ""
+    formations: list[str] = Field(default_factory=list)  # diplômes de départ (data/emplois.yaml)
     look: dict = Field(default_factory=dict)  # apparence : hair, pants (RGB), long_hair (bool)
     aime: list[str] = Field(default_factory=list)  # aliments préférés (data/aliments.yaml)
     can_be_pregnant: bool = False  # peut porter un bébé (scénario terrain) ; sinon le couple adopte

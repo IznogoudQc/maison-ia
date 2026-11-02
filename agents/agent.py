@@ -12,6 +12,7 @@ from agents.needs import Needs
 from agents.persona import Persona
 from agents.plan import DayPlan, Goal
 from agents.social import Relation
+from sim.career import Career
 from world.pathfinding import find_path
 
 Pos = tuple[int, int]
@@ -68,6 +69,7 @@ class Agent(BaseModel):
     parental_leave_until: int | None = None  # congé parental : pas de travail, prestations à la place
     sick_until: int | None = None        # malade jusqu'à cette minute : on reste à la maison
     sick_paid: dict[str, int] = Field(default_factory=dict)  # année -> jours de maladie déjà payés
+    career: Career | None = None         # emploi, études ou école (sim/career.py)
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property

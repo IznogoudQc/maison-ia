@@ -39,6 +39,15 @@ def character_rows(agent: Agent) -> list[Row]:
     return rows
 
 
+def career_rows(engine: Engine, agent: Agent) -> list[Row]:
+    """Travail et études : emploi, employeur, satisfaction, offre, diplômes, faits marquants."""
+    lines = engine.careers.lines(agent)
+    if not lines:
+        return []
+    rows: list[Row] = [("", theme.TEXT), ("Travail et études", HEADER), (lines[0], theme.TEXT)]
+    return rows + [(line, NOTE if line.startswith("Jour ") else theme.TEXT_DIM) for line in lines[1:]]
+
+
 def mood_rows(engine: Engine, agent: Agent) -> list[Row]:
     rows: list[Row] = [(f"Humeur : {agent.mood}", HEADER)]
     portraits = engine.portraits
@@ -119,7 +128,8 @@ class PortraitScreen:
         column = (panel.width - 48) // 2
         # Colonne de gauche : caractère puis humeur
         y = top
-        for text, color in character_rows(agent) + [("", theme.TEXT)] + mood_rows(self.engine, agent):
+        rows = character_rows(agent) + career_rows(self.engine, agent) + [("", theme.TEXT)] + mood_rows(self.engine, agent)
+        for text, color in rows:
             for line in wrap_text(text, font, column) if text else [""]:
                 if y > panel.bottom - 44:
                     break
