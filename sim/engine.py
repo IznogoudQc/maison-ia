@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import random
 import time
+from datetime import date
 from concurrent.futures import Future
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +45,7 @@ from sim.economy import CATALOG, Economy, Household
 from sim.events import Event, EventBus
 from sim.food import FOODS
 from sim.architect import Architect
+from sim.calendrier import Calendar
 from sim.family import FamilyLife
 from sim.portrait import Portraits
 from sim.credit import Credit
@@ -102,6 +104,7 @@ WOOD_YIELD = {"Érable": 6, "Sapin": 5, "Bouleau": 4}
 SAW_FACTOR = 0.45          # avec la scie à chaîne, un arbre prend 45 % du temps
 NO_ROOF_FUN_PER_HOUR = 1.0  # vivre sans toit use le moral, petit à petit
 CUT_HOURS = (8 * 60, 19 * 60)
+SICK_FORBIDDEN = {"couper", "construire", "tondre", "heures_sup", "engager"}  # trop dur quand on est malade
 STORY_WAIT_SECONDS = 10.0  # secondes réelles : au-delà, la nouvelle paraît avec son texte fixe
 BUILD_HOURS = (8 * 60, 20 * 60)   # on peut cogner jusqu'à 20 h (après le souper, l'été)
 EVENING = 17 * 60
@@ -122,7 +125,10 @@ class Engine:
         self.rng = rng
         self.bus = bus or EventBus()
         self.llm = llm
-        self.scheduler = Scheduler()
+        self.calendar = Calendar(date.fromisoformat(config.world.date_depart), config.world.vacances_semaines)
+        clock.calendar = self.calendar
+        self.scheduler = Scheduler(self.calendar)
+        self._calendar_day = -1   # dernier jour où le calendrier a été appliqué (maladie, paie des congés)
         self.pending_decisions: dict[str, PendingDecision] = {}
         self.pending_dialogues: list[PendingDialogue] = []
         self.pair_last_talk: dict[str, int] = {}  # paire -> minute absolue de la dernière conversation
@@ -383,6 +389,10 @@ class Engine:
                 score = max(score, 0.5)
             options.append(Option(action=definition.name, label=definition.label, score=score))
         options += self._economic_options(agent) + self._care_options(agent)
+        if self.is_sick(agent):  # malade : on se repose, pas de gros travaux
+            options = [o for o in options if o.action not in SICK_FORBIDDEN]
+            if self._object_spot(agent, "lit") is not None:
+                options.append(Option(action="sieste", label="se repose au lit (malade)", score=30.0))
         self.inventory.boost(agent, options)
         self.mind.boost(agent, options)
         options.sort(key=lambda o: (o.urgent, o.score), reverse=True)
@@ -506,7 +516,7 @@ class Engine:
                      f"{eco.household.money:.0f} $ en banque)")
             options.append(Option(action="epicerie", label=label, score=round(20 + (cfg.low_pantry_days - days) * 20, 2),
                                   urgent=days < 0.5))
-        weekday = self.clock.weekday < 5
+        weekday = self.clock.weekday < 5 and not self.calendar.agent_off(agent, self.clock.day)
         laid_off = agent.unemployed_until is not None
         if eco.household.money < cfg.overtime_below and agent.persona.salary_per_day > 0 and weekday \
                 and not laid_off and minute + cfg.overtime_minutes <= open_to:
@@ -692,6 +702,9 @@ class Engine:
         yard_due = self.clock.minute_of_day >= 6 * 60 and household.last_lawn_day != self.clock.day
         if self.economy.enabled and not self.house.layout.wild and yard_due:
             self._daily_yard()
+        if self.clock.minute_of_day >= 5 * 60 and self._calendar_day != self.clock.day:
+            self._calendar_day = self.clock.day
+            self._daily_calendar()
         for agent in self.agents:
             self._update_agent(agent)
         self.social.update()
@@ -747,6 +760,7 @@ class Engine:
                 project = self.architect.context_line()
                 if project:
                     lines.append(project)
+        lines += self.calendar_lines(agents)
         lines += self.family.context_lines()
         for line in (self.inventory.context_line(), self.garage.context_line(), self.credit.context_line()):
             if line:
@@ -1158,6 +1172,77 @@ class Engine:
                      wood=self.economy.household.wood, trees=len(self.house.objects_of_kind("arbre")))
         self.remember(agent, f"J'ai abattu un {tree.label.lower()} : {logs} bûches de plus "
                              f"(réserve : {self.economy.household.wood}).", 2)
+
+    # ------------------------------------------------------------------ calendrier : congés et maladie
+
+    def is_sick(self, agent: Agent) -> bool:
+        return agent.sick_until is not None and self.clock.total_minutes < agent.sick_until
+
+    def calendar_lines(self, agents: list[Agent]) -> list[str]:
+        """Pour les prompts : la date, le férié du jour, qui est en congé, les fériés qui s'en viennent."""
+        day = self.clock.day
+        holiday = self.calendar.holiday(day)
+        lines = [f"Aujourd'hui : {self.calendar.label(day)}" + (f", {holiday} (congé)." if holiday else ".")]
+        off = [f"{a.name} ({reason})" for a in agents if not a.dead
+               and a.persona.schedule.away is not None and day % 7 in a.persona.schedule.away.days
+               and (reason := self.calendar.agent_off(a, day))]
+        if off:
+            lines.append("En congé aujourd'hui : " + ", ".join(off) + ".")
+        coming = [f"{name} ({self.calendar.label(d)})" for d, name in self.calendar.upcoming(day)]
+        if coming:
+            lines.append("Bientôt : " + ", ".join(coming) + ".")
+        return lines
+
+    def _daily_calendar(self) -> None:
+        """Chaque matin : qui tombe malade ou guérit, la paie des congés payés, l'annonce des fériés."""
+        day = self.clock.day
+        now = self.clock.total_minutes
+        cfg = self.config.health
+        holiday = self.calendar.holiday(day)
+        for agent in self.agents:
+            if agent.dead or agent.is_away:
+                continue
+            if agent.sick_until is not None and now >= agent.sick_until:
+                agent.sick_until = None
+                self.remember(agent, "Ça va mieux : la grippe est passée.", 3)
+            elif agent.sick_until is None and agent.persona.stage != "bebe" and                     (luck := random.Random(f"grippe:{agent.id}:{day}")).random() < cfg.sick_chance:
+                # Tirage propre à la personne et au jour : la maladie ne décale pas le hasard du reste du jeu
+                days = luck.choice((1, 1, 2, 3))
+                agent.sick_until = (day + days) * 24 * 60 + 5 * 60
+                agent.needs.apply({"energy": -20, "fun": -15})
+                self.publish("malade", agent=agent.id, name=agent.name, days=days,
+                             text=f"{agent.name} a la grippe : {days} jour(s) à la maison")
+                self.remember(agent, f"Je file mal : la grippe. Je reste à la maison ({days} jour(s)).", 5)
+            if holiday and agent.persona.stage != "bebe":
+                self.remember(agent, f"C'est le {holiday} aujourd'hui : congé !", 3)
+            self._pay_day_off(agent, day)
+        if holiday:
+            self.publish("conge", name=holiday, text=f"{holiday} : congé pour tout le monde")
+
+    def _pay_day_off(self, agent: Agent, day: int) -> None:
+        """Férié et vacances sont payés ; la maladie l'est quelques jours par année, ensuite non."""
+        away = agent.persona.schedule.away
+        salary = agent.persona.salary_per_day
+        if not self.economy.enabled or salary <= 0 or away is None or day % 7 not in away.days:
+            return
+        now = self.clock.total_minutes
+        if (agent.unemployed_until is not None and now < agent.unemployed_until) or \
+                (agent.parental_leave_until is not None and now < agent.parental_leave_until):
+            return
+        reason = self.calendar.agent_off(agent, day)
+        if reason is None:
+            return
+        if reason == "malade":
+            year = str(self.calendar.date(day).year)
+            used = agent.sick_paid.get(year, 0)
+            if used >= self.config.health.sick_paid_days:
+                self.remember(agent, "Encore malade : cette journée-là n'est pas payée.", 4)
+                return
+            agent.sick_paid[year] = used + 1
+            reason = "congé de maladie"
+        self.economy.transaction(now, f"Paie de {agent.name} ({reason})", salary)
+        self.publish("paie", agent=agent.id, name=agent.name, amount=salary, source="conge",
+                     money=self.economy.household.money)
 
     def has_roof(self) -> bool:
         """Au moins une pièce intérieure (le terrain du départ n'en a aucune)."""

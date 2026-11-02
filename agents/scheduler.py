@@ -30,6 +30,9 @@ def is_sleep_time(minute: int, wake: int, sleep: int) -> bool:
 
 
 class Scheduler:
+    def __init__(self, calendar=None) -> None:
+        self.calendar = calendar  # sim.calendrier.Calendar : fériés, vacances, école fermée, maladie
+
     def check(self, agent: Agent, clock: SimClock) -> ScheduledAction | None:
         """Action imposée à démarrer maintenant, ou None. Marque la tâche comme faite."""
         schedule = agent.persona.schedule
@@ -48,7 +51,8 @@ class Scheduler:
         laid_off = agent.unemployed_until is not None and clock.total_minutes < agent.unemployed_until
         laid_off = laid_off or (agent.parental_leave_until is not None
                                 and clock.total_minutes < agent.parental_leave_until)
-        if away is not None and weekday in away.days and not laid_off:
+        day_off = self.calendar is not None and self.calendar.agent_off(agent, day) is not None
+        if away is not None and weekday in away.days and not laid_off and not day_off:
             back = parse_hhmm(away.back)
             if minute < back:
                 candidates.append(("away", parse_hhmm(away.leave), "partir", day_start + back, away.label))

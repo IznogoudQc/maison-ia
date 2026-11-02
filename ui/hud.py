@@ -52,6 +52,9 @@ class Hud:
         y += 32
         state = "PAUSE" if paused else f"Vitesse x{speed:g}"
         surface.blit(theme.font(15).render(state, True, theme.ACCENT if paused else theme.TEXT_DIM), (x, y))
+        date_text = clock.date_label()
+        if date_text:
+            surface.blit(theme.font(13).render(_clip(date_text, 40), True, theme.TEXT_DIM), (x + 110, y + 2))
         y += 24
         if llm is not None:
             y = self._draw_llm(surface, x, y, llm, llm_label)

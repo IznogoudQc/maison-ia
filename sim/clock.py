@@ -22,6 +22,7 @@ class SimClock:
         self.tick_minutes = tick_minutes
         # Minutes absolues depuis le lundi 00:00 de la semaine 0
         self.total_minutes = start_day * MINUTES_PER_DAY + parse_hhmm(start_time)
+        self.calendar = None  # sim.calendrier.Calendar, branché par le moteur : vraie date et fériés
 
     def advance(self) -> None:
         self.total_minutes += self.tick_minutes
@@ -45,6 +46,10 @@ class SimClock:
     @property
     def day_name(self) -> str:
         return DAY_NAMES[self.weekday]
+
+    def date_label(self) -> str:
+        """« 24 juin 2026 · Fête nationale » (vide sans calendrier)."""
+        return self.calendar.short_label(self.day) if self.calendar is not None else ""
 
     def label(self) -> str:
         return f"Jour {self.day + 1} ({self.day_name}) {self.hhmm}"

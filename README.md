@@ -140,6 +140,13 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
   d'abord ce qui périme en premier ; le potager donne des légumes, les poules des œufs. Chacun a ses
   plats préférés (`aime:` dans le YAML de la famille) qui remontent le moral.
 - **Heures supplémentaires** : proposées aux parents quand l'argent manque.
+- **Calendrier québécois** (`world.date_depart`, le 15 juin 2026 par défaut) : la vraie date s'affiche dans le panneau.
+  Les fériés (Jour de l'An, Vendredi saint, Patriotes, Fête nationale, fête du Canada, fête du Travail,
+  Action de grâce, Noël) sont chômés et payés ; l'école ferme l'été, aux Fêtes, à la relâche, le lundi de
+  Pâques et un vendredi par mois (journée pédagogique) ; les travailleurs prennent les deux semaines des
+  vacances de la construction, payées. On attrape parfois la grippe (`health.sick_chance`) : on reste
+  à la maison à se reposer, deux jours de maladie par année sont payés. L'IA connaît la date, les fériés
+  qui s'en viennent et qui est en congé.
 - **Santé et mort** : faim ou épuisement à zéro font baisser la santé ; à zéro, la personne meurt
   (cadre avec ruban noir au salon, deuil des survivants). Quand toute la famille est morte, la partie
   se termine. `health.mortality: false` remplace la mort par quelques jours d'hôpital.

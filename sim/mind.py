@@ -78,7 +78,8 @@ class Mind:
         busy = [(wake + BREAKFAST_DELAY, wake + BREAKFAST_DELAY + 25)]
         away = schedule.away
         laid_off = agent.unemployed_until is not None and day * MINUTES_PER_DAY < agent.unemployed_until
-        if away is not None and weekday in away.days and not laid_off:
+        day_off = self.engine.calendar.agent_off(agent, day)
+        if away is not None and weekday in away.days and not laid_off and not day_off:
             busy.append((parse_hhmm(away.leave) - 10, parse_hhmm(away.back)))
         for task in schedule.tasks:
             if weekday in task.days:
@@ -99,9 +100,14 @@ class Mind:
         fixed = [f"réveil {schedule.wake}", f"coucher {schedule.sleep}"]
         away = schedule.away
         laid_off = agent.unemployed_until is not None and day * MINUTES_PER_DAY < agent.unemployed_until
+        day_off = self.engine.calendar.agent_off(agent, day)
         if away is not None and weekday in away.days:
-            fixed.append("mise à pied : pas de travail" if laid_off
-                         else f"{away.label} de {away.leave} à {away.back}")
+            if laid_off:
+                fixed.append("mise à pied : pas de travail")
+            elif day_off:
+                fixed.append(f"congé aujourd'hui ({day_off}) : pas de {away.label}")
+            else:
+                fixed.append(f"{away.label} de {away.leave} à {away.back}")
         for task in schedule.tasks:
             if weekday in task.days:
                 fixed.append(f"{ACTIONS[task.action].label} à {task.time}")

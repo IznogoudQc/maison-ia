@@ -107,6 +107,8 @@ class HealthConfig(BaseModel):
     regen_per_hour: float = 1.5         # récupération quand on mange et dort assez
     hospital_days: int = 3
     grief_days: int = 3
+    sick_chance: float = 0.006          # chance par jour de tomber malade (environ 2 fois par an)
+    sick_paid_days: int = 2             # jours de maladie payés par année (Normes du travail)
 
 
 class EventsConfig(BaseModel):
@@ -148,6 +150,8 @@ class TerrainConfig(BaseModel):
 
 class WorldConfig(BaseModel):
     scenario: Literal["maison", "terrain"] = "maison"
+    date_depart: str = "2026-06-15"     # AAAA-MM-JJ : vraie date du jour 1 (ramenée au lundi qui précède)
+    vacances_semaines: int = 2          # vacances de la construction (fin juillet) ; 0 = pas de vacances
     terrain: TerrainConfig = Field(default_factory=TerrainConfig)
 
 

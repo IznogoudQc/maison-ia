@@ -85,6 +85,8 @@ health:
   regen_per_hour: 1.5
   hospital_days: 3
   grief_days: 3
+  sick_chance: 0.006         # chance par jour de tomber malade (environ 2 fois par an)
+  sick_paid_days: 2          # jours de maladie payes par annee
 
 events:
   enabled: true               # mise à pied, facture imprévue, hausse de prix, prime...
@@ -94,6 +96,8 @@ events:
 
 world:
   scenario: maison            # maison : la famille Gagnon et sa maison ; terrain : un couple, une tente, un lot à bâtir
+  date_depart: "2026-06-15"  # vraie date du jour 1 (feries quebecois, ecole, vacances)
+  vacances_semaines: 2       # vacances de la construction fin juillet ; 0 = aucune
   terrain:
     width: 120                # tuiles (la caméra défile : flèches, clic droit glissé, molette = zoom)
     height: 80

@@ -66,6 +66,8 @@ class Agent(BaseModel):
     bed: str | None = None               # lit attribué en cours de partie (sinon celui de la fiche)
     age_years: float | None = None       # âge précis (scénario terrain : on vieillit d'un an par semaine)
     parental_leave_until: int | None = None  # congé parental : pas de travail, prestations à la place
+    sick_until: int | None = None        # malade jusqu'à cette minute : on reste à la maison
+    sick_paid: dict[str, int] = Field(default_factory=dict)  # année -> jours de maladie déjà payés
     thinking: bool = Field(default=False, exclude=True)  # en attente d'une réponse LLM (« … »)
 
     @property
