@@ -95,6 +95,8 @@ class Hud:
             f"Appels : {stats.calls}  ({llm.limiter.used()}/{llm.limiter.max_per_minute} cette minute)",
             f"Tokens : {stats.input_tokens:,} entrée / {stats.output_tokens:,} sortie".replace(",", " "),
             f"Coût de la partie : {format_cost(llm.cost())}" if any(llm.prices) else "Coût : gratuit (pas de Claude)",
+            *([f"Cache : {stats.cache_read_tokens:,} tokens relus (-{format_cost(llm.stats.cache_savings(llm.prices[0]))})"
+               .replace(",", " ")] if stats.cache_read_tokens and any(llm.prices) else []),
             f"Échecs : {stats.failures}  —  replis : {stats.fallbacks}",
         ]
         for line in lines:

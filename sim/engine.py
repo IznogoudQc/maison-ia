@@ -900,7 +900,7 @@ class Engine:
         request = build_dialogue_request(group, room, self.clock.label(), memories, summaries,
                                          self.config.llm.max_tokens, self.dialogue_context(group),
                                          self._prompt_meta(), now=self.clock.total_minutes,
-                                         recent=self.social.recent_topics(group), topic=topic)
+                                         recent=self.social.recent_topics(group), topic=topic, family=self.agents)
         names = {a.id: a.name for a in group}
         future = self.llm.try_submit(request, Dialogue, None, lambda d: validate_dialogue(d, names))
         if future is None:
@@ -1412,7 +1412,8 @@ class Engine:
         if self.llm is not None:
             stats = self.llm.stats
             data["llm_stats"] = {"calls": stats.calls, "input_tokens": stats.input_tokens,
-                                 "output_tokens": stats.output_tokens}
+                                 "output_tokens": stats.output_tokens, "cache_read_tokens": stats.cache_read_tokens,
+                                 "cache_write_tokens": stats.cache_write_tokens}
         Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
 
     def load_state(self, path: str | Path) -> None:

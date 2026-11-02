@@ -88,6 +88,34 @@ def validate_dialogue(dialogue: Dialogue, participants: dict[str, str], max_line
 VARIETY = ("Varie les sujets d'une conversation à l'autre : la journée, le travail ou l'école, les intérêts de chacun, les projets, les enfants, une anecdote, une blague, un souvenir. L'argent et la bouffe reviennent seulement quand il se passe quelque chose de nouveau. ")
 
 
+WORLD_RULES = ("La famille vit au Québec, aujourd'hui. Le temps passe minute par minute : on se lève, on mange, on travaille ou on va à l'école en semaine, on jase, on se repose, on dort. Les besoins vont de 0 (au plancher) à 100 (comblé) : satiété, énergie, hygiène, social et loisir ; un besoin au plancher rend maussade et peut nuire à la santé. L'argent vient des paies et part dans les factures du vendredi, l'épicerie et les achats. Chaque personne a ses souvenirs, ses constats et ses relations : elle agit selon son caractère (qualités et défauts), son humeur et ce qu'elle sait, pas selon ce que les autres pensent en secret. On parle un français québécois naturel et familier (expressions d'ici, pas de France). Les réponses sont toujours en JSON valide, au format demandé à la fin du message.")
+
+
+def family_roster(family: list[Agent] | None, exclude: Agent | None = None) -> str:
+    """Portrait stable de chaque membre (pour le cache) : âge, rôle, caractère, intérêts."""
+    lines = []
+    for member in family or []:
+        if member is exclude or member.dead:
+            continue
+        p = member.persona
+        parts = [f"{p.name}, {p.age} ans ({p.role}) : {', '.join(p.traits)}"]
+        if p.qualites:
+            parts.append(f"qualités : {', '.join(p.qualites)}")
+        if p.defauts:
+            parts.append(f"défauts : {', '.join(p.defauts)}")
+        if p.interests:
+            parts.append(f"aime : {', '.join(p.interests[:3])}")
+        lines.append("- " + " ; ".join(parts) + ".")
+    return "\n".join(lines) or "- (personne d'autre)"
+
+
+def stable_prefix(agent: Agent | None, family: list[Agent] | None) -> str:
+    """Début de message identique d'un appel à l'autre pour cette personne : mis en cache par Claude."""
+    head = f"QUI JE SUIS\n{persona_block(agent)}\n\n" if agent is not None else ""
+    return (f"{head}LA FAMILLE\n{family_roster(family, exclude=agent)}\n\n"
+            f"LE MONDE\n{WORLD_RULES}")
+
+
 def topics_block(recent: list[str] | None, topic: str | None) -> str:
     """Sujets déjà jasés entre ces personnes (à ne pas reprendre) et une idée pour lancer la conversation."""
     text = ""
@@ -174,7 +202,6 @@ def build_decision_request(agent: Agent, room: str, time_label: str, options: li
         for o in options
     )
     prompt = (
-        f"PERSONNAGE\n{persona_block(agent)}\n\n"
         f"SITUATION\nMoment : {time_label}. Pièce : {room}.\n"
         f"Humeur : {agent.mood}.\nBesoins : {agent.needs.describe()}.\n\n"
         + (f"FAMILLE\n{context}\n\n" if context else "")
@@ -192,13 +219,15 @@ def build_decision_request(agent: Agent, room: str, time_label: str, options: li
         "options": [o.model_dump() for o in options],
         **(extra_meta or {}),
     }
-    return LLMRequest(kind="decision", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
+    return LLMRequest(kind="decision", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta,
+                      prefix=stable_prefix(agent, family))
 
 
 def build_dialogue_request(participants: list[Agent], room: str, time_label: str,
                            memories: dict[str, list[str]], summaries: dict[str, str | None],
                            max_tokens: int, context: str = "", extra_meta: dict | None = None,
-                           now: int = 0, recent: list[str] | None = None, topic: str | None = None) -> LLMRequest:
+                           now: int = 0, recent: list[str] | None = None, topic: str | None = None,
+                           family: list[Agent] | None = None) -> LLMRequest:
     system = (
         "Tu écris des dialogues pour une simulation de la vie d'une famille de Québec. "
         "Les répliques sont en français québécois naturel et familier (expressions d'ici, pas de France), "
@@ -233,7 +262,8 @@ def build_dialogue_request(participants: list[Agent], room: str, time_label: str
         "participants": [{"id": a.id, "name": a.name, "role": a.persona.role} for a in participants],
         **(extra_meta or {}),
     }
-    return LLMRequest(kind="dialogue", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
+    return LLMRequest(kind="dialogue", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta,
+                      prefix=stable_prefix(None, family or participants))
 
 
 class EventStory(BaseModel):

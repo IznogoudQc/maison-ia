@@ -80,24 +80,38 @@ class RateLimiter:
             return len(self._calls)
 
 
+CACHE_READ_FACTOR = 0.1     # tokens lus dans le cache : 10 % du prix d'entrée
+CACHE_WRITE_FACTOR = 1.25   # tokens écrits dans le cache (5 minutes) : 125 % du prix d'entrée
+
+
 class LLMStats:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.calls = 0
         self.input_tokens = 0
         self.output_tokens = 0
+        self.cache_read_tokens = 0
+        self.cache_write_tokens = 0
         self.failures = 0     # appels ou parsings ratés (avant retry)
         self.fallbacks = 0    # requêtes terminées sur la valeur de repli
 
-    def record_call(self, input_tokens: int, output_tokens: int) -> None:
+    def record_call(self, input_tokens: int, output_tokens: int, cache_read: int = 0, cache_write: int = 0) -> None:
         with self._lock:
             self.calls += 1
             self.input_tokens += input_tokens
             self.output_tokens += output_tokens
+            self.cache_read_tokens += cache_read
+            self.cache_write_tokens += cache_write
 
     def cost(self, price_in: float, price_out: float) -> float:
-        """Coût en $ selon les tarifs par million de tokens."""
-        return (self.input_tokens * price_in + self.output_tokens * price_out) / 1_000_000
+        """Coût en $ selon les tarifs par million de tokens (cache : lecture 0,1x, écriture 1,25x)."""
+        cached = self.cache_read_tokens * CACHE_READ_FACTOR + self.cache_write_tokens * CACHE_WRITE_FACTOR
+        return ((self.input_tokens + cached) * price_in + self.output_tokens * price_out) / 1_000_000
+
+    def cache_savings(self, price_in: float) -> float:
+        """Ce que le cache a fait économiser, en $, par rapport aux mêmes tokens sans cache."""
+        saved = self.cache_read_tokens * (1 - CACHE_READ_FACTOR) - self.cache_write_tokens * (CACHE_WRITE_FACTOR - 1)
+        return saved * price_in / 1_000_000
 
     def record_failure(self) -> None:
         with self._lock:
@@ -138,7 +152,8 @@ class LLMService:
         for attempt in range(1, self.MAX_ATTEMPTS + 1):
             try:
                 response = self.provider.complete(current)
-                self.stats.record_call(response.input_tokens, response.output_tokens)
+                self.stats.record_call(response.input_tokens, response.output_tokens,
+                                       response.cache_read_tokens, response.cache_write_tokens)
                 value = parse_json_response(response.text, schema)
                 if validate is not None:
                     value = validate(value)

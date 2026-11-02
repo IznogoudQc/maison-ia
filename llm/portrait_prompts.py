@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from llm.prompts import JSON_RULE, mind_block, persona_block, relations_block
+from llm.prompts import JSON_RULE, mind_block, relations_block, stable_prefix
 from llm.provider import LLMRequest
 
 if TYPE_CHECKING:
@@ -44,7 +44,6 @@ def build_portrait_request(agent: Agent, others: list[Agent], causes: list[tuple
     why = "\n".join(f"- {'(+)' if sign > 0 else '(-)' if sign < 0 else '(·)'} {text}" for text, sign in causes)
     people = [o for o in others if o.id != agent.id and not o.dead]
     prompt = (
-        f"QUI JE SUIS\n{persona_block(agent)}\n\n"
         f"COMMENT JE VAIS\n{agent.needs.describe()}\nCe qui joue sur mon humeur :\n{why or '- rien de spécial'}\n\n"
         f"EN TÊTE\n{mind_block(agent, now, with_plan=False)}\n\n"
         "SOUVENIRS RÉCENTS\n" + ("\n".join(f"- {m}" for m in agent.memory.recent(8)) or "- (aucun)") + "\n\n"
@@ -56,4 +55,5 @@ def build_portrait_request(agent: Agent, others: list[Agent], causes: list[tuple
     meta = {"agent": agent.id, "causes": [{"text": t, "sign": s} for t, s in causes],
             "others": [{"name": o.name, "affection": agent.relation(o.id).affection,
                         "tension": agent.relation(o.id).tension} for o in people]}
-    return LLMRequest(kind="portrait", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
+    return LLMRequest(kind="portrait", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta,
+                      prefix=stable_prefix(agent, [agent, *others]))

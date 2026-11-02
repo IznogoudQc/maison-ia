@@ -21,7 +21,8 @@ class OllamaProvider(LLMProvider):
             "format": "json",  # force une sortie JSON côté Ollama
             "messages": [
                 {"role": "system", "content": request.system},
-                {"role": "user", "content": request.prompt},
+                {"role": "user", "content": f"{request.prefix}\n\n{request.prompt}" if request.prefix
+                 else request.prompt},
             ],
             "options": {"num_predict": request.max_tokens},
         }

@@ -313,6 +313,10 @@ facture, épicerie, événement et décès est écrit dans `logs/sim_<date>.json
 Haiku 5.5). Les compteurs sont gardés dans la sauvegarde ; l'onglet Dépenses de l'écran Maison (touche I)
 les reprend. En mode simulé ou avec Ollama, c'est gratuit. La facture exacte reste celle de la console Anthropic.
 
+**Cache des prompts** : chaque demande à Claude commence par un bloc qui ne change presque pas (la fiche de la
+personne, le portrait de la famille, les règles du monde). Claude le garde en cache quelques minutes et le
+facture environ 10 fois moins cher aux appels suivants ; le panneau affiche les tokens relus et l'économie.
+
 ## Ajouter un persona
 
 Ajouter une entrée sous `family:` dans `data/family.yaml` :

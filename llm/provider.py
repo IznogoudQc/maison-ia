@@ -18,6 +18,9 @@ class LLMRequest(BaseModel):
     kind: RequestKind
     system: str
     prompt: str
+    # Début du message qui ne change presque jamais (fiche, famille, règles du monde) : Claude le met en
+    # cache et le facture environ 10 fois moins cher aux appels suivants. Le reste (prompt) varie.
+    prefix: str = ""
     max_tokens: int = 1500
     # Données structurées du contexte : ignorées par les vrais fournisseurs,
     # utilisées par le mock pour fabriquer une réponse plausible.
@@ -26,8 +29,10 @@ class LLMRequest(BaseModel):
 
 class LLMResponse(BaseModel):
     text: str
-    input_tokens: int = 0
+    input_tokens: int = 0          # tokens d'entrée hors cache
     output_tokens: int = 0
+    cache_read_tokens: int = 0     # lus dans le cache (environ 0,1 fois le prix)
+    cache_write_tokens: int = 0    # écrits dans le cache (environ 1,25 fois le prix)
 
 
 class LLMError(Exception):

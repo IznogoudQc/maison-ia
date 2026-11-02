@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 from agents.plan import PlanItem
-from llm.prompts import JSON_RULE, memory_block, mind_block, persona_block, relations_block
+from llm.prompts import JSON_RULE, memory_block, mind_block, relations_block, stable_prefix
 from llm.provider import LLMRequest
 from sim.clock import format_hhmm, parse_hhmm
 
@@ -155,7 +155,7 @@ def build_plan_request(agent: Agent, now: int, day_label: str, fixed: list[str],
         if replan_reason else "C'est le matin : planifie ta journée."
     )
     prompt = (
-        f"PERSONNAGE\n{persona_block(agent)}\nRelations :\n{relations}\n\n"
+        f"MES RELATIONS\n{relations}\n\n"
         f"AUJOURD'HUI : {day_label}\n"
         f"Déjà prévu (horaire fixe) : {'; '.join(fixed) or 'rien'}.\n"
         f"Plages libres : {_slots_text(slots)}.\n\n"
@@ -177,7 +177,8 @@ def build_plan_request(agent: Agent, now: int, day_label: str, fixed: list[str],
         "favorites": agent.persona.favorite_actions,
         "replan": bool(replan_reason),
     }
-    return LLMRequest(kind="plan", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
+    return LLMRequest(kind="plan", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta,
+                      prefix=stable_prefix(agent, family))
 
 
 def build_reflection_request(agent: Agent, now: int, events: list[str], catalog: list[Option],
@@ -198,8 +199,7 @@ def build_reflection_request(agent: Agent, now: int, events: list[str], catalog:
         "conclusion de fond sur ma vie, plus large qu'un seul jour, avec les numéros R qui la fondent.\n"
         if previous else "")
     prompt = (
-        f"PERSONNAGE\n{persona_block(agent)}\n\n"
-        + (f"FAMILLE\n{context}\n\n" if context else "")
+        (f"FAMILLE\n{context}\n\n" if context else "")
         + f"DANS MA TÊTE\n{mind_block(agent, now, with_plan=True)}\n\n"
         + (f"MES RELATIONS\n{relations_block(agent, family)}\n\n" if family else "")
         + f"CE QUE J'AI VÉCU DERNIÈREMENT\n{numbered}\n\n"
@@ -222,4 +222,5 @@ def build_reflection_request(agent: Agent, now: int, events: list[str], catalog:
         "previous": previous or [],
         "catalog": [o.model_dump() for o in catalog],
     }
-    return LLMRequest(kind="reflection", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
+    return LLMRequest(kind="reflection", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta,
+                      prefix=stable_prefix(agent, family))

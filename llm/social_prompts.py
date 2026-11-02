@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from llm.prompts import VARIETY, topics_block, JSON_RULE, memory_block, mind_block, persona_block, relations_block
+from llm.prompts import VARIETY, stable_prefix, topics_block, JSON_RULE, memory_block, mind_block, persona_block, relations_block
 from llm.provider import LLMRequest
 
 if TYPE_CHECKING:
@@ -86,7 +86,7 @@ def build_line_request(speaker: Agent, listeners: list[Agent], room: str, time_l
                        lines: list[tuple[str, str]], memories: list[str], summary: str | None,
                        max_tokens: int, now: int, turn: int, max_turns: int, context: str = "",
                        extra_meta: dict | None = None, recent: list[str] | None = None,
-                       topic: str | None = None) -> LLMRequest:
+                       topic: str | None = None, family: list[Agent] | None = None) -> LLMRequest:
     system = (
         f"Tu incarnes {speaker.name}, membre d'une famille québécoise, dans une conversation en cours. "
         "Tu dis UNE seule réplique, de son point de vue uniquement : tu ne sais que ce qu'il ou elle sait "
@@ -104,7 +104,7 @@ def build_line_request(speaker: Agent, listeners: list[Agent], room: str, time_l
                if turn >= max_turns - 1 else
                "Mets end à true si la conversation se termine naturellement après ta réplique.")
     prompt = (
-        f"PERSONNAGE\n{persona_block(speaker)}\nHumeur : {speaker.mood}. Besoins : {speaker.needs.describe()}.\n\n"
+        f"MOI EN CE MOMENT\nHumeur : {speaker.mood}. Besoins : {speaker.needs.describe()}.\n\n"
         f"SITUATION\nMoment : {time_label}. Pièce : {room}.\nAvec toi :\n{others}\n\n"
         + (f"FAMILLE\n{context}\n\n" if context else "")
         + f"CE QUE TU RESSENS POUR EUX\n{relations_block(speaker, listeners, with_profile=True)}\n\n"
@@ -128,7 +128,8 @@ def build_line_request(speaker: Agent, listeners: list[Agent], room: str, time_l
         "lines": lines,
         **(extra_meta or {}),
     }
-    return LLMRequest(kind="line", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta)
+    return LLMRequest(kind="line", system=system, prompt=prompt, max_tokens=max_tokens, meta=meta,
+                      prefix=stable_prefix(speaker, family or [speaker, *listeners]))
 
 
 def build_debrief_request(participants: list[Agent], room: str, time_label: str, day_label: str,

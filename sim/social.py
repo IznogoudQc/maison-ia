@@ -136,7 +136,7 @@ class Social:
                                      memories, summary, engine.config.llm.max_tokens,
                                      engine.clock.total_minutes, len(conv.lines), self.config.max_turns,
                                      engine.dialogue_context(people), engine._prompt_meta(),
-                                     recent=self.recent_topics(people), topic=topic)
+                                     recent=self.recent_topics(people), topic=topic, family=engine.agents)
         names = {a.id: a.name for a in listeners}
         future = engine.llm.try_submit(request, Line, None, lambda line: validate_line(line, speaker.name, names))
         if future is None:

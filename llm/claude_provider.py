@@ -22,13 +22,18 @@ class ClaudeProvider(LLMProvider):
         self.client = anthropic.Anthropic(api_key=api_key, timeout=timeout_s, max_retries=1)
 
     def complete(self, request: LLMRequest) -> LLMResponse:
+        content: str | list[dict] = request.prompt
+        if request.prefix:
+            # Point de cache à la fin de la partie stable : consignes (system) + fiche + famille + monde
+            content = [{"type": "text", "text": request.prefix, "cache_control": {"type": "ephemeral"}},
+                       {"type": "text", "text": request.prompt}]
         try:
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=request.max_tokens,
                 system=request.system,
                 output_config={"effort": self.effort},
-                messages=[{"role": "user", "content": request.prompt}],
+                messages=[{"role": "user", "content": content}],
             )
         except anthropic.AuthenticationError as exc:
             raise LLMError("Clé API Claude invalide") from exc
@@ -43,5 +48,7 @@ class ClaudeProvider(LLMProvider):
             raise LLMError("Requête refusée par le modèle")
         # La réflexion adaptative peut produire des blocs « thinking » : on ne garde que le texte
         text = "".join(block.text for block in response.content if block.type == "text")
-        return LLMResponse(text=text, input_tokens=response.usage.input_tokens,
-                           output_tokens=response.usage.output_tokens)
+        usage = response.usage
+        return LLMResponse(text=text, input_tokens=usage.input_tokens, output_tokens=usage.output_tokens,
+                           cache_read_tokens=usage.cache_read_input_tokens or 0,
+                           cache_write_tokens=usage.cache_creation_input_tokens or 0)

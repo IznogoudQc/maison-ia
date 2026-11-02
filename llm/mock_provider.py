@@ -161,7 +161,7 @@ class MockProvider(LLMProvider):
                 text = self._summary(request)
         if delay:
             time.sleep(delay)
-        return LLMResponse(text=text, input_tokens=len(request.system + request.prompt) // 4,
+        return LLMResponse(text=text, input_tokens=len(request.system + request.prefix + request.prompt) // 4,
                            output_tokens=len(text) // 4)
 
     def _decision(self, request: LLMRequest) -> str:
