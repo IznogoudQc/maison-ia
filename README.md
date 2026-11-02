@@ -147,6 +147,14 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
   vacances de la construction, payées. On attrape parfois la grippe (`health.sick_chance`) : on reste
   à la maison à se reposer, deux jours de maladie par année sont payés. L'IA connaît la date, les fériés
   qui s'en viennent et qui est en congé.
+- **Carrière** (`data/emplois.yaml`, à enrichir) : chaque adulte a un emploi (intitulé, employeur, salaire,
+  ancienneté, satisfaction au travail). Satisfait, on obtient des promotions ; au plancher, on peut être
+  congédié, puis toucher l'assurance-emploi en cherchant. Des offres arrivent (sans emploi, ou quand on
+  est malheureux au travail) et l'IA décide le soir de les accepter ou de retourner aux études (DEP, DEC,
+  bac : frais au début, prêts et bourses pendant les cours, meilleur emploi à la fin). Les jeunes ont un
+  niveau scolaire et une moyenne que les devoirs font monter ; à 18 ans, bonne moyenne : le cégep, sinon
+  une première job. Tout s'affiche à droite (personne sélectionnée), dans la fiche (touche P) et dans
+  le journal (touche J).
 - **Santé et mort** : faim ou épuisement à zéro font baisser la santé ; à zéro, la personne meurt
   (cadre avec ruban noir au salon, deuil des survivants). Quand toute la famille est morte, la partie
   se termine. `health.mortality: false` remplace la mort par quelques jours d'hôpital.
