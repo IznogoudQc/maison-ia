@@ -155,6 +155,10 @@ Pour essayer le terrain : `world.scenario: terrain` dans `config.yaml`, puis
   niveau scolaire et une moyenne que les devoirs font monter ; à 18 ans, bonne moyenne : le cégep, sinon
   une première job. Tout s'affiche à droite (personne sélectionnée), dans la fiche (touche P) et dans
   le journal (touche J).
+- **Revente d'occasion** : le campement se revend quand la maison le remplace (la tente quand tout le
+  monde a un vrai lit, la glacière quand il y a un frigo, le baril, la bécosse, la table de pique-nique),
+  et un objet du catalogue dont personne ne s'est servi depuis deux semaines rapporte 40 % de son prix.
+  C'est l'IA qui décide, une revente par jour au plus.
 - **Santé et mort** : faim ou épuisement à zéro font baisser la santé ; à zéro, la personne meurt
   (cadre avec ruban noir au salon, deuil des survivants). Quand toute la famille est morte, la partie
   se termine. `health.mortality: false` remplace la mort par quelques jours d'hôpital.

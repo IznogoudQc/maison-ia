@@ -26,6 +26,15 @@ if TYPE_CHECKING:
 
 CATALOGUE_FILE = Path("data/catalogue.yaml")
 RESALE = 0.4                  # un objet revendu rapporte 40 % de son prix
+UNUSED_DAYS = 14              # un objet dont personne ne s'est servi depuis ces jours-là peut être revendu
+# Campement du terrain : revendu d'occasion quand la maison le remplace (id : nom, prix, raison)
+CAMP_RESALE = {
+    "tente": ("la tente", 80, "on dort tous dans un vrai lit"),
+    "glaciere": ("la glacière", 30, "il y a un frigo dans la cuisine"),
+    "baril": ("le baril d'eau de pluie", 20, "il y a une vraie douche"),
+    "becosse": ("la bécosse", 60, "il y a une toilette dans la maison"),
+    "table_pique_nique": ("la table de pique-nique", 50, "on mange à la vraie table"),
+}
 MAX_SUGGESTIONS = 3
 SHOP_HOURS = (8 * 60, 21 * 60)
 # Pièces de la maison des Gagnon -> type de pièce du catalogue
@@ -129,6 +138,7 @@ class Inventory:
         if not self.catalogue:
             return []
         options = self._resale_options() if engine.economy.household.money < 0 else []
+        options += self._used_sale_options(options)
         budget = self._budget()
         suggestions: list[Option] = []
         for sleeper in self.needs_bed()[:1]:
@@ -227,6 +237,59 @@ class Inventory:
                                   label=f"revend {owned.label} (+{value} $)", score=10.0))
         return options[:2]
 
+    def camp_obsolete(self, obj_id: str) -> bool:
+        """L'objet du campement est remplacé par la maison : on peut s'en défaire."""
+        engine = self.engine
+        objects = engine.house.objects
+        if obj_id == "tente":
+            sleepers = [a for a in engine.agents if not a.dead and a.persona.stage != "bebe"]
+            return all(a.bed not in (None, "tente") and a.bed in objects for a in sleepers)
+        replacements = {"glaciere": lambda o: o.kind == "frigo" and o.id != "glaciere",
+                        "baril": lambda o: o.kind == "douche" and o.id != "baril",
+                        "becosse": lambda o: o.label.startswith("Toilette"),
+                        "table_pique_nique": lambda o: o.kind == "table" and o.id != "table_pique_nique"}
+        test = replacements.get(obj_id)
+        return test is not None and any(test(o) for o in objects.values())
+
+    def _used_sale_options(self, already: list[Option]) -> list[Option]:
+        """Revendre d'occasion ce qui ne sert plus : le campement remplacé, un objet dont personne ne se sert."""
+        engine = self.engine
+        day = engine.clock.day
+        if engine.economy.household.last_sale_day == day:
+            return []
+        offered = {o.target for o in already}
+        options = []
+        for obj_id, (name, value, why) in CAMP_RESALE.items():
+            if obj_id in engine.house.objects and self.camp_obsolete(obj_id):
+                options.append(Option(action="revendre", target=f"camp|{obj_id}",
+                                      label=f"revend {name} d'occasion (+{value} $) : {why}", score=7.0))
+        for owned in self.items:
+            if str(owned.uid) in offered or owned.kind in ("lit", "deco") or owned.food or owned.hydro or owned.discount:
+                continue  # un lit, une déco ou un objet qui fait économiser sert même sans qu'on y touche
+            idle = day - max(owned.bought_day, owned.last_used_day)
+            if owned.last_used_day >= 0 and idle >= UNUSED_DAYS:
+                options.append(Option(action="revendre", target=str(owned.uid), score=5.0,
+                                      label=f"revend {owned.label} (+{round(owned.price * RESALE)} $) : "
+                                            f"personne ne s'en sert depuis {idle} jours"))
+        return options[:2]
+
+    def mark_used(self, use_pos) -> None:
+        """Quelqu'un vient de se servir de l'objet à cette place : il n'est pas inutile."""
+        obj = self.engine.house.object_at_spot(use_pos) if use_pos is not None else None
+        if obj is None:
+            return
+        owned = next((o for o in self.items if o.object_id == obj.id), None)
+        if owned is not None:
+            owned.last_used_day = self.engine.clock.day
+
+    def target_name(self, target: str | None) -> str | None:
+        """Nom de ce qu'on revend (objet acheté, ou un objet du campement)."""
+        if (target or "").startswith("camp|"):
+            entry = CAMP_RESALE.get(target.split("|")[1])
+            return f"{entry[0]} d'occasion" if entry else None
+        owned = next((o for o in self.items if str(o.uid) == target), None)
+        return owned.label if owned else None
+
     # ------------------------------------------------------------------ achat, revente
 
     def buy(self, agent: Agent, target: str | None) -> None:
@@ -262,6 +325,7 @@ class Inventory:
             eco.transaction(engine.clock.total_minutes, f"Revente : {replaced.label}", refund)
         owned = OwnedItem(uid=eco.household.next_item_uid, item_id=item.id, label=item.label, kind=item.type,
                           room=room, rect=rect, uses=uses, quality=item.qualite, weekly=item.hebdo,
+                          bought_day=engine.clock.day, last_used_day=engine.clock.day,
                           food=item.effet.get("nourriture", 0.0), hydro=item.effet.get("hydro", 0.0),
                           discount=item.effet.get("epicerie", 0.0), price=item.prix, harvest=item.recolte)
         eco.household.next_item_uid += 1
@@ -280,15 +344,37 @@ class Inventory:
 
     def sell(self, agent: Agent, target: str | None) -> None:
         engine = self.engine
+        household = engine.economy.household
+        if (target or "").startswith("camp|"):
+            self._sell_camp(agent, target.split("|")[1])
+            return
         owned = next((o for o in self.items if str(o.uid) == target), None)
         if owned is None:
             return
         value = round(owned.price * RESALE)
+        broke = household.money < 0
         self._remove(owned)
+        household.last_sale_day = engine.clock.day
         engine.economy.transaction(engine.clock.total_minutes, f"Revente : {owned.label}", value)
         text = f"{agent.name} a revendu {owned.label} (+{value} $)"
         engine.publish("achat_objet", agent=agent.id, item=owned.item_id, room=owned.room, amount=value, text=text)
-        engine.remember(agent, text + " pour joindre les deux bouts.", 5)
+        engine.remember(agent, text + (" pour joindre les deux bouts." if broke else " : personne ne s'en servait."), 5)
+
+    def _sell_camp(self, agent: Agent, obj_id: str) -> None:
+        """Un objet du campement part d'occasion : la place se libère, l'argent rentre."""
+        engine = self.engine
+        entry = CAMP_RESALE.get(obj_id)
+        if entry is None or obj_id not in engine.house.objects or not self.camp_obsolete(obj_id):
+            return  # déjà vendu, ou de nouveau utile (décisions prises en même temps)
+        name, value, why = entry
+        engine.house.remove_object(obj_id)
+        engine.economy.household.last_sale_day = engine.clock.day
+        engine.economy.transaction(engine.clock.total_minutes, f"Revente : {name} d'occasion", value)
+        text = f"{agent.name} a revendu {name} d'occasion (+{value} $)"
+        engine.publish("achat_objet", agent=agent.id, item=obj_id, room="exterieur", amount=value, text=text)
+        for other in engine.agents:
+            if not other.dead and other.persona.stage != "bebe":
+                engine.remember(other, f"{text} : {why}. Une page de tournée !", 5)
 
     def _place(self, owned: OwnedItem) -> InteractiveObject:
         if owned not in self.items:
@@ -385,6 +471,8 @@ class Inventory:
         for owned in list(self.items):
             if owned.object_id not in self.engine.house.objects:
                 self._place(owned)
+            if owned.last_used_day < 0:
+                owned.last_used_day = self.engine.clock.day  # vieille partie : on ne sait pas, on laisse un délai
 
     def context_line(self) -> str:
         if not self.items:

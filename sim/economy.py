@@ -56,6 +56,8 @@ class OwnedItem(BaseModel):
     hydro: float = 0.0             # $ économisés par semaine sur Hydro
     discount: float = 0.0          # rabais sur l'épicerie
     price: float = 0.0
+    bought_day: int = 0
+    last_used_day: int = -1        # dernier jour où quelqu'un s'en est servi (-1 : inconnu, vieille partie)
 
     @property
     def object_id(self) -> str:
@@ -114,6 +116,7 @@ class Household(BaseModel):
     next_item_uid: int = 1
     last_harvest_day: int = -1
     last_item_day: int = -1          # un seul achat d'objet par jour (sauf un lit qui manque)
+    last_sale_day: int = -1          # une seule revente d'objet usagé par jour
     vehicles: list[OwnedVehicle] = Field(default_factory=list)
     loans: list[Loan] = Field(default_factory=list)
     foods: list[FoodStock] = Field(default_factory=list)  # détail du garde-manger par aliment

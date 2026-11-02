@@ -64,7 +64,9 @@ class Architect:
         return [a for a in self.engine.agents if a.persona.is_adult and not a.dead]
 
     def site(self) -> tuple[int, int]:
-        tent = self.engine.house.objects.get("tente")
+        # La tente de départ, même revendue depuis : la maison reste au même endroit
+        house = self.engine.house
+        tent = house.objects.get("tente") or next((o for o in house.layout.objects if o.id == "tente"), None)
         if tent is None:
             return self.engine.house.width // 2, self.engine.house.height // 2
         x, y, w, _h = tent.rect

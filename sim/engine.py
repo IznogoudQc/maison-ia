@@ -258,8 +258,7 @@ class Engine:
                 item = self.inventory.catalogue.get((target or "").split("|")[0])
                 target_name = item.label if item else None
             else:
-                owned = next((o for o in self.economy.household.items if str(o.uid) == target), None)
-                target_name = owned.label if owned else None
+                target_name = self.inventory.target_name(target)
             if target_name is None:
                 return None
         elif name == "soigner":
@@ -1012,6 +1011,7 @@ class Engine:
 
     def _on_done(self, agent: Agent, action: ActiveAction) -> None:
         """Effets de fin d'action sur le ménage (achat conclu, pelouse tondue)."""
+        self.inventory.mark_used(action.use_pos)
         if action.name == "acheter" and action.target:
             self._buy(agent, action.target)
         elif action.name == "couper" and action.target:
